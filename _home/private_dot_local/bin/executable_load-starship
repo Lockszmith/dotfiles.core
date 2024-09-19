@@ -1,0 +1,38 @@
+#! /usr/bin/env bash
+
+# Helper function
+is_sourced() {
+    if [ -n "$ZSH_VERSION" ]; then 
+        case $ZSH_EVAL_CONTEXT in *:file:*) return 0;; esac
+    else  # Add additional POSIX-compatible shell names here, if needed.
+        case ${0##*/} in dash|-dash|bash|-bash|ksh|-ksh|sh|-sh) return 0;; esac
+    fi
+    return 1; # NOT sourced.
+}
+
+BASE_0=${BASE_0:-$0}
+BASE_SHELL=$(basename "$SHELL")
+
+if is_sourced; then
+    starship() {
+        if [[ ! -x "$HOME/bin/starship" ]]; then
+            curl -sS https://starship.rs/install.sh | FORCE=1 BIN_DIR="$HOME/bin" sh > /dev/null
+        fi
+        "$HOME/bin/starship" "${@}"
+    }
+    # shellcheck disable=SC1090 
+    . <( starship init "$BASE_SHELL" ) 2> /dev/null
+    . <( starship completions ${BASE_SHELL} ) 2> /dev/null
+
+elif [[ "$1" == '-' ]]; then
+    echo "BASE_0=${BASE_0}"
+    cat "${0}"
+else
+    SCRIPT_NAME="$BASE_0"
+    printf '%s\n' \
+        "It seems $SCRIPT_NAME was invoked as a script. It should be sourced instead." \
+	'The easiest way is to call it like this:' \
+	"    $ . <( $SCRIPT_NAME - ) # Note the '-' after the script's name" \
+        ''
+fi
+
