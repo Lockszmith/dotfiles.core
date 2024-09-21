@@ -1,0 +1,28 @@
+#! /usr/bin/env bash
+
+set -e
+
+BASE_0=${BASE_0:-$0}
+BASE_SHELL=$(basename "$SHELL")
+
+_update-nvim() {
+    local LatestURL="$(get-github-release.sh \
+        neovim/neovim latest appimage \
+        | grep appimage\$
+    )"
+    local appPath="${HOME}/.local/bin/nvim.AppImage"
+    
+    rm "${HOME}/.local/bin/"{nvim.AppImage,nvim,vi,vim} 2>/dev/null || true
+    
+    printf 'Downloading from %s... ' "${LatestURL#*/download/}"
+    curl -sLo "$appPath" "$LatestURL" && printf 'Done'
+    printf '\n'
+    chmod +x "$appPath"
+    
+    ln -rs "$appPath" "${HOME}/.local/bin/nvim" 
+    ln -rs "$appPath" "${HOME}/.local/bin/vi" 
+    ln -rs "$appPath" "${HOME}/.local/bin/vim" 
+}
+
+_update-nvim "${@}"
+
