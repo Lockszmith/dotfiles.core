@@ -1,5 +1,20 @@
+# https://www.chezmoi.io/reference/special-files-and-directories/chezmoiexternal-format/
+#
+# type                  string          none    External type (file, archive, archive-file, or git-repo)
+# refreshPeriod 	duration        0       Refresh period (Examples: one day (24h), one week (168h), or four weeks (672h))
+
 ".config/sz.env/lib/ble.sh.curl":
   type: "archive"
   url: "https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz"
+  refreshPeriod: "168h"
+
+".config/sz.env/lib/bash-preexec/bash-preexec.sh":
+  type: "file"
+  url: "https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh"
+  refreshPeriod: "168h"
+
+".cache/chezmoi/tmp/zellij":
+  type: "archive"
+  url: "https://github.com/zellij-org/zellij/releases/download/v0.40.1/zellij-x86_64-unknown-linux-musl.tar.gz"
   refreshPeriod: "168h"
 
