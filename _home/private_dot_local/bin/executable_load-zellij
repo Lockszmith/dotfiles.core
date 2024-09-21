@@ -22,9 +22,10 @@ if is_sourced; then
     }
     zellij() {
         if [[ ! -x ~/bin/zellij ]]; then
-            if [[ -r $HOME/.cache/chezmoi/tmp/zellij/zellij ]]; then
+            if [[ -x $HOME/.cache/chezmoi/tmp/zellij/zellij ]]; then
                 ln --symbolic --relative $HOME/.cache/chezmoi/tmp/zellij/zellij ~/bin
             elif [[ ! -x /tmp/zellij/bootstrap/zellij ]]; then
+                 printf "Grabbing zellij from the web!\n"
                 bash <(curl -sL zellij.dev/launch) "${@}" && return
             fi
         fi
