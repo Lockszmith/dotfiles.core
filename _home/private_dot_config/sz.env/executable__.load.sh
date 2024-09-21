@@ -49,10 +49,13 @@ if is_sourced; then
             ALL_ENV_FILES="$(
                 find ~/.config/sz.env -xdev -type d -not -name '*.off' \
                     -exec sh -c '
+                        find "$1" -xdev -maxdepth 1 -type f -name "ID_*.env" | sort
+                    ' shell '{}' ';' \
+                    -exec sh -c '
                         find "$1" -xdev -maxdepth 1 -type f -name "PATH_*.env" | sort
                     ' shell '{}' ';' \
                     -exec sh -c '
-                        find "$1" -xdev -maxdepth 1 -type f -name "*.env" -not -name "PATH_*" -print | sort
+                        find "$1" -xdev -maxdepth 1 -type f -name "*.env" -not -name "ID_*" -not -name "PATH_*" -print | sort
                     ' shell '{}' ';' \
                 | sed -e 's/^/load_next "/; s/$/";/'
             )"

@@ -16,9 +16,9 @@
 [ -z "${DBG_SHRC}" ] || echo "Exiting .bashrc"
 # This will prevent atuin's setup script from adding itself: atuin init bash
 
-eval "${SZ_ENV_BASH_LOAD_PREEXEC}"
-if [[ -n "${BLE_VERSION-}" ]]; then
-    [[ -n "${DBG}" ]] && echo "attaching ble.sh"
-    ble-attach
-fi
+#eval "${SZ_ENV_BASH_LOAD_PREEXEC}"
+#if [[ -n "${BLE_VERSION-}" ]]; then
+#    [[ -n "${DBG}" ]] && echo "attaching ble.sh"
+#    ble-attach
+#fi
 
