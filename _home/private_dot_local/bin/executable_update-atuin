@@ -1,0 +1,32 @@
+#! /usr/bin/env bash
+
+set -e
+
+BASE_0=${BASE_0:-$0}
+BASE_SHELL=$(basename "$SHELL")
+
+#! /usr/bin/env bash
+
+_update-atuin() { (
+    set -e
+
+    local LatestURL="$(
+        get-github-release.sh \
+            atuinsh/atuin \
+            latest atuin-x86_64-unknown-linux-musl.tar.gz \
+            | grep -E 'tar\.gz$'
+    )"
+    local dlPath="$(mktemp --directory --suffix atuin)"
+    local appPath="$HOME/.local/bin"
+    printf 'Downloading from %s... ' "${LatestURL#*/download/}"
+    curl -sLO --output-dir "$dlPath" "$LatestURL" && printf 'Done'
+    printf '\n'
+    ( cd "$dlPath"; curl -sL "$LatestURL.sha256" | sha256sum --check )
+    ( cd "$appPath"; tar zxf "$dlPath"/*.tar.gz --strip-components=1 --no-anchored 'atuin' )
+    rm -R "$dlPath"
+
+    printf '%s\n' \
+        'atuin binary installed, please restart you shell'
+); }
+
+_update-atuin "${@}"
