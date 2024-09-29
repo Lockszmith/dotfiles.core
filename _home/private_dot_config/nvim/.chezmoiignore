@@ -1,0 +1,10 @@
+.github
+.github/**
+LICENSE.md
+README.md
+doc
+doc/**
+spell
+spell/**
+lua/kickstart
+lua/kickstart/**
