@@ -1,9 +1,22 @@
 # https://www.chezmoi.io/reference/special-files-and-directories/chezmoiexternal-format/
 #
+# The externals are checked based on the refreshPeriod whenever an `apply` (or `update`) operations run  
+#
+# The simplest form to update all externals:
+# ```sh
+# chezmoi apply --include externals
+# ```
+#
+# Variable              Type            Default Description
 # type                  string          none    External type (file, archive, archive-file, or git-repo)
-# refreshPeriod 	duration        0       Refresh period (Examples: one day (24h), one week (168h), or four weeks (672h))
+# url                   string          none    URL
+# refreshPeriod         duration        0       Refresh period (Examples: one day (24h), one week (168h), or four weeks (672h))
+# executable            bool            false   Add executable_ attribute to file
+# path                  string          none    Path to file in archive
 
-{{ $externals := dict -}}
+{{ $defaultRefresh := "168h" -}}
+{{- $externals := dict -}}
+
 
 {{- with $repo := "dandavison/delta" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -11,8 +24,8 @@
           "type" "archive-file"
           "url" (printf "https://github.com/%s/releases/download/%s/delta-%s-x86_64-unknown-linux-musl.tar.gz" $repo $version $version)
           "path" (printf "delta-%s-x86_64-unknown-linux-musl/delta" $version)
-          "refreshPeriod" "168h")
--}}
+          "refreshPeriod" $defaultRefresh
+) -}}
 {{-   end -}}
 {{- end -}}
 
@@ -22,8 +35,8 @@
           "type" "archive-file"
           "url" (printf "https://github.com/%s/releases/download/v%s/git-credential-oauth_%s_linux_amd64.tar.gz" $repo $version $version)
           "path" "git-credential-oauth"
-          "refreshPeriod" "168h")
--}}
+          "refreshPeriod" $defaultRefresh
+) -}}
 {{-   end -}}
 {{- end -}}
 
@@ -32,8 +45,8 @@
 {{-     $_ := set $externals ".cache/chezmoi/tmp/zellij" (dict
           "type" "archive"
           "url" (printf "https://github.com/%s/releases/download/%s/zellij-x86_64-unknown-linux-musl.tar.gz" $repo $version)
-          "refreshPeriod" "168h")
--}}
+          "refreshPeriod" $defaultRefresh
+) -}}
 {{-   end -}}
 {{- end -}}
 
@@ -41,15 +54,14 @@
 ".config/sz.env/lib/ble.sh.curl":
   type: "archive"
   url: "https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz"
-  refreshPeriod: "168h"
+  refreshPeriod: "{{ $defaultRefresh }}"
 
 ".config/sz.env/lib/delta.themes.gitconfig":
   type: "file"
   url: "https://raw.githubusercontent.com/dandavison/delta/refs/heads/main/themes.gitconfig"
-  refreshPeriod: "168h"
+  refreshPeriod: "{{ $defaultRefresh }}"
 
 ".config/sz.env/lib/bash-preexec/bash-preexec.sh":
   type: "file"
   url: "https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh"
-  refreshPeriod: "168h"
-
+  refreshPeriod: "{{ $defaultRefresh }}"
