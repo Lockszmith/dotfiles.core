@@ -57,6 +57,9 @@ if is_sourced; then
                     -exec sh -c '
                         find "$1" -xdev -maxdepth 1 -type f -name "*.env" -not -name "ID_*" -not -name "PATH_*" -print | sort
                     ' shell '{}' ';' \
+                    -exec sh -c '
+                        find "$1" -xdev -maxdepth 1 -type f -name "PATH_zz_cleanup.env"
+                    ' shell '{}' ';' \
                 | sed -e 's/^/load_next "/; s/$/";/'
             )"
             if [ -n "$DBG_NO_SZ_LOAD" ]; then
