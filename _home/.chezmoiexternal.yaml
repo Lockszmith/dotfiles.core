@@ -79,3 +79,9 @@
   type: "file"
   url: "https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh"
   refreshPeriod: "{{ $defaultRefresh }}"
+
+".local/bin/nvim.AppImage":
+  type: "file"
+  url: "https://github.com/neovim/neovim/releases/download/stable/nvim.appimage"
+  executable: true
+  refreshPeriod: "{{ $defaultRefresh }}"
