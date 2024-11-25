@@ -17,6 +17,17 @@
 {{ $defaultRefresh := "168h" -}}
 {{- $externals := dict -}}
 
+{{- with $repo := "zellij-org/zellij" -}}
+{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".cache/chezmoi/tmp/zellij" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/%s/zellij-x86_64-unknown-linux-musl.tar.gz" $repo $version)
+          "path" "zellij"
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end }}
 
 {{- with $repo := "dandavison/delta" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -41,16 +52,17 @@
 {{-   end -}}
 {{- end -}}
 
-{{- with $repo := "zellij-org/zellij" -}}
+{{- with $repo := "extrawurst/gitui" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".cache/chezmoi/tmp/zellij" (dict
-          "type" "archive"
-          "url" (printf "https://github.com/%s/releases/download/%s/zellij-x86_64-unknown-linux-musl.tar.gz" $repo $version)
+{{-     $_ := set $externals ".local/bin/gitui" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/%s/gitui-linux-x86_64.tar.gz" $repo $version)
+          "path" "./gitui"
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
 {{-   end -}}
-{{- end -}}
+{{- end }}
 
 {{- $externals | toYaml }}
 ".config/sz.env/lib/ble.sh.curl":
