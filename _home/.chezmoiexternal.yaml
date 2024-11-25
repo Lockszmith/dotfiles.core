@@ -35,6 +35,7 @@
           "type" "archive-file"
           "url" (printf "https://github.com/%s/releases/download/v%s/git-credential-oauth_%s_linux_amd64.tar.gz" $repo $version $version)
           "path" "git-credential-oauth"
+          "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
 {{-   end -}}
@@ -45,6 +46,7 @@
 {{-     $_ := set $externals ".cache/chezmoi/tmp/zellij" (dict
           "type" "archive"
           "url" (printf "https://github.com/%s/releases/download/%s/zellij-x86_64-unknown-linux-musl.tar.gz" $repo $version)
+          "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
 {{-   end -}}
