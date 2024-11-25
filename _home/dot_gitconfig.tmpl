@@ -1,7 +1,14 @@
 # This is Git's per-user configuration file.
+# It is recommended to edit this using chezmoi:
+# cz edit ~/.gitconfig
+
+[include]
+    path = .config/sz.env/lib/delta.themes.gitconfig
+
 [user]
-  name = Lockszmith (kateryna)
-  email = code@lksz.me
+  name = {{ .gitName }}
+  email = {{ .gitEmail }}
+
 [credential]
   helper = cache --timeout 21600
   helper = oauth
@@ -13,5 +20,37 @@
 # oauthDeviceAuthURL = /login/oauth/authorize
 # oauthDeviceAuthURL = /login/oauth/authorize_device
 # oauthScopes = read_repository
+[core]
+    editor = nvim
+    pager = delta
+
+[init]
+    defaultBranch = main
+
+[core]
+    pager = delta
+
+[interactive]
+    diffFilter = delta --color-only
+
+[delta]
+    features = colibri
+    navigate = true  # use n and N to move between diff sections
+    line-numbers = true
+    side-by-side = true
+
 [diff]
-	tool = vimdiff
+    tool = nvimdiff
+[difftool]
+    prompt = false
+[difftool "nvimdiff"]
+    cmd = "nvim -d \"$LOCAL\" \"$REMOTE\""
+
+[merge]
+    tool = nvimdiff
+    conflictstyle = zdiff3
+[mergetool]
+    prompt = true
+[mergetool "nvimdiff"]
+    cmd = "nvim -d \"$LOCAL\" \"$REMOTE\" \"$MERGED\" -c 'wincmd w' -c 'wincmd J'"
+

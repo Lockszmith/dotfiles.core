@@ -1,0 +1,32 @@
+{{- $sysname := promptStringOnce . "sysname" "System name" -}}
+{{- $sysgroup := promptStringOnce . "sysgroup" "System group" -}}
+{{- $sysarea := promptStringOnce . "sysarea" "System area" -}}
+{{- $gitEmail := promptStringOnce . "gitEmail" "email address (for git commits)" -}}
+{{- $gitName := promptStringOnce . "gitName" "Full name (for git commits)" -}}
+
+[data]
+{{- if ($sysname) }}
+    sysname = {{ $sysname | quote }}
+{{- end -}}
+{{- if ($sysgroup) }}
+    sysgroup = {{ $sysgroup | quote }}
+{{- end -}}
+{{- if ($sysarea) }}
+    sysarea = {{ $sysarea | quote }}
+{{ end -}}
+
+{{ if ($gitEmail) }}
+    gitEmail = {{ $gitEmail | quote }}
+{{- end -}}
+{{- if ($gitName) }}
+    gitName = {{ $gitName | quote }}
+{{- end }}
+
+[diff]
+#   command = "nvim"
+#   args = ["-d",  "{{- "{{ .Destination }}" -}}", "{{- "{{ .Target }}" -}}"]
+
+    command = "delta"
+    args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
+    pager = "delta"
+
