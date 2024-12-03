@@ -5,7 +5,7 @@
 # SC1090 Can't follow non-constant source
 
 # User basename instead of ${0:##*/} to be POSIX compliant
-BASE_0=${BASE_0:-$(basename $0)}
+BASE_0=${BASE_0:-$(basename ${0#-})}
 SCRIPT_DIR=${SCRIPT_DIR:-"$( cd -- "$( dirname -- "$0" )" &> /dev/null && pwd )"}
 BASE_SHELL=$(basename "$SHELL")
 
@@ -15,7 +15,7 @@ is_sourced() {
         case $ZSH_EVAL_CONTEXT in *:file:*) return 0;; esac
     else
         # case ${0##*/} in dash|-dash|bash|-bash|ksh|-ksh|sh|-sh) return 0;; esac
-        case "$(basename $0)" in $BASE_SHELL|-$BASE_SHELL) return 0;; esac
+        case "${BASE_0}" in $BASE_SHELL|-$BASE_SHELL) return 0;; esac
     fi
     return 1; # NOT sourced.
 }
