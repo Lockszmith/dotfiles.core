@@ -15,37 +15,49 @@ BASE_SHELL=$(basename "$SHELL")
 
 if is_sourced; then
     zellij-cleanup() {
-        type -pa zellij > /dev/null && type -pa zellij | sed -Ee 's/^.* is //' | awk '{ print $1 }' | grep -E "^$HOME" | xargs -tr rm
-        [[ -d "$HOME/.cache/zellij" ]] && echo "$HOME/.cache/zellij" | xargs -rt rm -fR
-        find /tmp -maxdepth 1 -mindepth 1 -type d -name 'zellij*' -print0 | xargs -r0t rm -fR
-	printf 'Zellij has been cleaned up, you can now reinstall it.\n'
+        which zellij > /dev/null && which zellij | grep -E "^$HOME" | ${SUDO:-} xargs -tr rm
+        [[ -d "$HOME/.cache/zellij" ]] && echo "$HOME/.cache/zellij" | ${SUDO:-} xargs -tr rm -fR
+        find /tmp -maxdepth 1 -mindepth 1 -type d -name 'zellij*' -print0 | ${SUDO:-} xargs -r0t rm -fR
+        if [[ -d "$HOME/.cache/zellij" ]]; then
+            printf 'Zellij cleanup failed to remove the cache directory, you might still have a zellij session active.\n'
+        else
+            printf 'Zellij has been cleaned up, you can now reinstall it.\n'
+            unset zellij-cleanup
+        fi
     }
-    zellij() {
-        if [[ ! -x ~/bin/zellij ]]; then
-            if [[ -x $HOME/.cache/chezmoi/tmp/zellij/zellij ]]; then
-                ln --symbolic --relative $HOME/.cache/chezmoi/tmp/zellij/zellij ~/bin
-            elif [[ ! -x /tmp/zellij/bootstrap/zellij ]]; then
-                 printf "Grabbing zellij from the web!\n"
-                bash <(curl -sL zellij.dev/launch) "${@}" && return
+    refresh-zellij() {
+        if [ -z "$(which zellij)" ] && ! [ -x ~/.local/bin/zellij ]; then
+            if [[ ! -r /tmp/zellij/bootstrap/zellij ]]; then
+                printf "Grabbing zellij from the web!\n"
+                bash <(curl -sL zellij.dev/launch) "--help" > /dev/null 2>&1 || true
+            fi
+            if [[ -r /tmp/zellij/bootstrap/zellij ]]; then
+                mv /tmp/zellij/bootstrap/zellij ~/.local/bin/zellij
+                rm -fR /tmp/zellij
             fi
         fi
-        if [[ -e /tmp/zellij/bootstrap/zellij ]]; then
-            mv /tmp/zellij/bootstrap/zellij ~/bin/zellij
-	    rm -fR /tmp/zellij
+        refresh-zellij() { :; }
+    }
+    zellij() {
+        refresh-zellij
+        if [[ $# -eq 0 ]]; then
+            env zellij attach -c $USER@$(hostname)
+        else
+            env zellij "${@}"
         fi
-        if [[ -x ~/bin/zellij ]]; then
-            ~/bin/zellij "${@}"
-        fi
-
     }
     zellij-completion() {
-    if [[ "${BASE_SHELL}" == "zsh" ]]; then
-        . <( zellij setup --generate-completion zsh | sed -Ee 's/^(_(zellij) ).*/compdef \1\2/' )
-    else
-        . <( zellij setup --generate-completion "$BASE_SHELL" )
-    fi
+        if [[ "${BASE_SHELL}" == "zsh" ]]; then
+            . <( env zellij setup --generate-completion zsh | sed -Ee 's/^(_(zellij) ).*/compdef \1\2/' )
+        else
+            . <( env zellij setup --generate-completion "$BASE_SHELL" )
+        fi
     }
-    zellij-completion
+${SET:-:} -x
+    if [[ -n "$(which zellij)" ]]; then
+        zellij-completion
+    fi
+${SET:-:} -x
     # Was needed when zsh would load
     # . <( zellij setup --generate-completion "$BASE_SHELL" | sed -ne '/^function/,$p' )
     if [[ -z "$ZELLIJ_SESSION_NAME" ]]; then
