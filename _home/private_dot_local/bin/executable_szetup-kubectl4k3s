@@ -4,23 +4,29 @@
 # - uneeded, as this checked whether script is sourced
 # SC1090 Can't follow non-constant source
 
-# User basename instead of ${0:##*/} to be POSIX compliant
-BASE_0=${BASE_0:-$(basename ${0#-})}
+# Use basename instead of ${0:##*/} to be POSIX compliant
+# Some shells return -<name> in $0 when sourced, ${0#-} drops that initial dash
+BASE_0=${BASE_0:-$(basename -- "${0#-}")}
 SCRIPT_DIR=${SCRIPT_DIR:-"$( cd -- "$( dirname -- "$0" )" &> /dev/null && pwd )"}
 BASE_SHELL=$(basename "$SHELL")
 
 # Helper function
 is_sourced() {
+    DBG_="$(
+        printf '\n\t\t%-12s%s' '$0:' "$0" BASE_0: "$BASE_0" BASE_SHELL: "$BASE_SHELL"
+    )"
     if [ -n "$ZSH_VERSION" ]; then 
         case $ZSH_EVAL_CONTEXT in *:file:*) return 0;; esac
     else
-        # case ${0##*/} in dash|-dash|bash|-bash|ksh|-ksh|sh|-sh) return 0;; esac
-        case "${BASE_0}" in $BASE_SHELL|-$BASE_SHELL) return 0;; esac
+        case "$(basename -- "${0}")" in $BASE_SHELL|-$BASE_SHELL) return 0;; esac
     fi
     return 1; # NOT sourced.
 }
 
-if is_sourced; then
+if [[ "$1" == '-' ]]; then
+    printf 'BASE_0="%s"\nSCRIPT_DIR=%s\n' "${BASE_0}" "${SCRIPT_DIR}"
+    cat "${BASH_SOURCE[0]}"
+elif is_sourced; then
     # This part is sourced, and might run in a non-bash shell
     DBG_="Is Sourced"
     USER_HOME=$HOME
@@ -107,9 +113,6 @@ if is_sourced; then
     	kubectl get "${NS:+--namespace=}${NS:---all-namespaces}" "${@:-pods}" | { sed -u 1q; sort; }
         }
     fi
-elif [[ "$1" == '-' ]]; then
-    printf 'BASE_0="%s"\nSCRIPT_DIR=%s\n' "${BASE_0}" "${SCRIPT_DIR}"
-    cat "${BASH_SOURCE[0]}"
 else
     SCRIPT_NAME="$BASE_0"
     printf '%s\n' \
