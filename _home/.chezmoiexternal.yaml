@@ -64,6 +64,18 @@
 {{-   end -}}
 {{- end }}
 
+{{- with $repo := "theimpostor/osc" -}}
+{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/osc" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/%s/osc_linux_x86_64.tar.gz" $repo $version)
+          "path" "osc"
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end }}
+
 {{- $externals | toYaml }}
 ".config/sz.env/lib/ble.sh.curl":
   type: "archive"
