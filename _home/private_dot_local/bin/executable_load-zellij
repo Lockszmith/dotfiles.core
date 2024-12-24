@@ -15,7 +15,7 @@ BASE_SHELL=$(basename "$SHELL")
 
 if is_sourced; then
     zellij-cleanup() {
-        which zellij > /dev/null && which zellij | grep -E "^$HOME" | ${SUDO:-} xargs -tr rm
+        env which zellij > /dev/null && env which zellij | grep -E "^$HOME" | ${SUDO:-} xargs -tr rm
         [[ -d "$HOME/.cache/zellij" ]] && echo "$HOME/.cache/zellij" | ${SUDO:-} xargs -tr rm -fR
         find /tmp -maxdepth 1 -mindepth 1 -type d -name 'zellij*' -print0 | ${SUDO:-} xargs -r0t rm -fR
         if [[ -d "$HOME/.cache/zellij" ]]; then
@@ -26,7 +26,8 @@ if is_sourced; then
         fi
     }
     refresh-zellij() {
-        if [ -z "$(which zellij)" ] && ! [ -x ~/.local/bin/zellij ]; then
+${SET:-:} -x
+        if [ -z "$(env which zellij)" ] && ! [ -x ~/.local/bin/zellij ]; then
             if [[ ! -r /tmp/zellij/bootstrap/zellij ]]; then
                 printf "Grabbing zellij from the web!\n"
                 bash <(curl -sL zellij.dev/launch) "--help" > /dev/null 2>&1 || true
@@ -48,13 +49,14 @@ if is_sourced; then
     }
     zellij-completion() {
         if [[ "${BASE_SHELL}" == "zsh" ]]; then
-            . <( env zellij setup --generate-completion zsh | sed -Ee 's/^(_(zellij) ).*/compdef \1\2/' )
+            type _zellij > /dev/null \
+            || . <( env zellij setup --generate-completion zsh | sed -Ee 's/^(_(zellij) ).*/compdef \1\2/' )
         else
             . <( env zellij setup --generate-completion "$BASE_SHELL" )
         fi
     }
 ${SET:-:} -x
-    if [[ -n "$(which zellij)" ]]; then
+    if [[ -n "$(env which zellij)" ]]; then
         zellij-completion
     fi
 ${SET:-:} -x
