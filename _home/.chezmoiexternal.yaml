@@ -76,6 +76,17 @@
 {{-   end -}}
 {{- end }}
 
+{{- with $repo := "Lifailon/lazyjournal" -}}
+{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/lazyjournal" (dict
+          "type" "file"
+          "url" (printf "https://github.com/%s/releases/download/%s/lazyjournal-%s-linux-amd64" $repo $version $version)
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end }}
+
 {{- $externals | toYaml }}
 ".config/sz.env/lib/ble.sh.curl":
   type: "archive"
