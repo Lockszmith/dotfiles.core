@@ -1,0 +1,24 @@
+# This .chezmoi.toml file is used once only
+# It collects information about the system in order to determine
+# which of the _home.* dirs will be set as the .chezmoiroot
+#
+{{- $chassisType := "desktop" }}
+{{- $sysType := "posix" }}
+{{- if eq .chezmoi.os "darwin" }}
+{{-   $sysType = "macos" }}
+{{-   if contains "BatteryData" (output "ioreg" "-c" "AppleSmartBattery") }}
+{{-     $chassisType = "laptop" }}
+{{-   else }}
+{{-     $chassisType = "desktop" }}
+{{-   end }}
+{{- else if eq .chezmoi.os "linux" }}
+{{-   $chassisType = (output "hostnamectl" "--json=short" | mustFromJson).Chassis }}
+{{- else if eq .chezmoi.os "windows" }}
+{{-   $sysType = "windows" }}
+{{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
+{{- end }}
+
+[scriptEnv]
+  CZ_CHASSIS="{{- $chassisType }}"
+  CZ_SYS="{{- $sysType }}"
+  CZ_OS="{{- .chezmoi.os }}"

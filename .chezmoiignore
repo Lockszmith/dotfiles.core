@@ -1,0 +1,7 @@
+# The content at the root of the repo is for initial detection only.
+# Thus, only .chezmoitscripts is required, because it will setup the
+# correct .chezmoiroot, where the rest of the content resides.
+#
+*
+! .chezmoiscripts/
+! .chezmoiscripts/**

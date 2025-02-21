@@ -1,0 +1,22 @@
+#! /usr/bin/env bash
+
+set -e
+
+#env | grep -E 'chezmoi|^CZ'
+cd "$CHEZMOI_SOURCE_DIR"
+CZ_MODEL="$(ioreg -l | grep "product-name" | sed -Ee 's/^.*\<"(.*)\"\>.*$/\1/')"
+set | grep '^CZ_'
+printf 'System detected as %s/%s, setting up .chezmoiroot and initializing...\n' "$CZ_SYS" "$CZ_CHASSIS"
+if [ -r "base.chezmoiroot.$CZ_SYS.$CZ_CHASSIS" ]; then
+    ln -s "base.chezmoiroot.$CZ_SYS.$CZ_CHASSIS" .chezmoiroot
+elif [ -r "base.chezmoiroot.$CZ_SYS" ]; then
+    ln -s "base.chezmoiroot.$CZ_SYS" .chezmoiroot
+elif [ -r "base.chezmoiroot.$CZ_CHASSIS" ]; then
+    ln -s "base.chezmoiroot.$CZ_CHASSIS" .chezmoiroot
+else
+    printf 'Failed to find a matching .chezmoiroot. Aborting!\n'
+    false
+fi
+
+# Brute force remove chezmoistate lock and restart init --apply
+exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb && chezmoi init --apply'
