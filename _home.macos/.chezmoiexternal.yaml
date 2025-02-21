@@ -17,7 +17,7 @@
 {{ $defaultRefresh := "168h" -}}
 {{- $externals := dict -}}
 
-{{ $myArch := "x86_64-unknown-linux-musl" }}
+{{ $myArch := "aarch64-apple-darwin" }}
 
 {{- with $repo := "zellij-org/zellij" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -42,7 +42,7 @@
 {{-   end -}}
 {{- end -}}
 
-{{ $myArch = "linux_amd64" }}
+{{ $myArch = "darwin_arm64" }}
 
 {{- with $repo := "hickford/git-credential-oauth" -}}
 {{-   with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
@@ -56,7 +56,7 @@
 {{-   end -}}
 {{- end -}}
 
-{{ $myArch = "linux-x86_64" }}
+{{ $myArch = "mac" }}
 
 {{- with $repo := "extrawurst/gitui" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -70,7 +70,7 @@
 {{-   end -}}
 {{- end }}
 
-{{ $myArch = "linux_x86_64" }}
+{{ $myArch = "Darwin_arm64" }}
 
 {{- with $repo := "theimpostor/osc" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -84,7 +84,7 @@
 {{-   end -}}
 {{- end }}
 
-{{ $myArch = "linux-amd64" }}
+{{ $myArch = "darwin-arm64" }}
 
 {{- with $repo := "Lifailon/lazyjournal" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -98,23 +98,8 @@
 {{- end }}
 
 {{- $externals | toYaml }}
-".config/sz.env/lib/ble.sh.curl":
-  type: "archive"
-  url: "https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz"
-  refreshPeriod: "{{ $defaultRefresh }}"
 
 ".config/sz.env/lib/delta.themes.gitconfig":
   type: "file"
   url: "https://raw.githubusercontent.com/dandavison/delta/refs/heads/main/themes.gitconfig"
-  refreshPeriod: "{{ $defaultRefresh }}"
-
-".config/sz.env/lib/bash-preexec/bash-preexec.sh":
-  type: "file"
-  url: "https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh"
-  refreshPeriod: "{{ $defaultRefresh }}"
-
-".local/bin/nvim.AppImage":
-  type: "file"
-  url: "https://github.com/neovim/neovim/releases/download/stable/nvim.appimage"
-  executable: true
   refreshPeriod: "{{ $defaultRefresh }}"
