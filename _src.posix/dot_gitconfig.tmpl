@@ -14,7 +14,19 @@
 [credential]
   helper = cache --timeout 21600
   helper = oauth
-# helper = oauth -device
+#  helper = osxkeychain
+#  helper = oauth -device
+
+# Raed only OAuth2 authorization
+[credential "https://git.vastdata.com"]
+  oauthClientId = 45fddd19ac1e3828f6caca2087dd78383477f0fc94164920476db536ac618beb
+  oauthClientSecret = 98958d78931d8f02be1ab9c4fd4f718dcce357be3b609e771ba26f500ddd6196
+  # oauthScopes = "read_repository write_repository"
+  oauthScopes = "read_repository"
+  oauthAuthURL = /oauth/authorize
+  oauthTokenURL = /oauth/token
+  oauthDeviceAuthURL = /oauth/authorize_device
+
 [credential "https://code.lksz.me"]
   oauthClientId = a4792ccc-144e-407e-86c9-5e7d8d9c3269
   oauthAuthURL = /login/oauth/authorize
