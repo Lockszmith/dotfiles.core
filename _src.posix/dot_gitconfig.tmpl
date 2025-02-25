@@ -9,6 +9,8 @@
   name = {{ .gitName }}
   email = {{ .gitEmail }}
 
+# Information on how to set this up:
+# https://github.com/hickford/git-credential-oauth?tab=readme-ov-file#git-credential-oauth
 [credential]
   helper = cache --timeout 21600
   helper = oauth
@@ -21,7 +23,7 @@
 # oauthDeviceAuthURL = /login/oauth/authorize_device
 # oauthScopes = read_repository
 [core]
-    editor = nvim
+    editor = vim
     pager = delta
 
 [init]
