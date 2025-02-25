@@ -1,0 +1,35 @@
+#! /usr/bin/env bash
+
+# Default is ~2 which will translate to '<default>~2'
+# '<default>' and '<deafult>~1' mean pretty much the same
+# '<default>~2' is one commit before it.
+arg_one="${1:-}"
+if [[ -z "$arg_one" ]]; then
+    if (git show main~2 --quiet --online 2>&1) >/dev/null; then
+        arg_one="~2"
+    elif (git show main~1 --quiet --online 2>&1) >/dev/null; then
+        arg_one="~1"
+    else
+        arg_one="+"
+    fi
+fi
+if [[ "$arg_one" == '+' ]]; then
+    [[ "${LINES-0}" -ne 0 ]] || LINES="$(tput lines)"
+    arg_one="-$(( (LINES-1)/3 ))"
+elif [[ "$arg_one" =~ ^\.?~ ]]; then
+    arg_one="$(git default)${arg_one#\.}.."
+fi
+
+git_args=( 
+    "--abbrev-commit" "--decorate" "--graph"
+    "--format=%C(yellow)%h%C(reset) %C(dim cyan)[%><(14)%ar] %C(reset)%C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(auto)%d%C(reset) "
+    "$arg_one" "${@:2}"
+)
+if [ "$1" == "---" ]; then
+    git_args=("${@:2}")
+fi
+#ANSI_Grey "${git_args[*]}" && echo ''
+
+command git log "${git_args[@]}"
+printf "\n"
+
