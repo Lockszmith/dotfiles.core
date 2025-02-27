@@ -1,0 +1,9 @@
+Host cs-dbg
+    User gal.szkolnik
+    HostName 10.27.70.101
+
+Host my-loop sales-devvm-gal-szkolnik-spot
+    User centos
+    HostName 10.91.1.10
+
+# vim: set ft=sshconfig sw=4 sts=4 et:

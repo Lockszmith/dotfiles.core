@@ -1,0 +1,8 @@
+Include config.d/*
+
+Host kateryna.out
+    HostName szk.li
+    Port 8080
+    User sz
+
+# vim: set ft=sshconfig sw=4 sts=4 et:
