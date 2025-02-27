@@ -26,7 +26,8 @@ module.exports = {
       match: [
         finicky.matchDomains(/.*\.vastdata.com/),
         "deeplinks.mindtickle.com*",
-        "vastdata.mindtickle.com*"
+        //"vastdata.mindtickle.com*",
+        "vastdata.*"
       ],
       browser: "Google Chrome"
     },
