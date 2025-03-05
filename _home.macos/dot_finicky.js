@@ -24,10 +24,10 @@ module.exports = {
   handlers: [
     {
       match: [
-        finicky.matchDomains(/.*\.vastdata.com/),
-        "deeplinks.mindtickle.com*",
-        //"vastdata.mindtickle.com*",
-        "vastdata.*"
+        finicky.matchDomains(/.*\.vastdata\.com/),
+        "vastdata.*",
+        finicky.matchDomains(/.*\.catonetworks\.com/),
+        "deeplinks.mindtickle.com*"
       ],
       browser: "Google Chrome"
     },
