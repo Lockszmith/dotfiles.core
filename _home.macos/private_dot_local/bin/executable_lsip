@@ -1,0 +1,29 @@
+#! /usr/bin/env bash
+
+set -e
+
+is_cmd() {
+    type -p -- "${@}" 2> /dev/null 1> /dev/null
+}
+
+if ! is_cmd ip; then
+    printf '%s\n' \
+        '`ip` command missing, try again after installing:' \
+        '    `brew install iproute2mac`' \
+	''
+    exit 1
+fi
+
+ip -j a s | jq -r '
+  map(select(.operstate == "UP"))
+  | map(select(.addr_info | length > 0))
+  | map(select(any(.addr_info[]; .family == "inet")))
+  | sort_by(.addr_info[0].local // "0.0.0.0") 
+  | .[]
+  | "\( .ifname )\t\( .link_type )\t\( 
+      .addr_info[]
+      | select(.family == "inet") 
+      | "\(.local)/\(.prefixlen)"
+    )"
+'
+
