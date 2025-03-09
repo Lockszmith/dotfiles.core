@@ -1,0 +1,8 @@
+#! /usr/bin/env bash
+
+DIR=${1:?Must supply path (use . for CWD)}
+
+find "${DIR}" -type d -exec chmod 775 '{}' \; \
+&& find "${DIR}" -type f -not -executable -exec chmod 664 '{}' \; \
+&& find "${DIR}" -type f -executable -exec chmod 775 '{}' \;
+
