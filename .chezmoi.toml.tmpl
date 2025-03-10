@@ -2,9 +2,11 @@
 # It collects information about the system in order to determine
 # which of the _home.* dirs will be set as the .chezmoiroot
 #
+{{- $githubToken := promptStringOnce . "githubToken" "GITHUB TOKEN (Public/Read-Only)" -}}
 {{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
 {{- $chassisType := "desktop" }}
 {{- $sysType := "posix" }}
+{{- $sysVendor := "unknown" }}
 {{- if eq .chezmoi.os "darwin" }}
 {{-   $sysType = "macos" }}
 {{-   if contains "BatteryData" (output "ioreg" "-c" "AppleSmartBattery") }}
@@ -17,7 +19,7 @@
 {{- else if eq .chezmoi.os "windows" }}
 {{-   $sysType = "windows" }}
 {{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
-{{- end }}
+{{- end -}}
 
 scriptTempDir={{- $scriptTempDir | quote }}
 
@@ -26,3 +28,6 @@ scriptTempDir={{- $scriptTempDir | quote }}
   CZ_CHASSIS={{- $chassisType | quote }}
   CZ_SYS={{- $sysType | quote }}
   CZ_OS={{- .chezmoi.os | quote }}
+  CHEZMOI_GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
+  GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
+  GITHUB_TOKEN={{- $githubToken | quote }}
