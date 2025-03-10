@@ -22,8 +22,8 @@ ssh_do() {
     ssh \
         -o PasswordAuthentication=no \
         -o LogLevel=ERROR \
-	-o BatchMode \
-	-o ConnectionTimeout=2 \
+        -o BatchMode=yes \
+        -o ConnectTimeout=2 \
         -ttn \
         "${USER:+${USER}@}${HOST}" -- "${@:3}" \
     || (printf '\n'; printf 'Exit code: %s\n' "$?" >&2)
