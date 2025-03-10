@@ -1,0 +1,37 @@
+[General]
+  Backend = "gist" # specify backend service to sync snippets (gist, ghe or gitlab, default: gist)
+  cmd = ["sh", "-c"]              # specify the command to execute the snippet with
+  Color = false # enables output coloring with fzf, same as '--color' flag
+  Column = 40 # column size for list command
+  Editor = "vim" # your favorite text editor
+  Format = "[$description]: $command $tags" # controls the format of the output when searching
+  SelectCmd = "fzf --ansi --layout=reverse --border --height=90% --pointer=* --cycle --prompt=Snippets:" # selector command for edit command (fzf or peco)
+  SnippetDirs = []
+  SnippetFile = "/Users/gal.szkolnik/.config/pet/snippet.toml" # specify snippet path
+  SortBy = "" # specify how snippets get sorted (recency (default), -recency, description, -description, command, -command, output, -output)
+
+[Gist]
+  file_name = "pet-snippet.toml" 
+  access_token = ""               # your access token
+  gist_id = ""                    # Gist ID
+  Public = false                  # public or priate
+  auto_sync = false               # sync automatically when editing snippets
+
+[GitLab]
+  file_name = "pet-snippet.toml"  # specify GitLab Snippets file name
+  access_token = "XXXXXXXXXXXXX"  # your access token
+  ID = ""                         # GitLab Snippets ID
+  Visibility = "private"          # public or internal or private
+  auto_sync = false               # sync automatically when editing snippets
+
+  Url = ""
+  skip_ssl = false
+
+[GHEGist]
+  Public = false
+  access_token = ""
+  auto_sync = false
+  base_url = ""
+  file_name = ""
+  gist_id = ""
+  upload_url = ""

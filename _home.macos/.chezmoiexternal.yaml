@@ -56,6 +56,18 @@
 {{-   end -}}
 {{- end -}}
 
+{{- with $repo := "knqyf263/pet" -}}
+{{-   with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/pet" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/v%s/pet_%s_%s.tar.gz" $repo $version $version $myArch)
+          "path" "pet"
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end -}}
+
 {{ $myArch = "mac" }}
 
 {{- with $repo := "extrawurst/gitui" -}}
