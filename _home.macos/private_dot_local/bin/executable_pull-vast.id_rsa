@@ -1,0 +1,25 @@
+#! /usr/bin/env bash
+
+set -e
+# Arguments 'TO', optional user (can be configured in ~/.ssh/config.d/...), command to run over ssh
+
+# Figure out the IPAddress I need to operate from
+# Figure out the interface name to use
+# Set the interface to the IP Address if not already setup
+# Test with ping
+# Connect with SSH
+
+VASTHOST="${1}"
+if [ -z "$VASTHOST" ]; then
+    VASTHOST=192.168.2.2
+    printf '%s\n' "VAST host argument not supplied, using default $VASTHOST..." >&2
+elif [ "$VASTHOST" == "0" ]; then
+    printf '%s\n' "Removing:" ~/.ssh/vast.id_rsa*
+    rm ~/.ssh/vast.id_rsa* || true
+    cp ~/.ssh/id_rsa ~/.ssh/vast.id_rsa
+    cp ~/.ssh/id_rsa.pub ~/.ssh/vast.id_rsa.pub
+    exit
+fi
+set -x
+scp vastdata@${VASTHOST}:.ssh/id_rsa ~/.ssh/vast.id_rsa
+scp vastdata@${VASTHOST}:.ssh/id_rsa.pub ~/.ssh/vast.id_rsa.pub

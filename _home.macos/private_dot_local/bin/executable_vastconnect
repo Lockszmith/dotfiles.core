@@ -1,0 +1,112 @@
+#! /usr/bin/env bash
+
+set -e
+# Arguments 'TO', optional user (can be configured in ~/.ssh/config.d/...), command to run over ssh
+
+# Figure out the IPAddress I need to operate from
+# Figure out the interface name to use
+# Set the interface to the IP Address if not already setup
+# Test with ping
+# Connect with SSH
+
+if [ $# -eq 0 ]; then
+    printf '%s\n' \
+        "${0#/*} <TO> [<FROM>] [<Interface>]" \
+        "" \
+        "Configure MacOS iface to connect to <TO> address from <FROM> address" \
+        "Default <Interface> is en9" \
+        "" \
+        "FROM and FROM_SN will be autofilled for the following subnets:" \
+        "    10.117.10.0/24" \
+        "    192.168.[1 or 2].0/24" \
+        "" \
+        "for other subnets, you'll need to specify a FROM argument and a FROM_SN env variable" \
+        ""
+    exit 2
+fi
+
+TO="${1}"
+IFACE="${IFACE:-en9}"
+SLEEP="${SLEEP:-3s}"
+PINGOK=1
+CMDs=("${@:2}")
+
+[ "${#CMDs}" -gt 0 ] || CMDs=( hostname )
+
+_myip() {
+    lsip | awk "/${IFACE}/"'{split($3, a, "/"); print a[1];}'
+}
+
+_ping() {
+    ping -c "${PING_C:-3}" -W 250 "${TO}"
+}
+
+_log() {
+    printf '%s\n' \
+            "${@:2}" \
+    >&2
+    exit ${1} 
+}
+
+if _ping &>/dev/null; then
+    printf "Connection detected.\n"
+else
+    PINGOK=0
+    case "${TO}" in
+        10.117.10.*)
+            FROM=10.117.10.254
+            FROM_SN=255.255.255.0
+            ;;
+        192.168.1.*)
+            FROM=192.168.1.254
+            FROM_SN=255.255.255.0
+            ;;
+        192.168.2.*)
+            FROM=192.168.2.254
+            FROM_SN=255.255.255.0
+            ;;
+        *)
+            FROM=${FROM:?FROM and FROM_SN Must be supplied for unknown IPv4 destination $1}
+            FROM_SN${FROM_SN:?FROM and FROM_SN Must be supplied for unknown IPv4 destination $1}
+            ;;
+    esac
+
+    MYIP=''
+    MYIP="$(_myip)"
+
+    if [ "$FROM" == "$MYIP" ]; then
+        _log 2 "Already setup with $MYIP, but ping to $TO is failing, you'll need to troubleshoot this."
+        exit 2
+    fi
+
+    echo "$MYIP detected on $IFACE, Setting up $FROM / $FROM_SN - \`sudo\` might be prompting you for your password"
+
+    sudo ipconfig set "${IFACE}" manual "${FROM}" "${FROM_SN}" \
+    && sleep "${SLEEP}" \
+    && MYIP="$(_myip)"
+fi
+
+if [ $PINGOK -eq 0 ] && _ping &>/dev/null; then
+    PINGOK=1
+fi
+
+if [ $PINGOK -eq 1 ]; then
+    # auto-copy-ssh-id "${TO}"
+
+    ssh-keygen -R "${TO}" || true
+
+    ssh \
+        -o PasswordAuthentication=no \
+        -o BatchMode=yes \
+        -o ConnectTimeout=2 \
+        -ttn \
+        "${TO}" -- "${CMDs[*]}" \
+    || 1>&2 printf '%s\n' \
+        "Could not SSH into ${TO}, you might want to run 'pull-vast.id_rsa ${TO}' or 'auto-copy-ssh-id ${TO}'"
+else
+    _log 2 "Ping faild."
+fi
+
+exit
+
+

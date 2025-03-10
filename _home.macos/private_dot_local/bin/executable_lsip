@@ -26,4 +26,3 @@ ip -j a s | jq -r '
       | "\(.local)/\(.prefixlen)"
     )"
 '
-
