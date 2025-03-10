@@ -14,7 +14,7 @@ BASE_0=${BASE_0:-$0}
 BASE_SHELL=$(basename "$SHELL")
 
 is_cmd() {
-type -p -- "${@}" 2> /dev/null 1> /dev/null
+    type -p -- "${@}" 2> /dev/null 1> /dev/null
 }
 
 if is_sourced; then
