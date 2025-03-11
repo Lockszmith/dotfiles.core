@@ -2,6 +2,7 @@
 # It collects information about the system in order to determine
 # which of the _home.* dirs will be set as the .chezmoiroot
 #
+{{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
 {{- $chassisType := "desktop" }}
 {{- $sysType := "posix" }}
 {{- if eq .chezmoi.os "darwin" }}
@@ -18,7 +19,10 @@
 {{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
 {{- end }}
 
+scriptTempDir={{- $scriptTempDir | quote }}
+
 [scriptEnv]
-  CZ_CHASSIS="{{- $chassisType }}"
-  CZ_SYS="{{- $sysType }}"
-  CZ_OS="{{- .chezmoi.os }}"
+  CZ_SCRIPT_TEMPDIR={{- $scriptTempDir | quote }}
+  CZ_CHASSIS={{- $chassisType | quote }}
+  CZ_SYS={{- $sysType | quote }}
+  CZ_OS={{- .chezmoi.os | quote }}

@@ -4,6 +4,9 @@
 {{- $gitEmail := promptStringOnce . "gitEmail" "email address (for git commits)" -}}
 {{- $gitName := promptStringOnce . "gitName" "Full name (for git commits)" -}}
 
+{{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
+scriptTempDir={{- $scriptTempDir | quote }}
+
 [data]
 {{- if ($sysname) }}
     sysname = {{ $sysname | quote }}
