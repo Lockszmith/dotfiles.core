@@ -14,6 +14,8 @@
 # executable            bool            false   Add executable_ attribute to file
 # path                  string          none    Path to file in archive
 
+{{- if not (env "OFFLINE") -}}
+
 {{ $defaultRefresh := "168h" -}}
 {{- $externals := dict -}}
 
@@ -115,3 +117,7 @@
   type: "file"
   url: "https://raw.githubusercontent.com/dandavison/delta/refs/heads/main/themes.gitconfig"
   refreshPeriod: "{{ $defaultRefresh }}"
+
+{{- else -}}
+# .chezmoiexternal is disabled because OFFLINE env is defined
+{{- end -}}

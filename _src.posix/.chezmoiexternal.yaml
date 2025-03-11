@@ -14,6 +14,8 @@
 # executable            bool            false   Add executable_ attribute to file
 # path                  string          none    Path to file in archive
 
+{{- if not (env "OFFLINE") -}}
+
 {{ $defaultRefresh := "168h" -}}
 {{- $externals := dict -}}
 
@@ -118,3 +120,7 @@
   url: "https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage"
   executable: true
   refreshPeriod: "{{ $defaultRefresh }}"
+
+{{- else -}}
+# .chezmoiexternal is disabled because OFFLINE env is defined
+{{- end -}}
