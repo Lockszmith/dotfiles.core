@@ -27,7 +27,6 @@ fi
 
 TO="${1}"
 IFACE="${IFACE:-en9}"
-SLEEP="${SLEEP:-3s}"
 PINGOK=1
 CMDs=("${@:2}")
 
@@ -52,24 +51,43 @@ if _ping &>/dev/null; then
     printf "Connection detected.\n"
 else
     PINGOK=0
-    case "${TO}" in
-        10.117.10.*)
-            FROM=10.117.10.254
-            FROM_SN=255.255.255.0
-            ;;
-        192.168.1.*)
-            FROM=192.168.1.254
-            FROM_SN=255.255.255.0
-            ;;
-        192.168.2.*)
-            FROM=192.168.2.254
-            FROM_SN=255.255.255.0
-            ;;
-        *)
-            FROM=${FROM:?FROM and FROM_SN Must be supplied for unknown IPv4 destination $1}
-            FROM_SN${FROM_SN:?FROM and FROM_SN Must be supplied for unknown IPv4 destination $1}
-            ;;
-    esac
+    if [ "${FROM:-${2:-}}" == "dhcp" ]; then
+        FROM=dhcp
+        FROM_SN=auto
+        SLEEP="${SLEEP:-15s}"
+    else
+        SLEEP="${SLEEP:-3s}"
+        case "${TO}" in
+            10.117.10.*)
+                FROM=10.117.10.254
+                FROM_SN=255.255.255.0
+                ;;
+            192.168.1.*)
+                FROM=192.168.1.254
+                FROM_SN=255.255.255.0
+                ;;
+            192.168.2.*)
+                FROM=192.168.2.254
+                FROM_SN=255.255.255.0
+                ;;
+            169.254.1.*)
+                FROM=169.254.1.15
+                FROM_SN=255.255.255.224
+                ;;
+            169.254.111.*)
+                FROM=169.254.111.15
+                FROM_SN=255.255.255.224
+                ;;
+            169.254.3.*)
+                FROM=169.254.3.254
+                FROM_SN=255.255.255.0
+                ;;
+            *)
+                FROM=${FROM:-${2:?FROM and FROM_SN Must be supplied for unknown IPv4 destination $1}}
+                FROM_SN=${FROM_SN:?FROM and FROM_SN Must be supplied for unknown IPv4 destination $1}
+                ;;
+        esac
+    fi
 
     MYIP=''
     MYIP="$(_myip)"
@@ -81,7 +99,13 @@ else
 
     echo "$MYIP detected on $IFACE, Setting up $FROM / $FROM_SN - \`sudo\` might be prompting you for your password"
 
-    sudo ipconfig set "${IFACE}" manual "${FROM}" "${FROM_SN}" \
+    if [ "${FROM}" == "dhcp" ]; then
+        sudo ipconfig set "${IFACE}" bootp || true
+        sudo ipconfig set "${IFACE}" dhcp
+    else
+        sudo ipconfig set "${IFACE}" manual "${FROM}" "${FROM_SN}"
+    fi \
+    && printf 'Waiting %s...' "${SLEEP}" \
     && sleep "${SLEEP}" \
     && MYIP="$(_myip)"
 fi
