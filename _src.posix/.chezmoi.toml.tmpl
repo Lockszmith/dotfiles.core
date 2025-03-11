@@ -1,3 +1,13 @@
+{{- $githubToken := (env "CHEZMOI_GITHUB_ACCESS_TOKEN") }}
+{{- if not ($githubToken) }}
+{{-   $githubToken = (env "GITHUB_ACCESS_TOKEN") }}
+{{- end }}
+{{- if not ($githubToken) }}
+{{-   $githubToken = (env "GITHUB_TOKEN") }}
+{{- end }}
+{{- if not ($githubToken) }}
+{{-   $githubToken = promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)" }}
+{{- end }}
 {{- $sysname := promptStringOnce . "sysname" "System name" }}
 {{- $sysgroup := promptStringOnce . "sysgroup" "System group" }}
 {{- $sysarea := promptStringOnce . "sysarea" "System area" }}
@@ -22,7 +32,6 @@
 {{-   $sysVendor = "pc" }}
 {{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
 {{- end }}
-{{- $githubToken := promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)" -}}
 
 {{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
 scriptTempDir={{- $scriptTempDir | quote }}
@@ -30,31 +39,34 @@ scriptTempDir={{- $scriptTempDir | quote }}
 [data]
 {{- if ($altArch) }}
   altArch={{- $altArch | quote }}
-{{- end -}}
+{{- end }}
 {{- if ($chassisType) }}
   chassisType={{- $chassisType | quote }}
-{{- end -}}
+{{- end }}
 {{- if ($sysType) }}
   sysType={{- $sysType | quote }}
-{{- end -}}
+{{- end }}
 {{- if ($githubToken) }}
   githubToken={{- $githubToken | quote }}
-{{- end -}}
+{{- end }}
 {{- if ($sysname) }}
     sysname = {{ $sysname | quote }}
-{{- end -}}
+{{- end }}
 {{- if ($sysgroup) }}
     sysgroup = {{ $sysgroup | quote }}
-{{- end -}}
+{{- end }}
 {{- if ($sysarea) }}
     sysarea = {{ $sysarea | quote }}
-{{ end -}}
+{{ end }}
 
 {{ if ($gitEmail) }}
     gitEmail = {{ $gitEmail | quote }}
-{{- end -}}
+{{- end }}
 {{- if ($gitName) }}
     gitName = {{ $gitName | quote }}
+{{- end }}
+{{- if not ($githubToken) }}
+  githubToken={{- $githubToken | quote }}
 {{- end }}
 
 [scriptEnv]
@@ -63,7 +75,7 @@ scriptTempDir={{- $scriptTempDir | quote }}
 
 [diff]
 #   command = "nvim"
-#   args = ["-d",  "{{- "{{ .Destination }}" -}}", "{{- "{{ .Target }}" -}}"]
+#   args = ["-d",  "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
 
     command = "delta"
     args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
