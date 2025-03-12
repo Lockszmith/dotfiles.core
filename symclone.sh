@@ -32,7 +32,7 @@ fi
 mkdir -p "$DEST_DIR"
 
 # Find all directories and recreate them in the destination
-find "$SRC_DIR" -type d -mindepth 1 | while read -r dir; do
+find "$SRC_DIR" -mindepth 1 -type d | while read -r dir; do
     mkdir -p "$DEST_DIR/${dir#$SRC_DIR/}"
 done
 

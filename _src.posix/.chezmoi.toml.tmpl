@@ -26,7 +26,8 @@
 {{-     $chassisType = "desktop" }}
 {{-   end }}
 {{- else if eq .chezmoi.os "linux" }}
-{{-   $chassisType = (output "hostnamectl" "--json=short" | mustFromJson).Chassis }}
+#  $chassisType = (output "hostnamectl" "--json=short" | mustFromJson).Chassis }}
+{{-   $chassisType = "server" }}
 {{- else if eq .chezmoi.os "windows" }}
 {{-   $sysType = "windows" }}
 {{-   $sysVendor = "pc" }}

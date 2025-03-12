@@ -15,7 +15,8 @@
 {{-     $chassisType = "desktop" }}
 {{-   end }}
 {{- else if eq .chezmoi.os "linux" }}
-{{-   $chassisType = (output "hostnamectl" "--json=short" | mustFromJson).Chassis }}
+#  $chassisType = (output "hostnamectl" "--json=short" | mustFromJson).Chassis }}
+{{-   $chassisType = "server" }}
 {{- else if eq .chezmoi.os "windows" }}
 {{-   $sysType = "windows" }}
 {{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
