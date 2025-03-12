@@ -2,7 +2,11 @@
 # It collects information about the system in order to determine
 # which of the _home.* dirs will be set as the .chezmoiroot
 #
-{{- $githubToken := promptStringOnce . "githubToken" "GITHUB TOKEN (Public/Read-Only)" -}}
+
+{{- $githubToken := or (env "CHEZMOI_GITHUB_ACCESS_TOKEN") (env "GITHUB_ACCESS_TOKEN") (env "GITHUB_TOKEN") }}
+{{- if not ($githubToken) }}
+{{-   $githubToken = promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)" }}
+{{- end }}
 {{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
 {{- $chassisType := "desktop" }}
 {{- $sysType := "posix" }}
@@ -29,6 +33,4 @@ scriptTempDir={{- $scriptTempDir | quote }}
   CZ_CHASSIS={{- $chassisType | quote }}
   CZ_SYS={{- $sysType | quote }}
   CZ_OS={{- .chezmoi.os | quote }}
-  CHEZMOI_GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
-  GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
-  GITHUB_TOKEN={{- $githubToken | quote }}
+  CZ_GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
