@@ -57,11 +57,18 @@ relpath() {
 find "$SRC_DIR" -type f | while read -r file; do
     # Determine the relative path for the symlink
     target_file="${file#$SRC_DIR/}"
+    target_path="$DEST_DIR/${target_file}"
+    remove_target="${target_path%/*}/remove_$(<<<"${target_file##*/}" sed -Ee 's/^(symlink|executable)_//; s/(\.tmpl)$//;')"
     src_relative_path=$(relpath "$file" "$(dirname "$DEST_DIR/$target_file")")
 
     # Create the symlink with relative path
-    [ -L "$DEST_DIR/$target_file" ] || ! [ -e "$DEST_DIR/$target_file" ] \
-    && ln ${FORCE} -vs "$src_relative_path" "$DEST_DIR/$target_file"
+    SKIP=
+    
+    [ -z "$SKIP" ] && [ -e "${remove_target}" ] && SKIP="remove entry found for: %s" || true
+    [ -z "$SKIP" ] && [ -L "$target_path" ] && [ -z "$FORCE" ] && SKIP="can't force replace %s" || true
+    [ -z "$SKIP" ] && [ -e "$target_path" ] && SKIP="%s exists" || true
+    [ -n "$DBG" ] && [ -n "$SKIP" ] && printf "$SKIP\n"  "$target_path" || true
+    [ -n "$SKIP" ] || ln ${FORCE} -vs "$src_relative_path" "$target_path" || (set | grep -E '^(?:target|remove|src)_' >&2; false)
 done
 
 echo "Symbolic links created successfully in '$DEST_DIR'."
