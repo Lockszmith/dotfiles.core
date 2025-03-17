@@ -44,6 +44,18 @@
 {{-   end -}}
 {{- end -}}
 
+{{- with $repo := "bitwarden/sdk-sm" -}}
+{{-   with $version := trimPrefix "bws-v" (gitHubReleases "bitwarden/sdk-sm" | toJson | fromJson | jq "map(select(.tag_name | startswith(\"bws-v\")))[0] | .tag_name" | first ) -}}
+{{-     $_ := set $externals ".local/bin/bws" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/bws-v%s/bws-%s-%s.zip" $repo $version $myArch $version)
+          "path" "bws"
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end -}}
+
 {{ $myArch = "darwin_arm64" }}
 
 {{- with $repo := "hickford/git-credential-oauth" -}}
