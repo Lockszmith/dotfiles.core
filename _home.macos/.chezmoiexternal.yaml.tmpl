@@ -111,6 +111,20 @@
 {{-   end -}}
 {{- end }}
 
+{{ $myArch = "macos-arm64" }}
+
+{{- with $repo := "alexpasmantier/television" -}}
+{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/tv" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/%s/tv-%s-%s.tar.gz" $repo $version $version $myArch)
+          "path" "tv"
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end }}
+
 {{- $externals | toYaml }}
 
 ".config/sz.env/lib/delta.themes.gitconfig":
@@ -118,6 +132,13 @@
   url: "https://raw.githubusercontent.com/dandavison/delta/refs/heads/main/themes.gitconfig"
   refreshPeriod: "{{ $defaultRefresh }}"
 
+".config/nvim":
+  type: "git-repo"
+  url: "https://code.lksz.me/szmedia/kickstart-modular.nvim.sz.git"
+  refreshPeriod: "{{ $defaultRefresh }}"
+
 {{- else -}}
 # .chezmoiexternal is disabled because OFFLINE env is defined
 {{- end -}}
+
+# vim: set ft=go sw=2 sts=2 et:
