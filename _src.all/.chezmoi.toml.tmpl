@@ -9,9 +9,13 @@
 {{- $gitName := promptStringOnce . "gitName" "Full name (for git commits)" }}
 {{- $chassisType := "desktop" }}
 {{- $sysType := "posix" }}
-{{- $altArch := "aarch64" }}
+{{- $arch_alt := "x86_64" }}
+{{- $arch_alt_dash := "x86-64" }}
 {{- $sysVendor := "unknown" }}
+{{- $clib_flavor := "" }}
 {{- if eq .chezmoi.os "darwin" }}
+{{-   $arch_alt := "aarch64" }}
+{{-   $arch_alt_dash := $arch_alt }}
 {{-   $sysType = "macos" }}
 {{-   $sysVendor = "apple" }}
 {{-   if contains "BatteryData" (output "ioreg" "-c" "AppleSmartBattery") }}
@@ -20,9 +24,11 @@
 {{-     $chassisType = "desktop" }}
 {{-   end }}
 {{- else if eq .chezmoi.os "linux" }}
+{{-   $clib_flavor = "-musl" }}
 #  $chassisType = (output "hostnamectl" "--json=short" | mustFromJson).Chassis }}
 {{-   $chassisType = "server" }}
 {{- else if eq .chezmoi.os "windows" }}
+{{-   $clib_flavor = "-msvc" }}
 {{-   $sysType = "windows" }}
 {{-   $sysVendor = "pc" }}
 {{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
@@ -31,18 +37,29 @@
 {{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
 scriptTempDir={{- $scriptTempDir | quote }}
 
-[data]
-{{- if ($altArch) }}
-  altArch={{- $altArch | quote }}
+[data.sz.os]
+{{- if eq .chezmoi.os "linux" }}
+    short={{- .chezmoi.os | quote }}
+{{- else }}
+    short={{- substr 0 3 (.chezmoi.os) | quote }}
+{{- end }}
+    rust_rel_target={{- printf "%s-%s%s" $sysVendor .chezmoi.os $clib_flavor | quote }}
+{{- if ($arch_alt) }}
+    arch_alt={{- $arch_alt | quote }}
+{{- end }}
+{{- if ($arch_alt_dash) }}
+    arch_alt_dash={{- $arch_alt_dash | quote }}
 {{- end }}
 {{- if ($chassisType) }}
-  chassisType={{- $chassisType | quote }}
+    chassisType={{- $chassisType | quote }}
 {{- end }}
 {{- if ($sysType) }}
-  sysType={{- $sysType | quote }}
+    sysType={{- $sysType | quote }}
 {{- end }}
+
+[data]
 {{- if ($githubToken) }}
-  githubToken={{- $githubToken | quote }}
+    githubToken={{- $githubToken | quote }}
 {{- end }}
 {{- if ($sysname) }}
     sysname = {{ $sysname | quote }}
@@ -54,19 +71,19 @@ scriptTempDir={{- $scriptTempDir | quote }}
     sysarea = {{ $sysarea | quote }}
 {{ end }}
 
-{{ if ($gitEmail) }}
+{{- if ($gitEmail) }}
     gitEmail = {{ $gitEmail | quote }}
 {{- end }}
 {{- if ($gitName) }}
     gitName = {{ $gitName | quote }}
 {{- end }}
 {{- if not ($githubToken) }}
-  githubToken={{- $githubToken | quote }}
+    githubToken={{- $githubToken | quote }}
 {{- end }}
 
 [scriptEnv]
-  GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
-  GITHUB_TOKEN={{- $githubToken | quote }}
+    GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
+    GITHUB_TOKEN={{- $githubToken | quote }}
 
 [diff]
 #   command = "nvim"

@@ -1,11 +1,14 @@
 # https://www.chezmoi.io/reference/special-files-and-directories/chezmoiexternal-format/
+# The file will be empty (except for this comment) unless CZ_EXTR env variable exists.
 #
 # The externals are checked based on the refreshPeriod whenever an `apply` (or `update`) operations run  
 #
-# The simplest form to update all externals:
+# The syntax to update all externals (and nothing else):
 # ```sh
-# chezmoi apply --include externals
+# CZ_EXTR=1 chezmoi apply --include externals
 # ```
+#
+{{/*
 #
 # Variable              Type            Default Description
 # type                  string          none    External type (file, archive, archive-file, or git-repo)
@@ -13,13 +16,22 @@
 # refreshPeriod         duration        0       Refresh period (Examples: one day (24h), one week (168h), or four weeks (672h))
 # executable            bool            false   Add executable_ attribute to file
 # path                  string          none    Path to file in archive
-
-{{- if not (env "OFFLINE") -}}
-
-{{ $defaultRefresh := "168h" -}}
+*/}}
+{{- if (env "CZ_EXTR") -}}
+{{/* Initialize template variables */}}
+{{- $myArch := "" -}}
+{{- $defaultRefresh := "168h" -}}
 {{- $externals := dict -}}
 
-{{ $myArch := "x86_64-unknown-linux-musl" }}
+{{/*
+# valid arch strings:
+# aarch64-apple-darwin
+# x86_64-apple-darwin
+# aarch64-unknown-linux-musl
+# x86_64-unknown-linux-musl
+*/}}
+
+{{ $myArch = (printf "%s-%s" .sz.os.arch_alt .sz.os.rust_rel_target )}}
 
 {{- with $repo := "zellij-org/zellij" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -31,7 +43,7 @@
           "refreshPeriod" $defaultRefresh
 ) -}}
 {{-   end -}}
-{{- end }}
+{{- end -}}
 
 {{- with $repo := "dandavison/delta" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -44,7 +56,18 @@
 {{-   end -}}
 {{- end -}}
 
-{{ $myArch = "linux_amd64" }}
+{{/*
+# valid arch strings:
+# darwin_amd64
+# darwin_arm64
+# linux_386
+# linux_amd64
+# linux_arm64
+# windows_386
+# windows_amd64
+# windows_arm64
+*/}}
+{{- $myArch = (printf "%s_%s" .chezmoi.os .chezmoi.arch) -}}
 
 {{- with $repo := "hickford/git-credential-oauth" -}}
 {{-   with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
@@ -58,7 +81,21 @@
 {{-   end -}}
 {{- end -}}
 
-{{ $myArch = "linux-x86_64" }}
+{{/*
+# valid arch strings:
+# linux-aarch64
+# linux-arm
+# linux-armv7
+# linux-x86_64
+# mac-x86
+# mac
+# win
+*/}}
+
+{{- $myArch = .sz.os.short -}}
+{{- if eq .chezmoi.os "linux" -}}
+{{-   $myArch = (printf "%s-%s" .chezmoi.os .sz.os.arch_alt) -}}
+{{- end -}}
 
 {{- with $repo := "extrawurst/gitui" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -70,9 +107,47 @@
           "refreshPeriod" $defaultRefresh
 ) -}}
 {{-   end -}}
-{{- end }}
+{{- end -}}
 
-{{ $myArch = "linux_x86_64" }}
+
+{{/*
+# valid arch strings:
+# darwin-amd64
+# darwin-arm64
+# freebsd-amd64
+# freebsd-arm64
+# linux-amd64
+# linux-arm64
+# openbsd-amd64
+# openbsd-arm64
+# windows-amd64
+# windows-arm64
+*/}}
+{{- $myArch = (print .chezmoi.os "-" .chezmoi.arch) -}}
+
+{{- with $repo := "Lifailon/lazyjournal" -}}
+{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/lazyjournal" (dict
+          "type" "file"
+          "url" (printf "https://github.com/%s/releases/download/%s/lazyjournal-%s-%s" $repo $version $version $myArch)
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end -}}
+
+{{/*
+# valid arch strings:
+# Darwin_arm64
+# Darwin_x86_64
+# Linux_arm64
+# Linux_i386
+# Linux_x86_64
+# Windows_arm64
+# Windows_i386
+# Windows_x86_64
+*/}}
+{{- $myArch = (printf "%s_%s" ( .chezmoi.os | title ) .sz.os.arch_alt) -}}
 
 {{- with $repo := "theimpostor/osc" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -84,20 +159,7 @@
           "refreshPeriod" $defaultRefresh
 ) -}}
 {{-   end -}}
-{{- end }}
-
-{{ $myArch = "linux-amd64" }}
-
-{{- with $repo := "Lifailon/lazyjournal" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/lazyjournal" (dict
-          "type" "file"
-          "url" (printf "https://github.com/%s/releases/download/%s/lazyjournal-%s-%s" $repo $version $version $myArch)
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{-   end -}}
-{{- end }}
+{{- end -}}
 
 {{- $externals | toYaml }}
 ".config/sz.env/lib/ble.sh.curl":
@@ -122,5 +184,5 @@
   refreshPeriod: "{{ $defaultRefresh }}"
 
 {{- else -}}
-# .chezmoiexternal is disabled because OFFLINE env is defined
+# .chezmoiexternal is disabled because CZ_EXTR env is undefined
 {{- end -}}
