@@ -1,6 +1,9 @@
-Host cs-dbg
-    User gal.szkolnik
-    HostName 10.27.70.101
+# [cs-dbg is dead as of 2025-03-09](https://vastdata.slack.com/archives/C04VA6PANDA/p1741536411791709) 
+# Host cs-dbg
+#     HostName 10.27.70.101
+
+Host crater-kfs2
+    HostName crater-kfs2
 
 Host my-loop sales-devvm-gal-szkolnik-spot
     User centos
