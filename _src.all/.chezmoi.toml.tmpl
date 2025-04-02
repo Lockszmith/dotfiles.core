@@ -40,6 +40,8 @@ scriptTempDir={{- $scriptTempDir | quote }}
 [data.sz.os]
 {{- if eq .chezmoi.os "linux" }}
     short={{- .chezmoi.os | quote }}
+{{- else if eq .chezmoi.os "darwin" }}
+    short="mac"
 {{- else }}
     short={{- substr 0 3 (.chezmoi.os) | quote }}
 {{- end }}

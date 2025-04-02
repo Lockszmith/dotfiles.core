@@ -5,6 +5,9 @@
 [include]
     path = .config/sz.env/lib/delta.themes.gitconfig
 
+[init]
+    defaultBranch = main
+
 [user]
   name = {{ .gitName }}
   email = {{ .gitEmail }}
@@ -36,13 +39,20 @@
 # oauthScopes = read_repository
 [core]
     editor = vim
-    pager = delta
+    # delta will used as the default pager for git
+    # and ov as the default pager for delta
+    # the pager will be overloaded via the [pager] section for a few commands
+    pager = delta --pager='ov -F'
 
-[init]
-    defaultBranch = main
+[pager]
+    # overload delta pager for some commands
+    show = delta --pager='ov -F --header 3'
 
-[core]
-    pager = delta
+    # We are now overloading some commands via "delta features"
+    # This allows us to use different pager per git command
+    # It allows to maintain a simpler config file and avoid escaping quotes
+    diff = delta --features ov-diff
+    log  = delta --features ov-log
 
 [interactive]
     diffFilter = delta --color-only
@@ -52,6 +62,20 @@
     navigate = true  # use n and N to move between diff sections
     line-numbers = true
     side-by-side = true
+    file-style = yellow
+
+# we define the delta feature "ov-diff" we are using for git diff
+[delta "ov-diff"]
+    # the idea is to overload the pager used by delta when using git diff
+    # we are using the same pattern used by delta when the default pager (less) is used
+    # using ov section feature brings a better experience
+    pager=ov -F --section-delimiter '^(commit|added:|removed:|renamed:|Δ)' --section-header --pattern '•'
+
+# we define the delta feature "ov-log" we are using for git log
+[delta "ov-log"]
+    # the idea is to overload the pager used by delta when using git log
+    # using ov section feature brings a better experience
+    pager=ov -F --section-delimiter '^commit' --section-header-num 3
 
 [diff]
     tool = nvimdiff

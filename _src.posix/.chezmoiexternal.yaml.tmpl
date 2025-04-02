@@ -81,6 +81,18 @@
 {{-   end -}}
 {{- end -}}
 
+{{- with $repo := "noborus/ov" -}}
+{{-   with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/ov" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/v%s/ov_%s_%s.zip" $repo $version $version $myArch)
+          "path" "ov"
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end -}}
+
 {{/*
 # valid arch strings:
 # linux-aarch64
@@ -161,6 +173,30 @@
 {{-   end -}}
 {{- end -}}
 
+{{/*
+# valid arch strings:
+# darwin-amd64
+# darwin-arm64
+# linux-386
+# linux-amd64
+# linux-arm64
+*/}}
+{{- $myArch = (printf "%s-%s" .chezmoi.os .chezmoi.arch) -}}
+
+{{- if and (env "TELEPORT_MAJOR") (not (eq .chezmoi.os "windows")) -}}
+{{- with $repo := "gravitational/teleport" -}}
+{{-   with $version := (gitHubReleases $repo | toJson | fromJson | jq (printf "map(select(.tag_name | startswith(\"v%s\")))[0] | .tag_name" (env "TELEPORT_MAJOR")) | first ) -}}
+{{-     $_ := set $externals ".local/bin/tsh" (dict
+          "type" "archive-file"
+          "url" (printf "https://cdn.teleport.dev/teleport-%s-%s-bin.tar.gz" $version $myArch)
+          "path" "teleport/tsh"
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end -}}
+{{- end }}
+
 {{- $externals | toYaml }}
 ".config/sz.env/lib/ble.sh.curl":
   type: "archive"
@@ -177,11 +213,13 @@
   url: "https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh"
   refreshPeriod: "{{ $defaultRefresh }}"
 
+{{- if eq .chezmoi.os "linux" -}}
 ".local/bin/nvim.AppImage":
   type: "file"
   url: "https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage"
   executable: true
   refreshPeriod: "{{ $defaultRefresh }}"
+{{- end -}}
 
 {{- else -}}
 # .chezmoiexternal is disabled because CZ_EXTR env is undefined
