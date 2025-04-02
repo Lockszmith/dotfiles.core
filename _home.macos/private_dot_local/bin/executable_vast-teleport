@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+# Usage: ./vast-teleport get version [auto|major|<vMajor>]
+# Example: ./latest_teleport_version.sh get major
+
+set -e
+
+SCRIPT_NAME="${0##/*}"
+usage() {
+    printf '%s\n' \
+        "${SCRIPT_NAME} command..." \
+        '' \
+        'Usage:' \
+        '  get version               same as running `tsh version`' \
+        '  get version server        grabs the version of the server' \
+        '  get version server major  grabs the major version of the server' \
+        '  get version client 15     grabs the latest version of the client for major' \
+        "  get version client auto   grab the latest version based on the server's major version" \
+        '' \
+        "  To update teleport's \`tsh\` with \`chezmoi\` run the following" \
+        '    eval "$(vast-teleport get version server major -) czx status"' \
+        ''
+    exit 2
+}
+
+get_server_version() {
+    curl -s https://teleport.vastdata.com:3080/webapi/ping \
+    | jq -r '.server_version'
+}
+get_server_major() {
+    get_server_version | awk -F. '{print $1}'
+}
+
+get_latest_version_by_major() {
+    local MAJOR="$1"
+    curl -s "https://api.github.com/repos/gravitational/teleport/releases?per_page=100" \
+    | jq -r ".[].tag_name" \
+    | grep -E "^v${MAJOR}\." \
+    | sort -V \
+    | tail -n 1
+}
+
+case "$1" in
+    get) shift; case $1 in
+        version) shift; case $1 in
+            '')     tsh version ;;
+            server) shift; case $1 in
+                '')     get_server_version ;;
+                major)  shift; case $1 in
+                    '')  get_server_major ;;
+                    '-') printf 'TELEPORT_MAJOR=' && get_server_major ;;
+                    *)   usage ;;
+                esac;;
+                *) usage ;;
+            esac ;;
+            client) shift; case $1 in
+                '')     usage ;;
+                auto)   get_latest_version_by_major "$(get_server_major)" ;;
+                *)      get_latest_version_by_major "${@}" ;;
+            esac;;
+            *) usage ;;
+        esac;;
+        *) usage ;;
+        esac ;;
+    *)  usage ;;
+esac
+# MAJOR="$1"
+# 
+# if [[ -z "$MAJOR" ]]; then
+#   echo "Usage: $0 <major_version>"
+#   exit 1
+# fi
+# 
+# curl -s "https://api.github.com/repos/gravitational/teleport/releases?per_page=100" | \
+#   jq -r ".[].tag_name" | \
+#   grep -E "^v${MAJOR}\." | \
+#   sort -V | \
+#   tail -n 1
