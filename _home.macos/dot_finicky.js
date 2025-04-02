@@ -29,13 +29,13 @@ module.exports = {
         finicky.matchDomains(/.*\.catonetworks\.com/),
         "deeplinks.mindtickle.com*"
       ],
-      browser: "Google Chrome"
+      browser: "Browserosaurus"
     },
     {
       match: [
         finicky.matchDomains(/127\.0\.0\.1/)
       ],
-      browser: "DuckDuckGo"
+      browser: "Browserosaurus"
     },
     {
       // Open these in Browserosaurus
