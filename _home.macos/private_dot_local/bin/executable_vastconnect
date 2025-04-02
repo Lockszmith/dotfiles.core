@@ -9,9 +9,10 @@ set -e
 # Test with ping
 # Connect with SSH
 
+SCRIPT_NAME="${0##*/}"
 if [ $# -eq 0 ]; then
     printf '%s\n' \
-        "${0#/*} <TO> [<FROM>] [<Interface>]" \
+        "${SCRIPT_NAME} <TO> [<FROM>] [<Interface>]" \
         "" \
         "Configure MacOS iface to connect to <TO> address from <FROM> address" \
         "Default <Interface> is en9" \
@@ -21,8 +22,36 @@ if [ $# -eq 0 ]; then
         "    192.168.[1 or 2].0/24" \
         "" \
         "for other subnets, you'll need to specify a FROM argument and a FROM_SN env variable" \
+        "" \
+        "What the script does:" \
+        "    1. Attempts a ping to the destination IP." \
+        "    2. If unsuccessful:" \
+        "       a. if FROM (2nd arg) isn't specified or set to 'dhcp':" \
+        "       - tries to guess the FROM and FROM_SN based on known TO ranges." \
+        "       b. if FROM was specied - uses FROM/2nd argument and FROM_SN from env" \
+        "       c. compares desired FROM and assigned IP on outgoing interface (IFACE env or default: en9)" \
+        "       d. if different, asssigns ip address to interface (temporary, using sudo)" \
+        "       e. Attempts ping once again" \
+        "    3. If ping was successful, tries to grab hostname via ssh" \
+        "" \
+        "    The entire process will do it's best to communicate error states and" \
+        "    recommend possible actions if any steps fail" \
+        ""\
+        "Predefined CIDR and  aliases" \
+        "    10.117.10.254/24  " \
+        "    192.168.1.254/24  " \
+        "    192.168.2.254/24  " \
+        "    169.254.1.15/27   " \
+        "    169.254.111.15/27 " \
+        "    169.254.3.254/24  " \
+        "" \
+        "Examples:" \
+        "    ${SCRIPT_NAME} 192.168.2.2 # connect to tech port" \
         ""
     exit 2
+elif [[ $# -eq 1 && "$1" == "editme" ]]; then
+    exec ${VISUAL:-${EDITOR:-vi}} "$(readlink -f "$0")"
+    exit 0
 fi
 
 TO="${1}"
@@ -57,7 +86,7 @@ else
         SLEEP="${SLEEP:-15s}"
     else
         SLEEP="${SLEEP:-3s}"
-        case "${TO}" in
+        case "${FROM:+__}${TO}" in
             10.117.10.*)
                 FROM=10.117.10.254
                 FROM_SN=255.255.255.0
@@ -79,7 +108,7 @@ else
                 FROM_SN=255.255.255.224
                 ;;
             169.254.3.*)
-                FROM=169.254.3.254
+                FROM=169.254.3.253
                 FROM_SN=255.255.255.0
                 ;;
             *)
