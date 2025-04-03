@@ -46,22 +46,29 @@ if is_sourced; then
             LOAD_EXIT=0
 
             # The following constructs a list of load_next ... commands
-            ALL_ENV_FILES="$(
-                find ~/.config/sz.env -xdev -type d -not -name '*.off' \
-                    -exec sh -c '
-                        find "$1" -xdev -maxdepth 1 -type f -name "ID_*.env" | sort
-                    ' shell '{}' ';' \
-                    -exec sh -c '
-                        find "$1" -xdev -maxdepth 1 -type f -name "PATH_*.env" | sort
-                    ' shell '{}' ';' \
-                    -exec sh -c '
-                        find "$1" -xdev -maxdepth 1 -type f -name "*.env" -not -name "ID_*" -not -name "PATH_*" -print | sort
-                    ' shell '{}' ';' \
-                    -exec sh -c '
-                        find "$1" -xdev -maxdepth 1 -type f -name "PATH_zz_cleanup.env"
-                    ' shell '{}' ';' \
-                | sed -e 's/^/load_next "/; s/$/";/'
+            FIND_CMD="$( printf "%s " \
+                "find ~/.config/sz.env -xdev -type d -not -name '*.off'" \
+                    "-exec sh -c '" \
+                        'find "$1" -xdev -maxdepth 1 -type f' \
+                            '-name "ID_*.env" -or -name "ID_*.env.'"${BASE_SHELL}"\" \
+                        "| sort' shell '{}' ';'" \
+                    "-exec sh -c '" \
+                        'find "$1" -xdev -maxdepth 1 -type f' \
+                            '-name "PATH_*.env" -or -name "PATH_*.env.'"${BASE_SHELL}"\" \
+                        "| sort' shell '{}' ';'" \
+                    "-exec sh -c '" \
+                        'find "$1" -xdev -maxdepth 1 -type f' \
+                            '-name "*.env" -or -name "*.env.'"${BASE_SHELL}"\" \
+                        '| grep -Ev "/(PATH|ID)_[^/]+$"' \
+                        "| sort' shell '{}' ';'" \
+                    "-exec sh -c '" \
+                        'find "$1" -xdev -maxdepth 1 -type f -name "PATH_zz_cleanup.env"' \
+                    "' shell '{}' ';'"
             )"
+            ALL_ENV_FILES="$(
+                eval "$FIND_CMD" | sed -e 's/^/load_next "/; s/$/";/'
+            )"
+            ${DBG/%1/:} unset FIND_CMD
             if [ -n "$DBG_NO_SZ_LOAD" ]; then
                ALL_ENV_FILES=$(<<<"$ALL_ENV_FILES" sed -Ee '
                    /PATH_/!s/^(load_next )/# \1/
@@ -70,6 +77,7 @@ if is_sourced; then
             fi
             # Run the constructed (see above) list
             eval "$ALL_ENV_FILES"
+            ${DBG/%1/:} unset ALL_ENV_FILES
         fi
     }
     load_all
