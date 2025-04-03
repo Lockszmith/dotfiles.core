@@ -1,0 +1,62 @@
+#! /usr/bin/env bash
+
+set -e
+
+SCRIPT_NAME="${0##/*}"
+usage() {
+    printf '%s\n' \
+        'Search Teleport for an ssh host with an interactive selection' \
+        '' \
+        'Usage:' \
+        "  [SILENT=1] [BATCH=1] [QUERY='query syntax'] ${SCRIPT_NAME} <search string>" \
+        '' \
+        'Arguments:' \
+        '' \
+        'Examples:' \
+        '  $ BATCH=1 tsh-get tesla' \
+        '  cluster_psnt=VAST-TESLA-AUS-1,hostname=aus08p1vstfs01-cn1-DO-NOT-LOGIN' \
+        '  cluster_psnt=VA22374479,hostname=c-0-1' \
+        '  cluster_psnt=VA22465472,hostname=c-0-1' \
+        '' \
+        '  tsh-get tesla ' \
+        ''
+    exit 2
+}
+
+if [[ $# -eq 0 ]]; then
+    usage
+fi
+
+SILENT=${SILENT:-${BATCH:+1}}
+SEARCH="$1"
+QUERY="${QUERY:+--query=${QUERY}}"
+
+${SILENT:+:} printf 'Searching for %s...' "$SEARCH" >&2
+
+OPTIONS="$(
+    tsh ls --search "$SEARCH" ${QUERY} --format json | jq -r ' .[] | (
+        if .metadata.labels.customer_name
+        then "customer_name=" + .metadata.labels.customer_name + ","
+        elif .metadata.labels.Customer
+        then "Customer=" + .metadata.labels.Customer + ","
+        else ""
+        end)
+        + "cluster_psnt=\(.metadata.labels.cluster_psnt),"
+        + "hostname=\(.spec.hostname)"
+    '
+)"
+
+if [[ -z "$BATCH" && "${OPTIONS}" == *$'\n'* ]]; then
+    SELECTED="$( tv --no-preview <<<"$OPTIONS" )"
+else
+    SELECTED="$OPTIONS"
+fi
+
+if [[ -z "$SELECTED" ]]; then
+    ${SILENT:+:} printf 'Aborted (empty response)\n' >&2
+    exit 2
+fi
+
+${SILENT:+:} printf '\n%s selected.\n' "$SELECTED" >&2
+echo "$SELECTED"
+
