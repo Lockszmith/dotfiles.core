@@ -2,25 +2,53 @@
 
 set -e
 
-# Source directory (existing structure with files)
-SRC_DIR=_src.posix
-
 # Target directory (new structure with symlinks)
-DEST_DIR="${1}"
+DEST_DIR="${DEST_DIR:-${1}}"
 
 is_cmd() {
     type -p -- "${@}" 2> /dev/null 1> /dev/null
 }
-if is_cmd chezmoi && [ -z "$DEST_DIR" ]; then
+if is_cmd chezmoi && [[ -z "$RESET" && -z "$SRC_DIR" && -z "$DEST_DIR" ]]; then
     DEST_DIR="$(chezmoi data | jq -r '.chezmoi.sourceDir | split("/") | last')"
 fi
-DEST_DIR="${DEST_DIR:?Must supply dest dir name}"
 
+# Source directory (existing structure with files)
+SRC_DIR=${SRC_DIR:-_src.posix}
+
+SCRIPT_NAME="${0##*/}"
+usage() {
+    printf '%s\n' \
+        'Assign symlinks acrosss chezmoi platform home-dirs' \
+        '' \
+        'Usage:' \
+        "  [RESET=reset] [FORCE=-f] [SRC_DIR=<alt src dir>] ${SCRIPT_NAME} [<destination_directory>]" \
+        '' \
+        'Notes: ' \
+        '  SRC_DIR assumes _src.posix if empty' \
+        '  If `chezmoi` state isn'"'"'t broken, the current chezmoihome dir will be used' \
+        '' \
+        '  When RESET env var is "reset", <destination_directory> is mandatory, ' \
+        '    it will remove any symlink in that directory' \
+        '' \
+        'Examples:' \
+        '  # A complete reset' \
+        '  RESET=reset SRC_DIR=_src.all ./symclone.sh _src.posix' \
+        '  RESET=reset ./symclone.sh _home.macos' \
+        '' \
+        '  # Alternative setup' \
+        '  RESET=reset SRC_DIR=_src.all ./symclone.sh _home.macos && ./symclone.sh' \
+        '' \
+        '  # General refresh' \
+        '  ./symclone.sh' \
+        ''
+    exit 1
+}
 # Check if both arguments are provided
 if [[ -z "$SRC_DIR" || -z "$DEST_DIR" ]]; then
-    echo "Usage: $0 <source_directory> <destination_directory>"
-    exit 1
+    usage
 fi
+
+DEST_DIR="${DEST_DIR:?Must supply dest dir name}"
 
 # Ensure source directory exists
 if [[ ! -d "$SRC_DIR" ]]; then
@@ -53,8 +81,17 @@ relpath() {
     echo "${back}${target_abs#$common_part/}"
 }
 
-# Find all files and create symbolic links in the destination
-find "$SRC_DIR" -type f | while read -r file; do
+if [[ -n "$RESET" ]]; then
+    [[ "$RESET" != 'reset' ]] \
+    && printf 'ERROR: RESET was set incorrectly, value %s is illeagal.\n\n' "$RESET" >&2 \
+    && usage
+    printf "Removing all symlinks from %s destination..." "${DEST_DIR}" >&2
+    find "${DEST_DIR}" -type l -delete
+    printf "Done.\n" >&2
+fi
+
+# Find all non-dirs (files and symlinks) and create symbolic links in the destination
+find "$SRC_DIR" -not -type d | while read -r file; do
     # Determine the relative path for the symlink
     target_file="${file#$SRC_DIR/}"
     target_path="$DEST_DIR/${target_file}"
@@ -71,4 +108,5 @@ find "$SRC_DIR" -type f | while read -r file; do
     [ -n "$SKIP" ] || ln ${FORCE} -vs "$src_relative_path" "$target_path" || (set | grep -E '^(?:target|remove|src)_' >&2; false)
 done
 
-echo "Symbolic links created successfully in '$DEST_DIR'."
+echo "${SCRIPT_NAME} for '$DEST_DIR' done." >&2
+
