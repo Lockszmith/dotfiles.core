@@ -63,7 +63,7 @@ find "$SRC_DIR" -type f | while read -r file; do
 
     # Create the symlink with relative path
     SKIP=
-    
+
     [ -z "$SKIP" ] && [ -e "${remove_target}" ] && SKIP="remove entry found for: %s" || true
     [ -z "$SKIP" ] && [ -L "$target_path" ] && [ -z "$FORCE" ] && SKIP="can't force replace %s" || true
     [ -z "$SKIP" ] && [ -e "$target_path" ] && SKIP="%s exists" || true
