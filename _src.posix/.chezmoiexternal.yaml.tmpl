@@ -148,6 +148,7 @@
 {{-   end -}}
 {{- end -}}
 
+{{- if (not (eq .chezmoi.os "darwin")) -}}
 {{- with $repo := "walles/moar" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
 {{-     $_ := set $externals ".local/bin/moar" (dict
@@ -157,6 +158,7 @@
           "refreshPeriod" $defaultRefresh
 ) -}}
 {{-   end -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
