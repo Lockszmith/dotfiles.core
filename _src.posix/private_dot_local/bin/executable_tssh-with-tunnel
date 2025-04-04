@@ -30,19 +30,18 @@ SSHUSER="${SSHUSER:-vastdata}"
 
 TARGET="${SSHUSER}@$(tsh-get "$SEARCH" "$SSHUSER")"
 
-VMS="${VMS:-"$(awk '$5 { split($4, cidr, "/"); print cidr[1] }' <(tsh ssh "${TARGET}" bash -l <<SSHEOF
-    VMS="\$(clush -g cnodes 'docker ps | grep vast_vms | grep -v grep' 2>/dev/null | cut -d':' -f1)" \
-    && clush -w "\$VMS" ip -4 -br a
-SSHEOF
-))"}"
+VMS="${VMS:-"$(tsh ssh "${TARGET}" -- cat /vast/vman/mgmt-vip)"}"
 
-TUNNEL="-L ${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+TUNNEL="${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
 
 RUN="${RUN:-}"
 if [[ -z "$RUN" && -n "$(command -v zellij)" ]]; then
-    RUN="zellij run --floating --pinned 'true' --name '${SCRIPT_NAME} ${SEARCH}: ${TUNNEL} ${TARGET}' --"
+    RUN="zellij run --floating --pinned 'true' --name '${TUNNEL}|${TARGET}|${SEARCH}|${SCRIPT_NAME}' --"
 fi
 
+TUNNEL="-L ${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+SSH_OPTS="${SSH_OPTS:--N}"
+
 printf "Executing: %s ...\n" "tsh ssh ${TUNNEL} ${TARGET} ${*:2}" >&2
-eval "${RUN} tsh ssh ${TUNNEL} '${TARGET}' ${*:2}"
+eval "${RUN} tsh ssh ${SSH_OPTS} ${TUNNEL} '${TARGET}' ${*:2}"
 
