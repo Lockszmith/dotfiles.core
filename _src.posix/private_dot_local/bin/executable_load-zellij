@@ -11,7 +11,7 @@ is_sourced() {
 }
 
 BASE_0=${BASE_0:-$0}
-BASE_SHELL=$(basename "$SHELL")
+BASE_SHELL="${BASE_SHELL:-$(basename "$SHELL")}"
 
 if is_sourced; then
     zellij-cleanup() {
@@ -47,7 +47,8 @@ ${SET:-:} -x
             env zellij "${@}"
         fi
     }
-    zellij-completion() {
+
+    zellij-load-completion() {
         if [[ "${BASE_SHELL}" == "zsh" ]]; then
             type _zellij > /dev/null \
             || . <( env zellij setup --generate-completion zsh | sed -Ee 's/^(_(zellij) ).*/compdef \1\2/' )
@@ -57,7 +58,7 @@ ${SET:-:} -x
     }
 ${SET:-:} -x
     if [[ -n "$(env which zellij)" ]]; then
-        zellij-completion
+        zellij-load-completion
     fi
 ${SET:-:} -x
     # Was needed when zsh would load
