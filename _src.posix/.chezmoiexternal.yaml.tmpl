@@ -148,6 +148,17 @@
 {{-   end -}}
 {{- end -}}
 
+{{- with $repo := "walles/moar" -}}
+{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/moar" (dict
+          "type" "file"
+          "url" (printf "https://github.com/%s/releases/download/%s/moar-%s-%s" $repo $version $version $myArch)
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end -}}
+
 {{/*
 # valid arch strings:
 # Darwin_arm64
