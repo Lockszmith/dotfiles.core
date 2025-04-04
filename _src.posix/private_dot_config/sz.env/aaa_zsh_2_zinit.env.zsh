@@ -24,5 +24,8 @@ zicompinit # <- https://wiki.zshell.dev/docs/guides/commands
 ### End of z-shell/zi installer's chunk
 alias zinit=zi
 
+zinit ice depth=1
+zinit light jeffreytse/zsh-vi-mode
+
 [[ -n "${DBG}" ]] && echo "zi ready"
 
