@@ -56,6 +56,18 @@
 {{-   end -}}
 {{- end -}}
 
+{{- with $repo := "atuinsh/atuin" -}}
+{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/atuin" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/%s/atuin-%s.tar.gz" $repo $version $myArch)
+          "path" (printf "atuin-%s/atuin" $myArch)
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{-   end -}}
+{{- end -}}
+
 {{/*
 # valid arch strings:
 # darwin_amd64
