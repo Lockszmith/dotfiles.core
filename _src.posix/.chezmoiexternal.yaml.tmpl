@@ -226,7 +226,7 @@
   url: "https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh"
   refreshPeriod: "{{ $defaultRefresh }}"
 
-{{ if eq .chezmoi.os "linux" -}}
+{{ if (and ( eq .chezmoi.os "linux" ) ( ne .chezmoi.osRelease.id "centos" )) -}}
 ".local/bin/nvim.AppImage":
   type: "file"
   url: "https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage"
