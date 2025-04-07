@@ -27,13 +27,20 @@ if is_sourced; then
     }
     refresh-zellij() {
 ${SET:-:} -x
-        if [ -z "$(env which zellij)" ] && ! [ -x ~/.local/bin/zellij ]; then
-            if [[ ! -r /tmp/zellij/bootstrap/zellij ]]; then
+        local bin_path=~/.local/bin/zellij
+        local cached_path=~/.cache/chezmoi/tmp/zellij
+        if [ -z "$(env which zellij)" ] && [ -x "${cached_path}" ]; then
+                printf "Grabbing zellij from the web!\n"
+                cp "${cached_path}" "${bin_path}"
+        fi
+        local cached_path=/tmp/zellij/bootstrap/zellij
+        if [ -z "$(env which zellij)" ] && ! [ -x "${bin_path}" ]; then
+            if [[ ! -r "${cached_path}" ]]; then
                 printf "Grabbing zellij from the web!\n"
                 bash <(curl -sL zellij.dev/launch) "--help" > /dev/null 2>&1 || true
             fi
-            if [[ -r /tmp/zellij/bootstrap/zellij ]]; then
-                mv /tmp/zellij/bootstrap/zellij ~/.local/bin/zellij
+            if [[ -r "${cached_path}" ]]; then
+                mv "${cached_path}" "${bin_path}"
                 rm -fR /tmp/zellij
             fi
         fi
