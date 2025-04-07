@@ -1,3 +1,4 @@
+set bg=dark
 " Set custom Vim config directory
 let s:vim_config_dir = '~/.config/vim'
 let s:autoload_dir = s:vim_config_dir . '/autoload'
@@ -12,7 +13,6 @@ endif
 " Ensure Vim uses the custom runtime path
 set runtimepath+=~/.config/vim
 execute 'source ' . s:plug_vim
-
 
 " Initialize vim-plug
 call plug#begin('~/.config/vim/plugged')
