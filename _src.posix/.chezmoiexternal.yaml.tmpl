@@ -42,8 +42,7 @@
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
+{{- end -}}{{- end -}}
 
 {{- with $repo := "dandavison/delta" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -53,8 +52,7 @@
           "path" (printf "delta-%s-%s/delta" $version $myArch)
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
+{{- end -}}{{- end -}}
 
 {{- with $repo := "atuinsh/atuin" -}}
 {{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -65,8 +63,20 @@
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
+{{- end -}}{{- end -}}
+
+{{- if (eq .chezmoi.os "linux") -}}
+{{- with $repo := "sharkdp/vivid" -}}
+{{-   with $app_name := "vivid" -}}
+{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-     $_ := set $externals ".local/bin/vivid" (dict
+          "type" "archive-file"
+          "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+          "path" (printf "%s-%s/%s" $app_name $myArch $app_name)
+          "executable" true
+          "refreshPeriod" $defaultRefresh
+) -}}
+{{- end -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -102,8 +112,7 @@
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
+{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -130,8 +139,7 @@
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
+{{- end -}}{{- end -}}
 
 
 {{/*
@@ -157,8 +165,7 @@
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
+{{- end -}}{{- end -}}
 
 {{- if (not (eq .chezmoi.os "darwin")) -}}
 {{- with $repo := "walles/moar" -}}
@@ -169,9 +176,7 @@
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
-{{- end -}}
+{{- end -}}{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -195,8 +200,7 @@
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
+{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -218,9 +222,7 @@
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{-   end -}}
-{{- end -}}
-{{- end }}
+{{- end -}}{{- end -}}{{- end }}
 
 {{- $externals | toYaml }}
 ".config/sz.env/lib/ble.sh.curl":
