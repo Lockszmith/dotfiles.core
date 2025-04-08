@@ -72,7 +72,7 @@
 {{-     $_ := set $externals ".local/bin/vivid" (dict
           "type" "archive-file"
           "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
-          "path" (printf "%s-%s/%s" $app_name $myArch $app_name)
+          "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
