@@ -65,6 +65,17 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- with $app_name := "lsd" -}}
+{{- with $repo := (printf "%s/%s" "lsd-rs" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{- if (eq .chezmoi.os "linux") -}}
 {{- with $app_name := "vivid" -}}
 {{- with $repo := (printf "%s/%s" "sharkdp" $app_name) -}}
@@ -75,7 +86,19 @@
         "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
         "executable" true
         "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
+{{- with $app_name := "eza" -}}
+{{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+{{- end -}}{{/* if linux */}}
 
 {{/*
 # valid arch strings:
