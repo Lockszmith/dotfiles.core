@@ -14,8 +14,8 @@
 {{- $sysVendor := "unknown" }}
 {{- $clib_flavor := "" }}
 {{- if eq .chezmoi.os "darwin" }}
-{{-   $arch_alt := "aarch64" }}
-{{-   $arch_alt_dash := $arch_alt }}
+{{-   $arch_alt = "aarch64" }}
+{{-   $arch_alt_dash = $arch_alt }}
 {{-   $sysType = "macos" }}
 {{-   $sysVendor = "apple" }}
 {{-   if contains "BatteryData" (output "ioreg" "-c" "AppleSmartBattery") }}
