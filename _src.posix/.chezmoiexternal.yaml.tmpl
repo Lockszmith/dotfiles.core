@@ -227,7 +227,12 @@
 # Windows_i386
 # Windows_x86_64
 */}}
-{{- $myArch = (printf "%s_%s" ( .chezmoi.os | title ) .chezmoi.arch) -}}
+
+{{- $myArch = .chezmoi.arch -}}
+{{- if (eq .chezmoi.os "linux") -}}
+{{-   $myArch = .sz.os.arch_alt -}}
+{{- end -}}
+{{- $myArch = (printf "%s_%s" ( .chezmoi.os | title ) $myArch) -}}
 
 {{- with $app_name := "osc" -}}
 {{- with $repo := (printf "%s/%s" "theimpostor" $app_name) -}}
