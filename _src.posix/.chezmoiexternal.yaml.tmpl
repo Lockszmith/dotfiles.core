@@ -88,13 +88,15 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{ $myArch = (printf "%s-%s" .sz.os.arch_alt "unknown-linux-gnu" )}}
+
 {{- with $app_name := "eza" -}}
 {{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
         "type" "archive-file"
-        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
-        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
+        "url" (printf "https://github.com/%s/releases/download/%s/%s_%s.tar.gz" $repo $version $app_name $myArch)
+        "path" (printf "./%s" $app_name)
         "executable" true
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
