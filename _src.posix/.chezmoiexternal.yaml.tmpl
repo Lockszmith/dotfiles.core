@@ -93,7 +93,7 @@
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
         "type" "archive-file"
-        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $app_name $version $myArch)
         "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
         "executable" true
         "refreshPeriod" $defaultRefresh
