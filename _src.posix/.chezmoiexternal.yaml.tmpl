@@ -76,17 +76,20 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- $archive_type := "zip" -}}
+{{- if (eq .chezmoi.os "linux" ) -}}
+{{-   $archive_type = "tgz" -}}
+{{- end -}}
 {{- with $app_name := "cargo-binstall" -}}
 {{- with $repo := (printf "%s/%s" "cargo-bins" $app_name) -}}
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{- with $archive_type := "zip" -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
         "type" "archive-file"
         "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.full.%s" $repo $version $app_name $myArch $archive_type)
         "path" $app_name
         "executable" true
         "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{- if (eq .chezmoi.os "linux") -}}
 {{- with $app_name := "vivid" -}}
