@@ -33,50 +33,49 @@
 
 {{ $myArch = (printf "%s-%s" .sz.os.arch_alt .sz.os.rust_rel_target )}}
 
-{{- with $repo := "zellij-org/zellij" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".cache/chezmoi/tmp/zellij" (dict
-          "type" "archive-file"
-          "url" (printf "https://github.com/%s/releases/download/%s/zellij-%s.tar.gz" $repo $version $myArch)
-          "path" "zellij"
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}
+{{- with $app_name := "zellij" -}}
+{{- with $repo := (printf "%s/%s" "zellij-org" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
+        "path" $app_name
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- with $repo := "dandavison/delta" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/delta" (dict
-          "type" "archive-file"
-          "url" (printf "https://github.com/%s/releases/download/%s/delta-%s-%s.tar.gz" $repo $version $version $myArch)
-          "path" (printf "delta-%s-%s/delta" $version $myArch)
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}
+{{- with $app_name := "delta" -}}
+{{- with $repo := (printf "%s/%s" "dandavison" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- with $repo := "atuinsh/atuin" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/atuin" (dict
-          "type" "archive-file"
-          "url" (printf "https://github.com/%s/releases/download/%s/atuin-%s.tar.gz" $repo $version $myArch)
-          "path" (printf "atuin-%s/atuin" $myArch)
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}
+{{- with $app_name := "atuin" -}}
+{{- with $repo := (printf "%s/%s" "atuinsh" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
+        "path" (printf "%s-%s/%s" $app_name $myArch $app_name )
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{- if (eq .chezmoi.os "linux") -}}
-{{- with $repo := "sharkdp/vivid" -}}
-{{-   with $app_name := "vivid" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/vivid" (dict
-          "type" "archive-file"
-          "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
-          "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}{{- end -}}{{- end -}}
+{{- with $app_name := "vivid" -}}
+{{- with $repo := (printf "%s/%s" "sharkdp" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -91,28 +90,27 @@
 */}}
 {{- $myArch = (printf "%s_%s" .chezmoi.os .chezmoi.arch) -}}
 
-{{- with $repo := "hickford/git-credential-oauth" -}}
-{{-   with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/git-credential-oauth" (dict
-          "type" "archive-file"
-          "url" (printf "https://github.com/%s/releases/download/v%s/git-credential-oauth_%s_%s.tar.gz" $repo $version $version $myArch)
-          "path" "git-credential-oauth"
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{-   end -}}
-{{- end -}}
+{{- with $app_name := "git-credential-oauth" -}}
+{{- with $repo := (printf "%s/%s" "hickford" $app_name) -}}
+{{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/v%s/%s_%s_%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" $app_name
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- with $repo := "noborus/ov" -}}
-{{-   with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/ov" (dict
-          "type" "archive-file"
-          "url" (printf "https://github.com/%s/releases/download/v%s/ov_%s_%s.zip" $repo $version $version $myArch)
-          "path" "ov"
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}
+{{- with $app_name := "ov" -}}
+{{- with $repo := (printf "%s/%s" "noborus" $app_name) -}}
+{{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/v%s/%s_%s_%s.zip" $repo $version $app_name $version $myArch)
+        "path" $app_name
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -130,16 +128,16 @@
 {{-   $myArch = (printf "%s-%s" .chezmoi.os .sz.os.arch_alt) -}}
 {{- end -}}
 
-{{- with $repo := "extrawurst/gitui" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/gitui" (dict
-          "type" "archive-file"
-          "url" (printf "https://github.com/%s/releases/download/%s/gitui-%s.tar.gz" $repo $version $myArch)
-          "path" "./gitui"
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}
+{{- with $app_name := "gitui" -}}
+{{- with $repo := (printf "%s/%s" "extrawurst" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
+        "path" (printf "./%s" $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
 
 {{/*
@@ -157,26 +155,26 @@
 */}}
 {{- $myArch = (print .chezmoi.os "-" .chezmoi.arch) -}}
 
-{{- with $repo := "Lifailon/lazyjournal" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/lazyjournal" (dict
-          "type" "file"
-          "url" (printf "https://github.com/%s/releases/download/%s/lazyjournal-%s-%s" $repo $version $version $myArch)
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}
+{{- with $app_name := "lazyjournal" -}}
+{{- with $repo := (printf "%s/%s" "Lifailon" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s" $repo $version $app_name $version $myArch)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{- if (not (eq .chezmoi.os "darwin")) -}}
-{{- with $repo := "walles/moar" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/moar" (dict
-          "type" "file"
-          "url" (printf "https://github.com/%s/releases/download/%s/moar-%s-%s" $repo $version $version $myArch)
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}{{- end -}}
+{{- with $app_name := "moar" -}}
+{{- with $repo := (printf "%s/%s" "walles" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s" $repo $version $app_name $version $myArch)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -191,16 +189,17 @@
 */}}
 {{- $myArch = (printf "%s_%s" ( .chezmoi.os | title ) .sz.os.arch_alt) -}}
 
-{{- with $repo := "theimpostor/osc" -}}
-{{-   with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-     $_ := set $externals ".local/bin/osc" (dict
+{{- with $app_name := "osc" -}}
+{{- with $repo := (printf "%s/%s" "theimpostor" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
           "type" "archive-file"
-          "url" (printf "https://github.com/%s/releases/download/%s/osc_%s.tar.gz" $repo $version $myArch)
-          "path" "osc"
+          "url" (printf "https://github.com/%s/releases/download/%s/%s_%s.tar.gz" $repo $version $app_name $myArch)
+          "path" $app_name
           "executable" true
           "refreshPeriod" $defaultRefresh
 ) -}}
-{{- end -}}{{- end -}}
+{{- end -}}{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -213,16 +212,16 @@
 {{- $myArch = (printf "%s-%s" .chezmoi.os .chezmoi.arch) -}}
 
 {{- if and (env "TELEPORT_MAJOR") (not (eq .chezmoi.os "windows")) -}}
-{{- with $repo := "gravitational/teleport" -}}
-{{-   with $version := (gitHubReleases $repo | toJson | fromJson | jq (printf "map(select(.tag_name | startswith(\"v%s\")))[0] | .tag_name" (env "TELEPORT_MAJOR")) | first ) -}}
-{{-     $_ := set $externals ".local/bin/tsh" (dict
-          "type" "archive-file"
-          "url" (printf "https://cdn.teleport.dev/teleport-%s-%s-bin.tar.gz" $version $myArch)
-          "path" "teleport/tsh"
-          "executable" true
-          "refreshPeriod" $defaultRefresh
-) -}}
-{{- end -}}{{- end -}}{{- end }}
+{{- with $app_name := "tsh" -}}
+{{- with $repo := (printf "%s/%s" "gravitational" "teleport") -}}
+{{- with $version := (gitHubReleases $repo | toJson | fromJson | jq (printf "map(select(.tag_name | startswith(\"v%s\")))[0] | .tag_name" (env "TELEPORT_MAJOR")) | first ) -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://cdn.teleport.dev/teleport-%s-%s-bin.tar.gz" $version $myArch)
+        "path" (printf "teleport/%s" $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end }}{{- end -}}
 
 {{- $externals | toYaml }}
 ".config/sz.env/lib/ble.sh.curl":
