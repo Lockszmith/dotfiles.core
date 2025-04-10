@@ -49,4 +49,4 @@ if ! [ -d ~/.cache/chezmoi/init_backup ]; then
 fi
 
 # Brute force remove chezmoistate lock and restart init --apply
-exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb && chezmoi init --apply'
+exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb && CZ_EXTR=1 chezmoi init --apply'
