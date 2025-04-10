@@ -19,5 +19,34 @@ else
     false
 fi
 
+# Function to get relative path without realpath or python
+relpath() {
+    local target=$1
+    local base=$2
+    local target_abs=$(cd "$(dirname "$target")" && pwd)/$(basename "$target")
+    local base_abs=$(cd "$base" && pwd)
+    local common_part="$base_abs"
+    local back=""
+
+    while [[ "${target_abs#$common_part}" == "$target_abs" ]]; do
+        common_part=$(dirname "$common_part")
+        back="../$back"
+    done
+
+    echo "${back}${target_abs#$common_part/}"
+}
+
+safe_backup() {
+    local BASE="${BASE:-$HOME/.cache/chezmoi/init_backup}"
+    while [ -n "${1}" ]; do
+        local relp="./$(relpath "${1}" ~)"
+        [ -r "${1}" ] && mkdir -p "${BASE}/${relp%/*}" && cp ${CPOPTS:-} "${1}" "${BASE}/${relp}"
+        shift
+    done
+}
+if ! [ -d ~/.cache/chezmoi/init_backup ]; then
+    safe_backup ~/.zshrc ~/.zsh_history ~/.zprofile ~/.bashrc ~/.bash_history ~/.profile
+fi
+
 # Brute force remove chezmoistate lock and restart init --apply
 exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb && chezmoi init --apply'
