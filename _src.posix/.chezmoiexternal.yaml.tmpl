@@ -267,7 +267,12 @@
 {{- if and (env "TELEPORT_MAJOR") (not (eq .chezmoi.os "windows")) -}}
 {{- with $app_name := "tsh" -}}
 {{- with $repo := (printf "%s/%s" "gravitational" "teleport") -}}
-{{- with $version := (gitHubReleases $repo | toJson | fromJson | jq (printf "map(select(.tag_name | startswith(\"v%s\")))[0] | .tag_name" (env "TELEPORT_MAJOR")) | first ) -}}
+{{- with $version := (gitHubReleases $repo | toJson | fromJson | jq (
+      printf
+        "map(select(.tag_name | startswith(\"v%s\")))[0] | .tag_name"
+        (env "TELEPORT_MAJOR"))
+      | first
+) -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
         "type" "archive-file"
         "url" (printf "https://cdn.teleport.dev/teleport-%s-%s-bin.tar.gz" $version $myArch)
