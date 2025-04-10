@@ -29,7 +29,7 @@ if is_sourced; then
         fi
     }
     refresh-zellij() {
-${SET:-:} -x
+${SET_X-:} -x
         local bin_path=~/.local/bin/zellij
         local cached_path=~/.cache/chezmoi/tmp/zellij
         if [ -z "$(env which zellij)" ] && [ -x "${cached_path}" ]; then
@@ -66,11 +66,11 @@ ${SET:-:} -x
             . <( env zellij setup --generate-completion "$BASE_SHELL" )
         fi
     }
-${SET:-:} -x
+${SET_X-:} -x
     if [[ -n "$(env which zellij)" ]]; then
         zellij-load-completion
     fi
-${SET:-:} -x
+${SET_X-:} -x
     # Was needed when zsh would load
     # . <( zellij setup --generate-completion "$BASE_SHELL" | sed -ne '/^function/,$p' )
     if [[ -z "$ZELLIJ_SESSION_NAME" ]]; then
