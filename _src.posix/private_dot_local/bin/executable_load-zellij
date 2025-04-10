@@ -15,14 +15,17 @@ BASE_SHELL="${BASE_SHELL:-$(basename "$SHELL")}"
 
 if is_sourced; then
     zellij-cleanup() {
-        env which zellij > /dev/null && env which zellij | grep -E "^$HOME" | ${SUDO:-} xargs -tr rm
-        [[ -d "$HOME/.cache/zellij" ]] && echo "$HOME/.cache/zellij" | ${SUDO:-} xargs -tr rm -fR
+        env which zellij > /dev/null && command -v zellij | grep -E "^$HOME" | ${SUDO:-} xargs -tr rm
+        [[ -d "$HOME/.cache/zellij" ]] \
+        && ${SUDO:-} rm -fR "$HOME/.cache/zellij"
+	[[ -d "$HOME/Library/Caches/org.Zellij-Contributors.Zellij" ]] \
+        && ${SUDO:-} rm -fR "$HOME/Library/Caches/org.Zellij-Contributors.Zellij"
         find /tmp -maxdepth 1 -mindepth 1 -type d -name 'zellij*' -print0 | ${SUDO:-} xargs -r0t rm -fR
-        if [[ -d "$HOME/.cache/zellij" ]]; then
+        if [[ -d "$HOME/.cache/zellij" || -d "$HOME/Library/Caches/org.Zellij-Contributors.Zellij" ]]; then
             printf 'Zellij cleanup failed to remove the cache directory, you might still have a zellij session active.\n'
         else
             printf 'Zellij has been cleaned up, you can now reinstall it.\n'
-            unset zellij-cleanup
+            unset -f zellij-cleanup
         fi
     }
     refresh-zellij() {
