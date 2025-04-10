@@ -17,10 +17,11 @@
 # executable            bool            false   Add executable_ attribute to file
 # path                  string          none    Path to file in archive
 */}}
+{{- $defaultRefresh := "168h" -}}
+
 {{- if (env "CZ_EXTR") -}}
 {{/* Initialize template variables */}}
 {{- $myArch := "" -}}
-{{- $defaultRefresh := "168h" -}}
 {{- $externals := dict -}}
 
 {{/*
@@ -76,10 +77,7 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- $archive_type := "zip" -}}
-{{- if (eq .chezmoi.os "linux" ) -}}
-{{-   $archive_type = "tgz" -}}
-{{- end -}}
+{{- $archive_type := or (get (dict "linux" "tgz") .chezmoi.os) "zip" }}
 {{- with $app_name := "cargo-binstall" -}}
 {{- with $repo := (printf "%s/%s" "cargo-bins" $app_name) -}}
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -268,7 +266,12 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end }}{{- end -}}
 
-{{- $externals | toYaml }}
+{{- $externals | toYaml -}}
+{{- else -}}
+# This is a truncated version of .chezmoiexternal because CZ_EXTR env is undefined
+
+{{- end }}
+
 ".config/sz.env/lib/ble.sh.curl":
   type: "archive"
   url: "https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz"
@@ -295,8 +298,4 @@
   url: "https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage"
   executable: true
   refreshPeriod: "{{ $defaultRefresh }}"
-{{- end -}}
-
-{{- else -}}
-# .chezmoiexternal is disabled because CZ_EXTR env is undefined
 {{- end -}}
