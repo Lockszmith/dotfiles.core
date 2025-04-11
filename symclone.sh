@@ -44,7 +44,7 @@ usage() {
     exit 1
 }
 # Check if both arguments are provided
-if [[ -z "$SRC_DIR" || -z "$DEST_DIR" ]]; then
+if [[ -z "$SRC_DIR" || -z "$DEST_DIR" || "$1" == '--help' ]]; then
     usage
 fi
 
