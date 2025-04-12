@@ -148,6 +148,17 @@
 */}}
 {{- $myArch = (printf "%s_%s" .chezmoi.os .chezmoi.arch) -}}
 
+{{- with $app_name := "gojq" -}}
+{{- with $repo := (printf "%s/%s" "itchyny" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" "jq") (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s_%s_%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" (printf "%s_%s_%s/%s" $app_name $version $myArch $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{- with $app_name := "git-credential-oauth" -}}
 {{- with $repo := (printf "%s/%s" "hickford" $app_name) -}}
 {{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
