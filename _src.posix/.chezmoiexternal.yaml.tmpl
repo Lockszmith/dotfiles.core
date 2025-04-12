@@ -233,6 +233,17 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- with $app_name := "fastfetch" -}}
+{{- with $repo := (printf "%s/%s" "fastfetch-cli" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+	"type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
+        "executable" true
+        "path" (printf "%s-%s/usr/bin/%s" $app_name $myArch $app_name)
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{- if (not (eq .chezmoi.os "darwin")) -}}
 {{- with $app_name := "moar" -}}
 {{- with $repo := (printf "%s/%s" "walles" $app_name) -}}
