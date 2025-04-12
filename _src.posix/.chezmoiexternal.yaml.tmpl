@@ -99,6 +99,7 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- if lookPath "jq" -}}
 {{- with $app_name := "eza" -}}
 {{- with $bin_url := (output "sh" "-c" (
       list
@@ -134,6 +135,7 @@
         "executable" true
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
+{{- end -}}
 
 {{/*
 # valid arch strings:
@@ -331,4 +333,3 @@
   executable: true
   refreshPeriod: "{{ $defaultRefresh }}"
 {{- end -}}
-
