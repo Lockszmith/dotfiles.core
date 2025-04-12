@@ -22,7 +22,8 @@
 {{- if (env "CZ_EXTR") -}}
 {{/* Initialize template variables */}}
 {{- $myArch := "" -}}
-{{- $archive_type := or (get (dict "linux" "tgz") .chezmoi.os) "zip" -}}
+{{- $archive_type := or (get (dict "linux" "tar.gz") .chezmoi.os) "zip" -}}
+{{- $archive_type_short := or (get (dict "tar.gz" "tgz") $archive_type) $archive_type -}}
 {{- $path_prefix := "" -}}
 {{- $externals := dict -}}
 
@@ -94,7 +95,7 @@
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
         "type" "archive-file"
-        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.full.%s" $repo $version $app_name $myArch $archive_type)
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.full.%s" $repo $version $app_name $myArch $archive_type_short)
         "path" $app_name
         "executable" true
         "refreshPeriod" $defaultRefresh
