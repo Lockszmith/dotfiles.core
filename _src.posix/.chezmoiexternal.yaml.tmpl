@@ -22,6 +22,8 @@
 {{- if (env "CZ_EXTR") -}}
 {{/* Initialize template variables */}}
 {{- $myArch := "" -}}
+{{- $archive_type := or (get (dict "linux" "tgz") .chezmoi.os) "zip" -}}
+{{- $path_prefix := "" -}}
 {{- $externals := dict -}}
 
 {{/*
@@ -77,7 +79,16 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- $archive_type := or (get (dict "linux" "tgz") .chezmoi.os) "zip" }}
+{{- with $app_name := "tv" -}}
+{{- with $repo := (printf "%s/%s" "alexpasmantier" "television") -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{- with $app_name := "cargo-binstall" -}}
 {{- with $repo := (printf "%s/%s" "cargo-bins" $app_name) -}}
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -89,18 +100,8 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- with $app_name := "tv" -}}
-{{- with $repo := (printf "%s/%s" "alexpasmantier" "television") -}}
-{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
-        "type" "archive-file"
-        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
-        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
-        "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}
-
 {{- if lookPath "jq" -}}
-{{- $path_prefix := or (get (dict "linux" "./") .chezmoi.os) "" -}}
+{{- $path_prefix = or (get (dict "linux" "./") .chezmoi.os) "" -}}
 {{- with $app_name := "eza" -}}
 {{- with $bin_url := (output "sh" "-c" (
       list
@@ -156,7 +157,7 @@
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" "jq") (dict
         "type" "archive-file"
-        "url" (printf "https://github.com/%s/releases/download/%s/%s_%s_%s.tar.gz" $repo $version $app_name $version $myArch)
+        "url" (printf "https://github.com/%s/releases/download/%s/%s_%s_%s.%s" $repo $version $app_name $version $myArch $archive_type)
         "path" (printf "%s_%s_%s/%s" $app_name $version $myArch $app_name)
         "executable" true
         "refreshPeriod" $defaultRefresh
@@ -195,7 +196,7 @@
 # win
 */}}
 
-{{- $myArch := or (get (dict "linux" (printf "%s-%s" .chezmoi.os .sz.os.arch_alt)) .chezmoi.os) .sz.os.short }}
+{{- $myArch = or (get (dict "linux" (printf "%s-%s" .chezmoi.os .sz.os.arch_alt)) .chezmoi.os) .sz.os.short }}
 
 {{- with $app_name := "gitui" -}}
 {{- with $repo := (printf "%s/%s" "extrawurst" $app_name) -}}
@@ -233,17 +234,6 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- with $app_name := "fastfetch" -}}
-{{- with $repo := (printf "%s/%s" "fastfetch-cli" $app_name) -}}
-{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
-	"type" "archive-file"
-        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
-        "executable" true
-        "path" (printf "%s-%s/usr/bin/%s" $app_name $myArch $app_name)
-        "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}
-
 {{- if (not (eq .chezmoi.os "darwin")) -}}
 {{- with $app_name := "moar" -}}
 {{- with $repo := (printf "%s/%s" "walles" $app_name) -}}
@@ -254,6 +244,19 @@
         "executable" true
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
+
+{{- $myArch = or (get (dict "darwin" "macos-universal") .chezmoi.os) $myArch }}
+
+{{- with $app_name := "fastfetch" -}}
+{{- with $repo := (printf "%s/%s" "fastfetch-cli" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+	"type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
+        "executable" true
+        "path" (printf "%s-%s/usr/bin/%s" $app_name $myArch $app_name)
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{/*
 # valid arch strings:
