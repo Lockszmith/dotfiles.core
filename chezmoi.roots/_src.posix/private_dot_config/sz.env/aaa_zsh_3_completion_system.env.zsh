@@ -7,3 +7,4 @@ if false; then
     zstyle ':completion:*' menu yes select
 fi
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

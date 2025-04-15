@@ -60,3 +60,4 @@ fi
 ${SILENT:+:} printf '\n%s selected.\n' "$SELECTED" >&2
 echo "$SELECTED"
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

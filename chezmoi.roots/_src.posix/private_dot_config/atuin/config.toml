@@ -140,3 +140,5 @@ common_subcommands = [
 # 
 # Set commands that should be totally stripped and ignored from stats
 #common_prefix = ["sudo"]
+
+# vim: set ft=toml expandtab tabstop=2 shiftwidth=2:

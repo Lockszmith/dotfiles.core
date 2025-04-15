@@ -18,3 +18,5 @@ DL_URL=$( \
 [[ -n "$DL_URL" ]] \
     && printf "%s\n" $DL_URL \
     || return 1 2>/dev/null || exit 1
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

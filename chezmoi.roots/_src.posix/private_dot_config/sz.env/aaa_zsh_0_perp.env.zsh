@@ -66,3 +66,4 @@ if [[ "${BASE_SHELL}" == "zsh" ]]; then
     [[ -n "${DBG}" ]] && echo "ZSH preped"
 fi
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

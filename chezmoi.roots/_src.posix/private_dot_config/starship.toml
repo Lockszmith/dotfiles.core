@@ -99,3 +99,4 @@ disabled = false
 [character]
 disabled = false
 
+# vim: set ft=toml expandtab tabstop=2 shiftwidth=2:

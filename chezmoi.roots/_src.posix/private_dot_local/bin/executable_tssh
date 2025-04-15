@@ -26,3 +26,4 @@ TARGET="${SSHUSER}@$(tsh-get "$SEARCH" "$SSHUSER")"
 
 tsh ssh ${TUNNEL} "${TARGET}" "${@:2}"
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

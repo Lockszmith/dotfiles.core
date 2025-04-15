@@ -95,3 +95,4 @@ else
         ''
 fi
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

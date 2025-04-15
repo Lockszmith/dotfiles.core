@@ -22,3 +22,4 @@ if [[ -f "$SZ_ENV_ROOT/lib/bash-preexec/.bash-preexec.sh" ]]; then
     [[ -n "${DBG}" ]] && echo "Bash-preexec will be loaded."
 fi
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

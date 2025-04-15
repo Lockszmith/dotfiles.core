@@ -29,3 +29,4 @@ zinit light jeffreytse/zsh-vi-mode
 
 [[ -n "${DBG}" ]] && echo "zi ready"
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

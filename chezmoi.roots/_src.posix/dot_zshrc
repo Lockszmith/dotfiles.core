@@ -6,3 +6,4 @@
 
 [ -s "$HOME/.config/sz.env/_.load.sh" ] && . <( "$HOME/.config/sz.env/_.load.sh" - )
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

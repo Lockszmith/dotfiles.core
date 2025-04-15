@@ -20,3 +20,4 @@ if [[ -n "${DBG}" && -n "${BLE_VERSION-}" ]]; then
     echo "ble.sh will be loaded."
 fi
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

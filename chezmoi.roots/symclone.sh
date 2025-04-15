@@ -110,3 +110,4 @@ done
 
 echo "${SCRIPT_NAME} for '$DEST_DIR' done." >&2
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

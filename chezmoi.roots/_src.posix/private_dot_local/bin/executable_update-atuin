@@ -30,3 +30,5 @@ _update-atuin() { (
 ); }
 
 _update-atuin "${@}"
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

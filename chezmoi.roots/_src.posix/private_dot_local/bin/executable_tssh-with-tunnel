@@ -45,3 +45,4 @@ SSH_OPTS="${SSH_OPTS:--N}"
 printf "Executing: %s ...\n" "tsh ssh ${TUNNEL} ${TARGET} ${*:2}" >&2
 eval "${RUN} tsh ssh ${SSH_OPTS} ${TUNNEL} '${TARGET}' ${*:2}"
 
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

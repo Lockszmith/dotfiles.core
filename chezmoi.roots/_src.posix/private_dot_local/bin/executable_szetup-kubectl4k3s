@@ -121,3 +121,5 @@ else
 	"    $ . <( $SCRIPT_NAME - ) # Note the '-' after the script's name" \
         ''
 fi
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
