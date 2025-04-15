@@ -112,7 +112,7 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- if lookPath "jq" -}}
+{{- if and (lookPath "jq") (lookPath "cargo-binstall") -}}
 {{- $path_prefix = or (get (dict "linux" "./") .chezmoi.os) "" -}}
 {{- with $app_name := "eza" -}}
 {{- with $bin_url := (output "sh" "-c" (
