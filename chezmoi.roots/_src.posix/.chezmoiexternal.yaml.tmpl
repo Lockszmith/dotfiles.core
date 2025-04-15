@@ -101,6 +101,17 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- with $app_name := "zoxide" -}}
+{{- with $repo := (printf "%s/%s" "ajeetdsouza" $app_name) -}}
+{{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/v%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" $app_name
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{- if lookPath "jq" -}}
 {{- $path_prefix = or (get (dict "linux" "./") .chezmoi.os) "" -}}
 {{- with $app_name := "eza" -}}
