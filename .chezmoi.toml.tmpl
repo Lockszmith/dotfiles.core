@@ -1,7 +1,6 @@
 # This .chezmoi.toml file is used once only
 # It collects information about the system in order to determine
 # which of the _home.* dirs will be set as the .chezmoiroot
-#
 
 {{- $githubToken := promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)" (or (
         env "CZ_GITHUB_ACCESS_TOKEN"
@@ -9,7 +8,7 @@
     ) ( env "GITHUB_ACCESS_TOKEN"
     ) ( env "GITHUB_TOKEN"
     )) -}}
-{{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
+{{- $scriptTempDir := or (env "CZ_SCRIPT_TEMPDIR") "~/.cache/chezmoi/tmp" }}
 
 {{- $chassisType := "desktop" }}
 {{- $sysType := "posix" }}
@@ -32,8 +31,9 @@
 {{-   $sysType = "windows" }}
 {{-   $sysVendor = "pc" }}
 {{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
-{{- end }}
+{{- end -}}
 
+#
 scriptTempDir={{- $scriptTempDir | quote }}
 
 [scriptEnv]

@@ -34,6 +34,28 @@ done
 set -e
 ${SET_X:-:} -x
 
+# Make sure temporary directory exists
+CZ_SCRIPT_TEMPDIR="${CZ_SCRIPT_TEMPDIR:-~/.cache/chezmoi/tmp}"
+mkdir -p "${CZ_SCRIPT_TEMPDIR}"
+
+# (in debug x2 mode) Show the existing configuration before destroying it
+[[ -z "${CZ_DEBUG}" ]] || chezmoi cat-config
+
+# Destroy existing chezmoi state
 rm -fR ~/.config/chezmoi ~/.local/share/chezmoi/.chezmoiroot
+
+# Create a temporary chezmoi configuration bypass /tmp noexec situation
+mkdir -p ~/.config/chezmoi
+cat - > ~/.config/chezmoi/chezmoi.toml <<TOML
+scriptTempDir="${CZ_SCRIPT_TEMPDIR}"
+TOML
+
+# Show the initial configuration in debug x2 mode
+[[ -z "${CZ_DEBUG}" ]] || chezmoi cat-config
+
+# "It's show time!" - Re-initialize
 chezmoi init ${CZ_DEBUG} --apply
 unset SET_X
+
+# Show the final configuration in debug x2 mode
+[[ -z "${CZ_DEBUG}" ]] || chezmoi cat-config
