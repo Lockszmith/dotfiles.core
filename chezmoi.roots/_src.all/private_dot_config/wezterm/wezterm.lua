@@ -103,7 +103,7 @@ config.font = wezterm.font_with_fallback({
 	"monospace",
 })
 
-config.disable_default_key_bindings = true
+-- config.disable_default_key_bindings = true
 
 --config.default_prog = { 'pwsh' }
 
