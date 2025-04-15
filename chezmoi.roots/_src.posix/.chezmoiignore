@@ -2,4 +2,5 @@
 /**/.git/**
 
 .config/vim/autoload
-
+.chezmoiexternals/bin
+.chezmoiexternals/bin/**

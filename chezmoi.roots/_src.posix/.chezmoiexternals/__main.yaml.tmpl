@@ -37,6 +37,11 @@
 
 {{ $myArch = (printf "%s-%s" .sz.os.arch_alt .sz.os.rust_rel_target )}}
 
+{{- if (includeTemplate ".chezmoiexternals/.bin/zellij.tmpl" .) -}}
+
+{{- end -}}
+
+{{/*
 {{- with $app_name := "zellij" -}}
 {{- with $repo := (printf "%s/%s" "zellij-org" $app_name) -}}
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -47,6 +52,7 @@
         "executable" true
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
+*/}}
 
 {{- with $app_name := "delta" -}}
 {{- with $repo := (printf "%s/%s" "dandavison" $app_name) -}}

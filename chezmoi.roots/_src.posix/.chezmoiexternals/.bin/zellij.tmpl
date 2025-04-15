@@ -1,0 +1,11 @@
+
+{{- with $app_name := "zellij" -}}
+{{- with $repo := (printf "%s/%s" "zellij-org" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
+        "path" $app_name
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
