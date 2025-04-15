@@ -1,97 +1,117 @@
-{{- $githubToken := or (env "CZ_GITHUB_ACCESS_TOKEN") (env "CHEZMOI_GITHUB_ACCESS_TOKEN") (env "GITHUB_ACCESS_TOKEN") (env "GITHUB_TOKEN") }}
-{{- if not ($githubToken) }}
-{{-   $githubToken = promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)" }}
-{{- end }}
-{{- $sysname := promptStringOnce . "sysname" "System name" }}
-{{- $sysgroup := promptStringOnce . "sysgroup" "System group" }}
-{{- $sysarea := promptStringOnce . "sysarea" "System area" }}
-{{- $gitEmail := promptStringOnce . "gitEmail" "email address (for git commits)" }}
-{{- $gitName := promptStringOnce . "gitName" "Full name (for git commits)" }}
-{{- $chassisType := "desktop" }}
-{{- $sysType := "posix" }}
-{{- $arch_alt := "x86_64" }}
-{{- $arch_alt_dash := "x86-64" }}
-{{- $sysVendor := "unknown" }}
-{{- $clib_flavor := "" }}
-{{- if eq .chezmoi.os "darwin" }}
-{{-   $arch_alt = "aarch64" }}
-{{-   $arch_alt_dash = $arch_alt }}
-{{-   $sysType = "macos" }}
-{{-   $sysVendor = "apple" }}
-{{-   if contains "BatteryData" (output "ioreg" "-c" "AppleSmartBattery") }}
-{{-     $chassisType = "laptop" }}
-{{-   else }}
-{{-     $chassisType = "desktop" }}
-{{-   end }}
-{{- else if eq .chezmoi.os "linux" }}
-{{-   $clib_flavor = "-musl" }}
-#  $chassisType = (output "hostnamectl" "--json=short" | mustFromJson).Chassis }}
-{{-   $chassisType = "server" }}
-{{- else if eq .chezmoi.os "windows" }}
-{{-   $clib_flavor = "-msvc" }}
-{{-   $sysType = "windows" }}
-{{-   $sysVendor = "pc" }}
-{{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
-{{- end }}
+# source by .chezmoi.toml.tmpl, it is recommended to edit with
+#   cz edit-config-template && cz init
+
+{{- $githubToken := or (
+        env "CZ_GITHUB_ACCESS_TOKEN"
+    ) ( env "CHEZMOI_GITHUB_ACCESS_TOKEN"
+    ) ( env "GITHUB_ACCESS_TOKEN"
+    ) ( env "GITHUB_TOKEN"
+    ) ( promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)"
+    ) -}}
+{{- $sysname := promptStringOnce . "sysname" "System name" (or (
+        env "CZ_SYSNAME"
+    ) ( .chezmoi.hostname
+    )) -}}
+{{- $sysgroup := promptStringOnce . "sysgroup" "System group" (or (
+        env "CZ_SYSGROUP"
+    ) ( .chezmoi.group
+    )) -}}
+{{- $sysuser := promptStringOnce . "sysuser" "System user" (or (
+        env "CZ_SYSUSER"
+    ) ( .chezmoi.username
+    )) -}}
+{{- $gitEmail := promptStringOnce . "gitEmail" "email address (for git commits)" (or (
+        env "CZ_GIT_EMAIL"
+    ) ( output "git" "config" "user.email"
+    ) ( list .chezmoi.username "@" .chezmoi.fqdnHostname | join ""
+    )) -}}
+{{- $gitName := promptStringOnce . "gitName" "Full name (for git commits)" (or (
+        env "CZ_GIT_NAME"
+    ) ( output "git" "config" "user.name"
+    ) ( list .chezmoi.username " (@" $sysname ")" | join ""
+    )) -}}
+
+{{- $scriptTempDir   := or ( get . "sz.os.scriptTempDir"   ) ( env "CZ_SCRIPT_TEMPDIR"      ) -}}
+{{- $chassisType     := or ( get . "sz.os.chassisType"     ) ( env "CZ_CHASSIS"             ) -}}
+{{- $sysType         := or ( get . "sz.os.sysType"         ) ( env "CZ_SYS"                 ) -}}
+{{- $sysVendor       := or ( get . "sz.os.sysVendor"       ) ( env "CZ_VENDOR"              ) -}}
+
+{{- $arch_alt := "x86_64" -}}
+{{- $arch_alt_dash := "x86-64" -}}
+{{- $clib_flavor := "" -}}
+{{- if eq .chezmoi.os "darwin" -}}
+{{-   $arch_alt = "aarch64" -}}
+{{-   $arch_alt_dash = $arch_alt -}}
+{{- else if eq .chezmoi.os "linux" -}}
+{{-   $clib_flavor = "-musl" -}}
+{{- else if eq .chezmoi.os "windows" -}}
+{{-   $clib_flavor = "-msvc" -}}
+{{- end -}}
 
 {{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
-scriptTempDir={{- $scriptTempDir | quote }}
+scriptTempDir={{ $scriptTempDir | quote }}
 
 [data.sz.os]
 {{- if eq .chezmoi.os "linux" }}
-    short={{- .chezmoi.os | quote }}
+   short={{- .chezmoi.os | quote }}
 {{- else if eq .chezmoi.os "darwin" }}
-    short="mac"
+   short="mac"
 {{- else }}
-    short={{- substr 0 3 (.chezmoi.os) | quote }}
+   short={{- substr 0 3 (.chezmoi.os) | quote }}
 {{- end }}
-    rust_rel_target={{- printf "%s-%s%s" $sysVendor .chezmoi.os $clib_flavor | quote }}
+   rust_rel_target={{- printf "%s-%s%s" $sysVendor .chezmoi.os $clib_flavor | quote }}
 {{- if ($arch_alt) }}
-    arch_alt={{- $arch_alt | quote }}
+   arch_alt={{- $arch_alt | quote }}
 {{- end }}
 {{- if ($arch_alt_dash) }}
-    arch_alt_dash={{- $arch_alt_dash | quote }}
+   arch_alt_dash={{- $arch_alt_dash | quote }}
 {{- end }}
 {{- if ($chassisType) }}
-    chassisType={{- $chassisType | quote }}
+   chassisType={{- $chassisType | quote }}
 {{- end }}
 {{- if ($sysType) }}
-    sysType={{- $sysType | quote }}
+   sysType={{- $sysType | quote }}
 {{- end }}
 
 [data]
 {{- if ($githubToken) }}
-    githubToken={{- $githubToken | quote }}
+   githubToken={{- $githubToken | quote }}
 {{- end }}
 {{- if ($sysname) }}
-    sysname = {{ $sysname | quote }}
+   sysname = {{ $sysname | quote }}
 {{- end }}
 {{- if ($sysgroup) }}
-    sysgroup = {{ $sysgroup | quote }}
+   sysgroup = {{ $sysgroup | quote }}
 {{- end }}
-{{- if ($sysarea) }}
-    sysarea = {{ $sysarea | quote }}
-{{ end }}
+{{- if ($sysuser) }}
+   sysuser = {{ $sysuser | quote }}
+{{- end }}
 
 {{- if ($gitEmail) }}
-    gitEmail = {{ $gitEmail | quote }}
+   gitEmail = {{ $gitEmail | quote }}
 {{- end }}
 {{- if ($gitName) }}
-    gitName = {{ $gitName | quote }}
+   gitName = {{ $gitName | quote }}
 {{- end }}
 {{- if not ($githubToken) }}
-    githubToken={{- $githubToken | quote }}
+   githubToken={{- $githubToken | quote }}
 {{- end }}
 
 [scriptEnv]
-    GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
-    GITHUB_TOKEN={{- $githubToken | quote }}
+   CZ_SCRIPT_TEMPDIR={{- $scriptTempDir | quote }}
+   CZ_CHASSIS={{- $chassisType | quote }}
+   CZ_SYS={{- $sysType | quote }}
+   CZ_OS={{- .chezmoi.os | quote }}
+   CZ_GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
+   CZ_VENDOR={{- $sysVendor | quote }}
+   GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
+   GITHUB_TOKEN={{- $githubToken | quote }}
 
 [diff]
 #   command = "nvim"
 #   args = ["-d",  "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
 
-    command = "delta"
-    args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
-    pager = "moar"
+   command = "delta"
+   args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
+   pager = "moar"
 

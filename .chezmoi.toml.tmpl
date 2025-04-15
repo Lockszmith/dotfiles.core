@@ -3,28 +3,36 @@
 # which of the _home.* dirs will be set as the .chezmoiroot
 #
 
-{{- $githubToken := or (env "CHEZMOI_GITHUB_ACCESS_TOKEN") (env "GITHUB_ACCESS_TOKEN") (env "GITHUB_TOKEN") }}
-{{- if not ($githubToken) }}
-{{-   $githubToken = promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)" }}
-{{- end }}
+{{- $githubToken := promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)" (or (
+        env "CZ_GITHUB_ACCESS_TOKEN"
+    ) ( env "CHEZMOI_GITHUB_ACCESS_TOKEN"
+    ) ( env "GITHUB_ACCESS_TOKEN"
+    ) ( env "GITHUB_TOKEN"
+    )) -}}
 {{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
+
 {{- $chassisType := "desktop" }}
 {{- $sysType := "posix" }}
 {{- $sysVendor := "unknown" }}
 {{- if eq .chezmoi.os "darwin" }}
 {{-   $sysType = "macos" }}
+{{-   $sysVendor = "apple" }}
 {{-   if contains "BatteryData" (output "ioreg" "-c" "AppleSmartBattery") }}
 {{-     $chassisType = "laptop" }}
 {{-   else }}
 {{-     $chassisType = "desktop" }}
 {{-   end }}
 {{- else if eq .chezmoi.os "linux" }}
-#  $chassisType = (output "hostnamectl" "--json=short" | mustFromJson).Chassis }}
-{{-   $chassisType = "server" }}
+{{-   $chassisType = or (and
+          (lookPath "hostnamectl") (output "hostnamectl" "--json=short" | mustFromJson).Chassis
+        )
+        "server"
+}}
 {{- else if eq .chezmoi.os "windows" }}
 {{-   $sysType = "windows" }}
+{{-   $sysVendor = "pc" }}
 {{-   $chassisType = (output "powershell.exe" "-NoProfile" "-NonInteractive" "-Command" "if ((Get-CimInstance -Class Win32_Battery | Measure-Object).Count -gt 0) { Write-Output 'laptop' } else { Write-Output 'desktop' }") | trim }}
-{{- end -}}
+{{- end }}
 
 scriptTempDir={{- $scriptTempDir | quote }}
 
@@ -34,3 +42,5 @@ scriptTempDir={{- $scriptTempDir | quote }}
   CZ_SYS={{- $sysType | quote }}
   CZ_OS={{- .chezmoi.os | quote }}
   CZ_GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
+  CZ_VENDOR={{- $sysVendor | quote }}
+

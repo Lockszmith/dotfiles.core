@@ -2,18 +2,19 @@
 
 set -e
 
-env | grep -E 'chezmoi|^CZ'
+[ -z "$SET_X" ] || env | grep -E 'chezmoi|^CZ'
 cd "$CHEZMOI_SOURCE_DIR"
 #CZ_MODEL="$(ioreg -l | grep "product-name" | sed -Ee 's/^.*\<"(.*)\"\>.*$/\1/')"
-set | grep '^CZ_'
+${SET_X:-:} | grep '^CZ_' || true
 printf 'System detected as %s/%s, setting up .chezmoiroot and initializing...\n' "$CZ_SYS" "$CZ_CHASSIS"
-set -x
-if [ -r "base.chezmoiroot.$CZ_SYS.$CZ_CHASSIS" ]; then
-    ln -s "base.chezmoiroot.$CZ_SYS.$CZ_CHASSIS" .chezmoiroot
-elif [ -r "base.chezmoiroot.$CZ_SYS" ]; then
-    ln -s "base.chezmoiroot.$CZ_SYS" .chezmoiroot
-elif [ -r "base.chezmoiroot.$CZ_CHASSIS" ]; then
-    ln -s "base.chezmoiroot.$CZ_CHASSIS" .chezmoiroot
+${SET_X:-:} -x
+CZROOTLINK=chezmoi.roots/__root_links/base.chezmoiroot
+if [ -r "${CZROOTLINK}.$CZ_SYS.$CZ_CHASSIS" ]; then
+    ln -s "${CZROOTLINK}.$CZ_SYS.$CZ_CHASSIS" .chezmoiroot
+elif [ -r "${CZROOTLINK}.$CZ_SYS" ]; then
+    ln -s "${CZROOTLINK}.$CZ_SYS" .chezmoiroot
+elif [ -r "${CZROOTLINK}.$CZ_CHASSIS" ]; then
+    ln -s "${CZROOTLINK}.$CZ_CHASSIS" .chezmoiroot
 else
     printf 'Failed to find a matching .chezmoiroot. Aborting!\n'
     false
