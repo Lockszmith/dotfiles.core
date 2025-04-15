@@ -49,5 +49,10 @@ if ! [ -d ~/.cache/chezmoi/init_backup ]; then
     safe_backup ~/.zshrc ~/.zsh_history ~/.zprofile ~/.bashrc ~/.bash_history ~/.profile
 fi
 
-# Brute force remove chezmoistate lock and restart init --apply
-exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb && CZ_EXTR=1 chezmoi init --apply'
+# Brute force remove chezmoistate lock and initialize chezmoi
+# apply with CZ_EXTR=1 will run twice as some logic in chemzoiexternal
+# requires tools that are downloaded with chezmoiexternal
+exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb \
+    && chezmoi init && chezmoi apply \
+    && printf "apply with externals #1/2...\n" && CZ_EXTR=1 chezmoi apply \
+    && printf "apply with externals #2/2...\n" && CZ_EXTR=1 chezmoi apply'
