@@ -1,1 +1,0 @@
-../../../_src.posix/private_dot_config/sz.env/aaa_zsh_2_zinit.env.zsh
