@@ -112,45 +112,6 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- if and (lookPath "jq") (lookPath "cargo-binstall") -}}
-{{- $path_prefix = or (get (dict "linux" "./") .chezmoi.os) "" -}}
-{{- with $app_name := "eza" -}}
-{{- with $bin_url := (output "sh" "-c" (
-      list
-        "cargo-binstall --log-level debug --dry-run --no-track --no-confirm --json-output"
-        $app_name
-        "| jq \".fields | select ( .message == \\\"Downloading package\\\" )\""
-      | join " ") | fromJson
-    ).url
--}}
-{{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
-{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
-        "type" "archive-file"
-        "url" $bin_url
-        "path" (printf "%s%s" $path_prefix $app_name)
-        "executable" true
-        "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}
-
-{{- with $app_name := "vivid" -}}
-{{- with $bin_url := (output "sh" "-c" (
-      list
-        "cargo-binstall --log-level debug --dry-run --no-track --no-confirm --json-output"
-        $app_name
-        "| jq \".fields | select ( .message == \\\"Downloading package\\\" )\""
-      | join " ") | fromJson
-    ).url
--}}
-{{- with $path := trimSuffix ".zip" (trimSuffix ".tgz" (trimSuffix ".tar" (trimSuffix ".gz" (base $bin_url)))) -}}
-{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
-        "type" "archive-file"
-        "url" $bin_url
-        "path" (printf "%s/%s" $path $app_name)
-        "executable" true
-        "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}
-{{- end -}}
-
 {{/*
 # valid arch strings:
 # darwin_amd64
@@ -337,6 +298,46 @@
         "executable" true
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end }}{{- end -}}
+
+{{/* cargo-binstall besed sources */}}
+{{- if and (lookPath "jq") (lookPath "cargo-binstall") -}}
+{{- $path_prefix = or (get (dict "linux" "./") .chezmoi.os) "" -}}
+{{- with $app_name := "eza" -}}
+{{- with $bin_url := (output "sh" "-c" (
+      list
+        "cargo-binstall --log-level debug --dry-run --no-track --no-confirm --json-output"
+        $app_name
+        "| jq \".fields | select ( .message == \\\"Downloading package\\\" )\""
+      | join " ") | fromJson
+    ).url
+-}}
+{{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" $bin_url
+        "path" (printf "%s%s" $path_prefix $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
+{{- with $app_name := "vivid" -}}
+{{- with $bin_url := (output "sh" "-c" (
+      list
+        "cargo-binstall --log-level debug --dry-run --no-track --no-confirm --json-output"
+        $app_name
+        "| jq \".fields | select ( .message == \\\"Downloading package\\\" )\""
+      | join " ") | fromJson
+    ).url
+-}}
+{{- with $path := trimSuffix ".zip" (trimSuffix ".tgz" (trimSuffix ".tar" (trimSuffix ".gz" (base $bin_url)))) -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" $bin_url
+        "path" (printf "%s/%s" $path $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+{{- end -}}
 
 {{- $externals | toYaml -}}
 {{- else -}}
