@@ -351,7 +351,11 @@ config.keys = {
 --	{ key = 'DownArrow',      mods = 'SHIFT|ALT|CTRL', action = act.AdjustPaneSize{ 'Down', 1 } },
 	{ key = 'Copy',           mods = 'NONE',           action = act.CopyTo 'Clipboard' },
 	{ key = 'Paste',          mods = 'NONE',           action = act.PasteFrom 'Clipboard' },
-  }
+
+	{ key = 'PageUp',         mods = 'SUPER',          action = act.ActivateTabRelative(-1) },
+	{ key = 'PageDown',       mods = 'SUPER',          action = act.ActivateTabRelative(1) },
+
+}
   
 config.key_tables = {
 	copy_mode = {
