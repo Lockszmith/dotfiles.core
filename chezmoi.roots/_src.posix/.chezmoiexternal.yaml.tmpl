@@ -112,6 +112,16 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- with $app_name := "bat" -}}
+{{- with $repo := (printf "%s/%s" "sharkdp" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $app_name)
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{/*
 # valid arch strings:
 # darwin_amd64
