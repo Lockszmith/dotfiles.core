@@ -66,6 +66,21 @@ ${SET_X-:} -x
             . <( env zellij setup --generate-completion "$BASE_SHELL" )
         fi
     }
+
+    zellij-mode() {
+        local BASE="config.kdl" ROOT=~/.config/zellij
+        local SRC="${BASE}.${1:?Mode missing}"
+        [[ -s "${ROOT}/${SRC}" ]] \
+        || ( printf 'Mode "%s" must exists!\n' "${1}" >&2; return 1 )
+        [[ -L "${ROOT}/${BASE}" || ! -e "${ROOT}/${BASE}" ]] \
+        || ( printf 'config.kdl is an actual file, will not replace\n' >&2; return 2 )
+        if [[ "$RESET" == 'reset' ]]; then
+            [[ -e "${ROOT}/${BASE}" ]] && rm "${ROOT}/${BASE}"
+            cp "${ROOT}/${SRC}" "${ROOT}/${BASE}"
+        else
+            (cd "${ROOT}"; ln -sf "${SRC}" "${BASE}")
+        fi
+    }
 ${SET_X-:} -x
     if [[ -n "$(env which zellij)" ]]; then
         zellij-load-completion
