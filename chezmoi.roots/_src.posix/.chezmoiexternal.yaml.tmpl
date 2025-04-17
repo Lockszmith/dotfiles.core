@@ -337,6 +337,22 @@
         "executable" true
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
+
+{{- with $app_name := "broot" -}}
+{{- with $bin_url := (output "sh" "-c" (
+      list
+        "cargo-binstall --log-level debug --dry-run --no-track --no-confirm --json-output"
+        $app_name
+        "| jq \".fields | select ( .message == \\\"Downloading package\\\" )\""
+      | join " ") | fromJson
+    ).url
+}}{{    $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" $bin_url
+        "path" (printf "%s" $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}
 {{- end -}}
 
 {{- $externals | toYaml -}}
