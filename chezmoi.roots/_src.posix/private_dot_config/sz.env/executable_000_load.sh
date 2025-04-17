@@ -54,15 +54,15 @@ if is_sourced; then
                         "| sort' shell '{}' ';'" \
                     "-exec sh -c '" \
                         'find "$1" -xdev -maxdepth 1 -type f' \
-                            '-name "PATH_*.env" -or -name "PATH_*.env.'"${BASE_SHELL}"\" \
+                            '-name "???_PATH_*.env" -or -name "???_PATH_*.env.'"${BASE_SHELL}"\" \
                         "| sort' shell '{}' ';'" \
                     "-exec sh -c '" \
                         'find "$1" -xdev -maxdepth 1 -type f' \
                             '-name "*.env" -or -name "*.env.'"${BASE_SHELL}"\" \
-                        '| grep -Ev "/(PATH|ID)_[^/]+$"' \
+                        '| grep -Ev "/[[:digit:]]+_(PATH|ID)_[^/]+$"' \
                         "| sort' shell '{}' ';'" \
                     "-exec sh -c '" \
-                        'find "$1" -xdev -maxdepth 1 -type f -name "PATH_zz_cleanup.env"' \
+                        'find "$1" -xdev -maxdepth 1 -type f -name "999_PATH_zz_cleanup.env"' \
                     "' shell '{}' ';'"
             )"
             ALL_ENV_FILES="$(

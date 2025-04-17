@@ -1,8 +1,6 @@
 #!/usr/bin/env -S bash -c 'echo "Not a user script. source(aka .) only"'
 
-if is_cmd broot; then
-    . <(broot --print-shell-function "${SHELL##*/}")
-    broot --set-install-state installed
-fi
+zicompinit
 
 # vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+
