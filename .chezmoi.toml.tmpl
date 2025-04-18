@@ -22,10 +22,10 @@
 {{-     $chassisType = "desktop" }}
 {{-   end }}
 {{- else if eq .chezmoi.os "linux" }}
-{{-   $chassisType = or (and
-          (lookPath "hostnamectl") (output "hostnamectl" "--json=short" | mustFromJson).Chassis
-        )
-        "server"
+{{-   $chassisType = (and
+          (lookPath "hostnamectl")
+          ( regexReplaceAll "Chassis:\\s*" (regexFind "Chassis:\\s*\\S+" (output "hostnamectl" "status")) "" )
+        ) | default "server"
 }}
 {{- else if eq .chezmoi.os "windows" }}
 {{-   $sysType = "windows" }}
