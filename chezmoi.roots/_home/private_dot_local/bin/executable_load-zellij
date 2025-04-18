@@ -32,9 +32,9 @@ if is_sourced; then
 ${SET_X-:} -x
         local bin_path=~/.local/bin/zellij
         local cached_path=~/.cache/chezmoi/tmp/zellij
-        if [ -z "$(env which zellij)" ] && [ -x "${cached_path}" ]; then
-                printf "Grabbing zellij from the web!\n"
-                cp "${cached_path}" "${bin_path}"
+        if [ -z "$(command -v zellij)" ] && [ -x "${cached_path}" ]; then
+            printf "Grabbing zellij from the web!\n"
+            cp "${cached_path}" "${bin_path}"
         fi
         local cached_path=/tmp/zellij/bootstrap/zellij
         if [ -z "$(env which zellij)" ] && ! [ -x "${bin_path}" ]; then
@@ -64,6 +64,20 @@ ${SET_X-:} -x
             || . <( env zellij setup --generate-completion zsh | sed -Ee 's/^(_(zellij) ).*/compdef \1\2/' )
         else
             . <( env zellij setup --generate-completion "$BASE_SHELL" )
+        fi
+    }
+
+    zellij-toggle-autoload() {
+        if [[ -n "$ZELLIJ_SESSION_NAME" ]]; then
+            if [[ "$ZELLIJ_SESSION_NAME" == "dont_load" ]]; then
+                unset ZELLIJ_SESSION_NAME
+                printf "ZELLIJ_SESSION_NAME was unset.\n"
+            else
+                printf "Seems like you're in a zellij session ('%s'), you must exit it first.\n" >&2
+            fi
+        else
+            export ZELLIJ_SESSION_NAME=dont_load
+            printf "ZELLIJ_SESSION_NAME was set, zellij will not start automatically.\n"
         fi
     }
 
@@ -104,3 +118,4 @@ else
 fi
 
 # vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+
