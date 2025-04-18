@@ -22,12 +22,12 @@
     )) -}}
 {{- $gitEmail := promptStringOnce . "gitEmail" "email address (for git commits)" (or (
         env "CZ_GIT_EMAIL"
-    ) ( output "git" "config" "user.email"
+    ) ( output "sh" "-c" "git config user.email || true"
     ) ( list .chezmoi.username "@" .chezmoi.fqdnHostname | join ""
     )) -}}
 {{- $gitName := promptStringOnce . "gitName" "Full name (for git commits)" (or (
         env "CZ_GIT_NAME"
-    ) ( output "git" "config" "user.name"
+    ) ( output "sh" "-c" "git config user.name || true"
     ) ( list .chezmoi.username " (@" $sysname ")" | join ""
     )) -}}
 
