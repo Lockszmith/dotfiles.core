@@ -1,1 +1,1 @@
-../../../_src.posix/private_dot_config/sz.env/remove_zzz_zsh_finalize.env.zsh
+../../../_home/private_dot_config/sz.env/remove_zzz_zsh_finalize.env.zsh

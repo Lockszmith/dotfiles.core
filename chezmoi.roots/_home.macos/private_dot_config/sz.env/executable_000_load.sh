@@ -1,1 +1,1 @@
-../../../_src.posix/private_dot_config/sz.env/executable_000_load.sh
+../../../_home/private_dot_config/sz.env/executable_000_load.sh

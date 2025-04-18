@@ -1,1 +1,0 @@
-../../../_src.posix/private_dot_config/sz.env/980_atuin.env.bash

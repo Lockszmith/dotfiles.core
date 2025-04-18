@@ -1,1 +1,1 @@
-../../../_src.posix/private_dot_config/sz.env/011_bash_1_preexec.env.bash
+../../../_home/private_dot_config/sz.env/011_bash_1_preexec.env.bash

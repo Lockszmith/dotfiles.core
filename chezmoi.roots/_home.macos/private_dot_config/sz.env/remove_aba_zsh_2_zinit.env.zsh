@@ -1,1 +1,1 @@
-../../../_src.posix/private_dot_config/sz.env/remove_aba_zsh_2_zinit.env.zsh
+../../../_home/private_dot_config/sz.env/remove_aba_zsh_2_zinit.env.zsh

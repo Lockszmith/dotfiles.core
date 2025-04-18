@@ -1,1 +1,1 @@
-../../../_src.posix/private_dot_config/sz.env/remove_zzy_atuin.env.bash
+../../../_home/private_dot_config/sz.env/remove_zzy_atuin.env.bash

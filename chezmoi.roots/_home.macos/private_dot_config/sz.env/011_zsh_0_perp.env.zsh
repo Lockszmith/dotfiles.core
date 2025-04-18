@@ -1,1 +1,1 @@
-../../../_src.posix/private_dot_config/sz.env/011_zsh_0_perp.env.zsh
+../../../_home/private_dot_config/sz.env/011_zsh_0_perp.env.zsh

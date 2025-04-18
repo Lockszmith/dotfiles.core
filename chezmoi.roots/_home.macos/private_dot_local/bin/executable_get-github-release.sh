@@ -1,1 +1,1 @@
-../../../_src.posix/private_dot_local/bin/executable_get-github-release.sh
+../../../_home/private_dot_local/bin/executable_get-github-release.sh
