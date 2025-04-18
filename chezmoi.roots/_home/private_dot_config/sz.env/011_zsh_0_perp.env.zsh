@@ -1,1 +1,65 @@
-../../../_src.posix/private_dot_config/sz.env/011_zsh_0_perp.env.zsh
+#!/usr/bin/env -S zsh -c 'echo "Not a user script. source(aka .) only"'
+
+[ -z "$ZSH_CACHE_DIR" ] && export ZSH_CACHE_DIR=$HOME/.cache/zsh
+mkdir -p $ZSH_CACHE_DIR/completions
+mkdir -p "$HOME/.local/share/zsh/completions"
+
+# Remove duplicates from fpath, and add local completion dir
+fpath=( $(
+    for d in $( 
+        awk '!seen[$0]++' <(
+            echo "$HOME/.local/share/zsh/completions"
+            printf '%s\n' $fpath
+        )
+    ); do
+        [ -d "$d" ] && echo "$d"
+    done
+) )
+
+skip_global_compinit=1
+
+# # Jump to the bottom of the screen
+# SZ_TPUT_END=$(tput cup 9999 0)
+# echo $SZ_TPUT_END 
+
+PS1="$(zsh -c '. <([ -n "$(echo /etc/*-release(N))" ] && cat /etc/*-release(N) | uniq -u || NAME="$VENDOR" ); echo "$NAME $VERSION_ID "')| ZSH ${ZSH_VERSION} LOADING >"
+
+#""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+#"""                              Shell Settings                              """
+#""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+typeset -g HISTFILE="$HOME/.zsh_history"
+typeset -g HISTSIZE=1000000
+typeset -g SAVEHIST=$HISTSIZE
+typeset -g COMPLETION_WAITING_DOTS="true"
+setopt hist_ignore_dups       # ignore duplicated commands history list
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES # fix "+[__NSPlaceholderDictionary initialize] may have been in progress in another thread when fork() was called" issue
+
+#####################
+# SETOPT            #
+#####################
+setopt promptsubst
+setopt extended_history       # record timestamp of command in HISTFILE
+setopt hist_expire_dups_first # delete duplicates first when HISTFILE size exceeds HISTSIZE
+setopt hist_ignore_all_dups   # ignore duplicated commands history list
+setopt hist_ignore_space      # ignore commands that start with space
+setopt hist_verify            # show command with history expansion to user before running it
+setopt inc_append_history     # add commands to HISTFILE in order of execution
+setopt share_history          # share command history data
+setopt always_to_end          # cursor moved to the end in full completion
+setopt hash_list_all          # hash everything before completion
+setopt nocompletealiases      # no complete alisases - no need for specific compdef for aliases
+setopt always_to_end          # when completing from the middle of a word, move the cursor to the end of the word
+setopt complete_in_word       # allow completion from within a word/phrase
+setopt nocorrect              # spelling correction for commands
+setopt list_ambiguous         # complete as much of a completion until it gets ambiguous.
+setopt auto_cd                # changing directories without cd
+setopt nolisttypes
+setopt listpacked
+setopt automenu
+setopt interactivecomments    # allow # comments in command-line
+setopt vi
+
+[[ -n "${DBG}" ]] && echo "ZSH preped"
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+

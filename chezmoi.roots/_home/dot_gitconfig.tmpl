@@ -1,1 +1,94 @@
-../_src.posix/dot_gitconfig.tmpl
+# This is Git's per-user configuration file.
+# It is recommended to edit this using chezmoi:
+# cz edit ~/.gitconfig
+
+[include]
+    path = .config/sz.env/lib/delta.themes.gitconfig
+
+[init]
+    defaultBranch = main
+
+[user]
+  name = {{ .gitName }}
+  email = {{ .gitEmail }}
+
+# Information on how to set this up:
+# https://github.com/hickford/git-credential-oauth?tab=readme-ov-file#git-credential-oauth
+[credential]
+  helper = cache --timeout 21600
+  helper = oauth
+#  helper = osxkeychain
+#  helper = oauth -device
+
+# Raed only OAuth2 authorization
+[credential "https://git.vastdata.com"]
+  oauthClientId = 45fddd19ac1e3828f6caca2087dd78383477f0fc94164920476db536ac618beb
+  oauthClientSecret = 98958d78931d8f02be1ab9c4fd4f718dcce357be3b609e771ba26f500ddd6196
+  # oauthScopes = "read_repository write_repository"
+  oauthScopes = "read_repository"
+  oauthAuthURL = /oauth/authorize
+  oauthTokenURL = /oauth/token
+  oauthDeviceAuthURL = /oauth/authorize_device
+
+[credential "https://code.lksz.me"]
+  oauthClientId = a4792ccc-144e-407e-86c9-5e7d8d9c3269
+  oauthAuthURL = /login/oauth/authorize
+  oauthTokenURL = /login/oauth/access_token
+# oauthDeviceAuthURL = /login/oauth/authorize
+# oauthDeviceAuthURL = /login/oauth/authorize_device
+# oauthScopes = read_repository
+[core]
+    editor = vim
+    # delta will used as the default pager for git
+    # and ov as the default pager for delta
+    # the pager will be overloaded via the [pager] section for a few commands
+    pager = delta --pager='ov -F'
+
+[pager]
+    # overload delta pager for some commands
+    show = delta --pager='ov -F --header 3'
+
+    # We are now overloading some commands via "delta features"
+    # This allows us to use different pager per git command
+    # It allows to maintain a simpler config file and avoid escaping quotes
+    diff = delta --features ov-diff
+    log  = delta --features ov-log
+
+[interactive]
+    diffFilter = delta --color-only
+
+[delta]
+    features = colibri
+    navigate = true  # use n and N to move between diff sections
+    line-numbers = true
+    side-by-side = true
+    file-style = yellow
+
+# we define the delta feature "ov-diff" we are using for git diff
+[delta "ov-diff"]
+    # the idea is to overload the pager used by delta when using git diff
+    # we are using the same pattern used by delta when the default pager (less) is used
+    # using ov section feature brings a better experience
+    pager=ov -F --section-delimiter '^(commit|added:|removed:|renamed:|Δ)' --section-header --pattern '•'
+
+# we define the delta feature "ov-log" we are using for git log
+[delta "ov-log"]
+    # the idea is to overload the pager used by delta when using git log
+    # using ov section feature brings a better experience
+    pager=ov -F --section-delimiter '^commit' --section-header-num 3
+
+[diff]
+    tool = nvimdiff
+[difftool]
+    prompt = false
+[difftool "nvimdiff"]
+    cmd = "nvim -d \"$LOCAL\" \"$REMOTE\""
+
+[merge]
+    tool = nvimdiff
+    conflictstyle = zdiff3
+[mergetool]
+    prompt = true
+[mergetool "nvimdiff"]
+    cmd = "nvim -d \"$LOCAL\" \"$REMOTE\" \"$MERGED\" -c 'wincmd w' -c 'wincmd J'"
+

@@ -1,1 +1,48 @@
-../../../_src.posix/private_dot_local/bin/executable_tssh-with-tunnel
+#! /usr/bin/env bash
+
+set -e
+
+SCRIPT_NAME="${0##*/}"
+usage() {
+    printf '%s\n' \
+        'Open a tunnel to the VMS external IP' \
+        '' \
+        'Usage:' \
+        "  ${SCRIPT_NAME} <search> [ssh args...]" \
+        '' \
+        'Env manipulators:' \
+        '  LOCAL_PORT   default is 8443' \
+        '  TARGET_PORT  default is 443' \
+        '  SSHUSER      default is vastdata' \
+        '  VMS          default is auto-detected' \
+        ''
+    exit 2
+}
+
+if [[ $# -eq 0 ]]; then
+    usage
+fi
+
+LOCAL_PORT="${LOCAL_PORT:-8443}"
+TARGET_PORT="${TARGET_PORT:-443}"
+SEARCH="$1"
+SSHUSER="${SSHUSER:-vastdata}"
+
+TARGET="${SSHUSER}@$(tsh-get "$SEARCH" "$SSHUSER")"
+
+VMS="${VMS:-"$(tsh ssh "${TARGET}" -- cat /vast/vman/mgmt-vip)"}"
+
+TUNNEL="${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+
+RUN="${RUN:-}"
+if [[ -z "$RUN" && -n "$(command -v zellij)" ]]; then
+    RUN="zellij run --floating --pinned 'true' --name '${TUNNEL}|${TARGET}|${SEARCH}|${SCRIPT_NAME}' --"
+fi
+
+TUNNEL="-L ${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+SSH_OPTS="${SSH_OPTS:--N}"
+
+printf "Executing: %s ...\n" "tsh ssh ${TUNNEL} ${TARGET} ${*:2}" >&2
+eval "${RUN} tsh ssh ${SSH_OPTS} ${TUNNEL} '${TARGET}' ${*:2}"
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

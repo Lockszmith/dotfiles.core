@@ -1,1 +1,9 @@
-../../../_src.posix/private_dot_config/sz.env/031_zsh_4_plugin_vimode.env.zsh
+#!/usr/bin/env -S zsh -c 'echo "Not a user script. source(aka .) only"'
+
+zinit ice depth=1
+zinit light jeffreytse/zsh-vi-mode
+
+[[ -n "${DBG}" ]] && echo "jeffreytse/zsh-vi-mode loaded"
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+#

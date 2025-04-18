@@ -1,1 +1,7 @@
-../../../_src.posix/private_dot_config/sz.env/011_zsh_3_completion_system.env.zsh
+#!/usr/bin/env -S zsh -c 'echo "Not a user script. source(aka .) only"'
+
+zinit light 'marlonrichert/zsh-autocomplete'
+zinit light 'zsh-users/zsh-autosuggestions'
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+

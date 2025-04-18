@@ -1,1 +1,23 @@
-../../../_src.posix/private_dot_config/sz.env/011_bash_1_ble.sh.env.bash
+#!/usr/bin/env -S bash -c 'echo "Not a user script. source(aka .) only"'
+
+update-ble.sh() {
+    [[ -n "${DBG}" ]] && set -x
+    local workdir="$SZ_ENV_ROOT/lib/ble.sh.curl"
+    [ -d "$workdir" ] && rm -fR "$workdir"
+    mkdir -p "$workdir"
+    
+    cd "$workdir"
+    curl -L https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz | tar xJf -
+    
+    source "$workdir/ble-nightly/ble.sh"
+    [[ -n "${DBG}" ]] && set +x
+}
+if [ -f "$SZ_ENV_ROOT/lib/ble.sh.curl/ble-nightly/ble.sh" ]; then
+    source "$SZ_ENV_ROOT/lib/ble.sh.curl/ble-nightly/ble.sh" --noattach
+fi
+
+if [[ -n "${DBG}" && -n "${BLE_VERSION-}" ]]; then
+    echo "ble.sh will be loaded."
+fi
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

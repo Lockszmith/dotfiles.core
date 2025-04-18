@@ -1,1 +1,42 @@
-../../../_src.posix/private_dot_local/bin/executable_auto-copy-ssh-id
+#! /usr/bin/env bash
+
+set -e
+
+REMOTE_HOST=("${@:--}")
+
+if [[ "${#REMOTE_HOST}" -eq 1 && "${REMOTE_HOST[0]}" == '-' ]]; then
+    read -a REMOTE_HOST
+fi
+
+ssh_do() {
+    local USER="${1}" HOST="${2:?}"
+    # BLINDLY Trust host keys ( https://stackoverflow.com/a/74410573/799379 )
+    [ 1 -eq "${NO_REFRESH}" ] || (
+        ssh-keygen -F "$HOST" &>/dev/null && ssh-keygen -R "$HOST" &>/dev/null
+    )
+    ssh-keygen -F "$HOST" &>/dev/null || (
+        ssh-keyscan -Ht ed25519 "$HOST" || ssh-keyscan -H "$HOST"
+    ) | grep -v '^#' >> "$HOME/.ssh/known_hosts"
+
+    SSH_ASKPASS_REQUIRE=never \
+    ssh \
+        -o PasswordAuthentication=no \
+        -o LogLevel=ERROR \
+        -o BatchMode=yes \
+        -o ConnectTimeout=2 \
+        -ttn \
+        "${USER:+${USER}@}${HOST}" -- "${@:3}" \
+    || (printf '\n'; printf 'Exit code: %s\n' "$?" >&2)
+}
+
+for _host in "${REMOTE_HOST[@]}"; do
+    printf '%-40s: ' "$_host"
+    if ssh_do "" "$_host" hostname &>/dev/null; then
+        echo "ready"
+    else
+	printf 'Attempting to copy SSH key...\n\n'
+        ssh-copy-id "$_host"
+    fi 
+done
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

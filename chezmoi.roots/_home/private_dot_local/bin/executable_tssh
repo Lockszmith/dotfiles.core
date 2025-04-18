@@ -1,1 +1,29 @@
-../../../_src.posix/private_dot_local/bin/executable_tssh
+#! /usr/bin/env bash
+
+set -e
+
+SCRIPT_NAME="${0##/*}"
+usage() {
+    printf '%s\n' \
+	'SSH using Teleport with interactive selection and VAST-reasnoble defaults' \
+	'' \
+        "${SCRIPT_NAME} " \
+        '' \
+        'Usage:' \
+        ''
+    exit 2
+}
+
+if [[ $# -eq 0 ]]; then
+    usage
+fi
+
+SEARCH="$1"
+SSHUSER="${SSHUSER:-vastdata}"
+TUNNEL="${TUNNEL:+-L ${TUNNEL}}"
+
+TARGET="${SSHUSER}@$(tsh-get "$SEARCH" "$SSHUSER")"
+
+tsh ssh ${TUNNEL} "${TARGET}" "${@:2}"
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

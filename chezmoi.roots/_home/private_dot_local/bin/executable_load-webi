@@ -1,1 +1,41 @@
-../../../_src.posix/private_dot_local/bin/executable_load-webi
+#! /usr/bin/env bash
+
+# Helper function
+is_sourced() {
+    if [ -n "$ZSH_VERSION" ]; then 
+        case $ZSH_EVAL_CONTEXT in *:file:*) return 0;; esac
+    else  # Add additional POSIX-compatible shell names here, if needed.
+        case ${0##*/} in dash|-dash|bash|-bash|ksh|-ksh|sh|-sh) return 0;; esac
+    fi
+    return 1; # NOT sourced.
+}
+
+BASE_0=${BASE_0:-$0}
+BASE_SHELL=$(basename "$SHELL")
+
+if is_sourced; then
+    webi() {
+        if [[ ! -x "${HOME}/.local/bin/webi" ]]; then
+	    printf '%s\n' \
+                "webi isn't installed, install by running:" \
+                "    curl -sS https://webi.sh/webi | sh"
+            return
+        fi
+        ${HOME}/.local/bin/webi "${@}"
+    }
+    if is_cmd webi; then
+        webi
+    fi
+
+elif [[ "$1" == '-' ]]; then
+    cat "${BASH_SOURCE[0]}"
+else
+    SCRIPT_NAME="$BASE_0"
+    printf '%s\n' \
+        "It seems $SCRIPT_NAME was invoked as a script. It should be sourced instead." \
+        'The easiest way is to call it like this:' \
+        "    $ . <( $SCRIPT_NAME - ) # Note the '-' after the script's name" \
+        ''
+fi
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

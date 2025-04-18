@@ -1,1 +1,5 @@
-../_src.posix/.chezmoiignore
+/**/.git
+/**/.git/**
+
+.config/vim/autoload
+
