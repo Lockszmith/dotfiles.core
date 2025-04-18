@@ -13,7 +13,7 @@ if is_cmd chezmoi && [[ -z "$RESET" && -z "$SRC_DIR" && -z "$DEST_DIR" ]]; then
 fi
 
 # Source directory (existing structure with files)
-SRC_DIR=${SRC_DIR:-_src.posix}
+SRC_DIR=${SRC_DIR:-_home}
 
 SCRIPT_NAME="${0##*/}"
 usage() {
