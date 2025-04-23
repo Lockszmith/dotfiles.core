@@ -5,10 +5,41 @@
 
 set -e
 
-SCRIPT_NAME="${0##/*}"
+SCRIPT_NAME="${0##*/}"
 usage() {
     printf '%s\n' \
-        "${SCRIPT_NAME} command..." \
+        'Utility script for connecting and managing teleport client for VAST CS' \
+        '' \
+        "  ${SCRIPT_NAME} <command>..." \
+        '' \
+        'Usage:' \
+        "  login    Login to VAST's teleport server" \
+        "  search   Search VAST's teleport connections" \
+        "  ssh      Establish SSH connection through VAST's teleport instance" \
+        '  launch   Connect via teleport, leveraging any session multiplexing' \
+        '           solution that is available' \
+        '  upgrade  Upgrade tsh to the latest aviable client matching our server' \
+        "  get      Fetch information regarding teleport's client or server" \
+        ''
+    exit 2
+}
+
+usage-ssh() {
+    printf '%s\n' \
+	'SSH using Teleport with interactive selection and VAST-reasnoble defaults' \
+	'' \
+        "${SCRIPT_NAME} " \
+        '' \
+        'Usage:' \
+        ''
+    exit 2
+}
+
+usage-get() {
+    printf '%s\n' \
+        "Fetch information regarding teleport's client or server" \
+        '' \
+        "  ${SCRIPT_NAME} get <sub-command>..." \
         '' \
         'Usage:' \
         '  get version               same as running `tsh version`' \
@@ -17,8 +48,41 @@ usage() {
         '  get version client 15     grabs the latest version of the client for major' \
         "  get version client auto   grab the latest version based on the server's major version" \
         '' \
-        "  To update teleport's \`tsh\` with \`chezmoi\` run the following" \
-        '    eval "$(vast-teleport get version server major -) czx status"' \
+        "  When using Gal Szkolnik's chezmoi envrionment, can be used to get the" \
+        "  correct tsh version by running:" \
+        '    eval "$('"$SCRIPT_NAME"' get version server major -) czx status"' \
+        ''
+    exit 2
+}
+
+usage-search() {
+    printf '%s\n' \
+        "Search VAST's teleport connections" \
+        '' \
+        "  [SILENT=1] [BATCH=1] [QUERY='query syntax'] ${SCRIPT_NAME} search [<options>] <search string>" \
+        '' \
+        'Usage:' \
+        '' \
+        'Examples:' \
+        "  \$ BATCH=1 ${SCRIPT_NAME} search tesla" \
+        '  cluster_psnt=VAST-TESLA-AUS-1,hostname=aus08p1vstfs01-cn1-DO-NOT-LOGIN' \
+        '  cluster_psnt=VA22374479,hostname=c-0-1' \
+        '  cluster_psnt=VA22465472,hostname=c-0-1' \
+        '' \
+        "  ${SCRIPT_NAME} search tsh-get tesla " \
+        ''
+    exit 2
+}
+
+usage-launch() {
+    printf '%s\n' \
+        'Connect via teleport, leveraging any session multiplexing solution that '\
+        'is available' \
+        '' \
+        "  ${SCRIPT_NAME} launch [<options>...] <destination>" \
+        '' \
+        'Options:' \
+        '  --no-mux  no multiplexing, even if it exists' \
         ''
     exit 2
 }
@@ -40,39 +104,200 @@ get_latest_version_by_major() {
     | tail -n 1
 }
 
-case "$1" in
-    get) shift; case $1 in
-        version) shift; case $1 in
-            '')     tsh version ;;
-            server) shift; case $1 in
-                '')     get_server_version ;;
-                major)  shift; case $1 in
-                    '')  get_server_major ;;
-                    '-') printf 'TELEPORT_MAJOR=' && get_server_major ;;
-                    *)   usage ;;
-                esac;;
-                *) usage ;;
-            esac ;;
-            client) shift; case $1 in
-                '')     usage ;;
-                auto)   get_latest_version_by_major "$(get_server_major)" ;;
-                *)      get_latest_version_by_major "${@}" ;;
-            esac;;
-            *) usage ;;
-        esac;;
-        *) usage ;;
-        esac ;;
-    *)  usage ;;
-esac
-# MAJOR="$1"
-# 
-# if [[ -z "$MAJOR" ]]; then
-#   echo "Usage: $0 <major_version>"
-#   exit 1
-# fi
-# 
-# curl -s "https://api.github.com/repos/gravitational/teleport/releases?per_page=100" | \
-#   jq -r ".[].tag_name" | \
-#   grep -E "^v${MAJOR}\." | \
-#   sort -V | \
-#   tail -n 1
+_do_upgrade() {
+    eval "$(_go_get_version_server_major -) CZ_EXTR=1 chezmoi apply --verbose --include externals $(command -v tsh)"
+}
+
+_go_get() {
+    case $1 in
+        version) shift; _go_get_version "${@}" ;;
+        *)       usage-get ;;
+    esac
+}
+
+_go_get_version() {
+    case $1 in
+        '')     tsh version ;;
+        server) shift; _go_get_version_server "${@}" ;;
+        client) shift; _go_get_version_client "${@}" ;;
+        *)      usage-get ;;
+    esac
+}
+
+_go_get_version_server() {
+    case $1 in
+        '')    get_server_version ;;
+        major) shift; _go_get_version_server_major "${@}" ;;
+        *)     usage-get ;;
+    esac
+}
+
+_go_get_version_client() {
+    case $1 in
+        '')   usage-get ;;
+        auto) get_latest_version_by_major "$(get_server_major)" ;;
+        *)    get_latest_version_by_major "${@}" ;;
+    esac
+}
+
+_go_get_version_server_major() {
+    case $1 in
+        '')  get_server_major ;;
+        '-') printf 'TELEPORT_MAJOR=' && get_server_major ;;
+        *)   usage-get ;;
+    esac
+}
+
+is_cmd() { type -p -- "${@}" 2> /dev/null 1> /dev/null; }
+
+_do_search() {
+    if [[ $# -eq 0 || "$1" == "--help" ]]; then
+        usage-search
+    fi
+
+    local FZF="tv --no-preview"
+    local BATCH="${BATCH:-}"
+    if ! is_cmd tv; then
+        if is_cmd fzf; then
+            FZF="fzf --no-preview"
+        else
+            FZF=''
+            BATCH=1
+        fi
+    fi
+    local SILENT=${SILENT:-${BATCH:+1}}
+    local SEARCH="$1"
+    local QUERY="${QUERY:+--query=${QUERY}}"
+
+    ${SILENT:+:} printf 'Searching for %s...' "$SEARCH" >&2
+
+    OPTIONS="$(
+        tsh ls ${QUERY} --format json --search "$SEARCH" | jq -r ' .[] | (
+            if .metadata.labels.customer_name
+            then "customer_name=" + .metadata.labels.customer_name + ","
+            elif .metadata.labels.Customer
+            then "Customer=" + .metadata.labels.Customer + ","
+            else ""
+            end)
+            + "cluster_psnt=\(.metadata.labels.cluster_psnt),"
+            + "hostname=\(.spec.hostname)"
+        '
+    )"
+
+    if [[ -z "$BATCH" && "${OPTIONS}" == *$'\n'* ]]; then
+        SELECTED="$( tv --no-preview <<<"$OPTIONS" )"
+    else
+        SELECTED="$OPTIONS"
+    fi
+
+    if [[ -z "$SELECTED" ]]; then
+        ${SILENT:+:} printf 'Aborted (empty response)\n' >&2
+        exit 2
+    fi
+
+    ${SILENT:+:} printf '\n%s selected.\n' "$SELECTED" >&2
+    echo "$SELECTED"
+}
+
+_do_login() {
+    tsh login
+}
+
+_do_ssh() {
+    local ECHO=${ECHO:-:}
+    local SEARCH="$1"
+    local SSHUSER="${SSHUSER:-vastdata}"
+    local TUNNEL="${TUNNEL:+-L ${TUNNEL}}"
+
+    local TARGET="${SSHUSER}@${TARGET:-$(_do_search "$SEARCH" "$SSHUSER")}"
+
+    $ECHO "Connecting to ${TARGET}"
+    tsh ssh ${TUNNEL} "${TARGET}" "${@:2}"
+}
+
+_do_ssh_with_tunnel() {
+    local ECHO=${ECHO:-:}
+    local LOCAL_PORT="${LOCAL_PORT:-8443}"
+    local TARGET_PORT="${TARGET_PORT:-443}"
+    local SEARCH="$1"
+    local SSHUSER="${SSHUSER:-vastdata}"
+
+    local TARGET="${SSHUSER}@${TARGET:-$(_do_search "$SEARCH" "$SSHUSER")}"
+
+    local VMS="${VMS:-"$(tsh ssh "${TARGET}" -- cat /vast/vman/mgmt-vip)"}"
+
+    local TUNNEL="${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+
+    local RUN="${RUN:-}"
+    if [[ -z "$RUN" && -n "$(command -v zellij)" ]]; then
+        RUN="zellij run --floating --pinned 'true' --name '${TUNNEL}|${TARGET}|${SEARCH}|${SCRIPT_NAME}' --"
+    fi
+
+    TUNNEL="-L ${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+    local SSH_OPTS="${SSH_OPTS:--N}"
+
+    $ECHO "Creating tunnel (${TUNNEL}) to ${TARGET}..."
+    printf "Executing: %s ...\n" "tsh ssh ${TUNNEL} ${TARGET} ${*:2}" >&2
+    eval "${RUN} tsh ssh ${SSH_OPTS} ${TUNNEL} '${TARGET}' ${*:2}"
+}
+
+_go_launch() {
+    local SRCH=() NO_MUX=0 DEST='' ECHO=':' LOGIN='_do_login'
+    local ZELLIJ_DEST=/tmp/vast-teleport/zellij/teleport
+    while [[ -n "$1" ]]; do
+        case $1 in
+            '--help')           usage-launch ;;
+            '--verbose')        ECHO=echo; set -x ;;
+            '--no-login')       LOGIN=: ;;
+            '--no-mux')         NO_MUX=1 ;;
+            '--from-zellij')    FROM_ZELLIJ=1 ;;
+            *)                  SRCH=("${SRCH[@]}" "$1") ;;
+        esac
+        shift
+    done
+
+    if [[ "$FROM_ZELLIJ" -eq 1 ]]; then
+        LOGIN=:; NO_MUX=1;
+        [ -r "$ZELLIJ_DEST" ] \
+        || DEST="." \
+        && DEST="$(env cat "$ZELLIJ_DEST")"
+    fi
+
+    $LOGIN
+    DEST="${DEST:-$(_do_search "${SRCH[@]}")}"
+
+    [[ -n "$DEST" ]] || exit 1
+    [[ "$( wc -l <<<"$DEST" )" -eq 1 ]] || exit 1
+
+    if [[ $NO_MUX != 1 ]] && is_cmd zellij; then
+        mkdir -p "${ZELLIJ_DEST%/*}"
+        echo "$DEST" > "${ZELLIJ_DEST}"
+        zellij action new-tab --layout=teleport
+    else
+        if [[ "$FROM_ZELLIJ" -eq 1 ]]; then
+            TARGET="${DEST}" _do_ssh_with_tunnel
+        fi
+        $ECHO "connecting to ${DEST}"
+
+        TARGET="${DEST}" _do_ssh
+        ! [ -r "$ZELLIJ_DEST" ] || rm "$ZELLIJ_DEST"
+    fi
+}
+
+_go() {
+    while true; do
+        case "$1" in
+            --debug) shift; set -x; ;;
+            login)   shift; _do_login "${@}"; break ;;
+            upgrade) shift; _do_upgrade "${@}"; break ;;
+            get)     shift; _go_get "${@}"; break ;;
+            search)  shift; _do_search "${@}"; break ;;
+            ssh)     shift; _do_ssh "${@}"; break ;;
+            launch)  shift; _go_launch "${@}"; break ;;
+            *)       usage ;;
+        esac
+    done
+}
+
+_go "${@}"
+
