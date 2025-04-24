@@ -294,6 +294,32 @@
 
 {{/*
 # valid arch strings:
+# aarch64-macos
+# x86_64-macos
+# linux-musl-arm64
+# linux-musl-x86_64
+*/}}
+
+{{- if (eq .chezmoi.os "darwin" ) -}}
+{{-   $myArch = list .sz.os.arch_alt "macos" | join "-" -}}
+{{- else -}}
+{{-   $myArch = list .chezmoi.os .chezmoi.arch | join "-" -}}
+{{- end -}}
+
+{{- with $app_name := "lnav" -}}
+{{- with $repo := (printf "%s/%s" "tstack" $app_name) -}}
+{{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/v%s/%s-%s-%s.zip" $repo $version $app_name $version $myArch)
+        "path" (printf "%s-%s/%s" $app_name $version $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
+
+{{/*
+# valid arch strings:
 # darwin-amd64
 # darwin-arm64
 # linux-386
