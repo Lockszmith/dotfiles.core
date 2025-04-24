@@ -1,0 +1,5 @@
+# S3
+[[cable_channel]]
+name = "vast-s3-releases"
+source_command = "vast-lab get s3-releases"
+preview_command = "aws s3 ls s3://vastdata-releases/release_bundles/service-packs/{0}/"
