@@ -1,0 +1,144 @@
+# Customized, based on tokyo-night
+
+{{/* pallette definition */}}
+{{- $theme := dict -}}
+{{- with $_ := set $theme "gradient" dict }}{{ end -}}
+{{- with $_ := set $theme.gradient "bt" "#9da7c1" }}{{ end -}}{{/* #54618c #0d0e14 #       */}}
+{{- with $_ := set $theme.gradient "a"  "#3a4e82" }}{{ end -}}{{/* #3a4e82 #777076 #090c0c */}}
+{{- with $_ := set $theme.gradient "b"  "#54618c" }}{{ end -}}{{/* #54618c #597d7c #a3aed2 */}}
+{{- with $_ := set $theme.gradient "c"  "#495479" }}{{ end -}}{{/* #495479 #252933 #769ff0 */}}
+{{- with $_ := set $theme.gradient "d"  "#3d4766" }}{{ end -}}{{/* #3d4766 #386775 #e3e5e5 */}}
+{{- with $_ := set $theme.gradient "e"  "#323a53" }}{{ end -}}{{/* #323a53 #404556 #       */}}
+{{- with $_ := set $theme.gradient "f"  "#262c40" }}{{ end -}}{{/* #262c40 #20504e #394260 */}}
+{{- with $_ := set $theme.gradient "g"  "#1f2333" }}{{ end -}}{{/* #1f2333 #60515c #212736 */}}
+{{- with $_ := set $theme.gradient "h"  "#3a4e82" }}{{ end -}}{{/* #3a4e82 #193d31 #1d2230 */}}
+{{- with $_ := set $theme.gradient "dt" "#1f2333" }}{{ end -}}{{/* #090c0c #777076 #       */}}
+{{- with $_ := set $theme "pair" dict }}{{ end -}}
+{{- with $_ := set $theme.pair "a" ( printf "bg:%s fg:%s" $theme.gradient.a $theme.gradient.bt ) }}{{ end -}}{{/* body os */}}
+{{- with $_ := set $theme.pair "B" ( printf "bg:%s fg:%s" $theme.gradient.b $theme.gradient.a  ) }}{{ end -}}{{/* head Dir */}}
+{{- with $_ := set $theme.pair "b" ( printf "bg:%s fg:%s" $theme.gradient.b $theme.gradient.bt ) }}{{ end -}}{{/* body Dir */}}
+{{- with $_ := set $theme.pair "C" ( printf "bg:%s fg:%s" $theme.gradient.c $theme.gradient.b  ) }}{{ end -}}{{/* head chezmoi */}}
+{{- with $_ := set $theme.pair "c" ( printf "bg:%s fg:%s" $theme.gradient.c $theme.gradient.bt ) }}{{ end -}}{{/* body chezmoi */}}
+{{- with $_ := set $theme.pair "D" ( printf "bg:%s fg:%s" $theme.gradient.d $theme.gradient.c  ) }}{{ end -}}{{/* head git */}}
+{{- with $_ := set $theme.pair "d" ( printf "bg:%s fg:%s" $theme.gradient.d $theme.gradient.bt ) }}{{ end -}}{{/* body git */}}
+{{- with $_ := set $theme.pair "E" ( printf "bg:%s fg:%s" $theme.gradient.e $theme.gradient.d  ) }}{{ end -}}{{/* head nodejs/rust/golang */}}
+{{- with $_ := set $theme.pair "e" ( printf "bg:%s fg:%s" $theme.gradient.e $theme.gradient.a  ) }}{{ end -}}{{/* body nodejs/rust/golang */}}
+{{- with $_ := set $theme.pair "F" ( printf "bg:%s fg:%s" $theme.gradient.f $theme.gradient.e  ) }}{{ end -}}{{/* head time */}}
+{{- with $_ := set $theme.pair "f" ( printf "bg:%s fg:%s" $theme.gradient.f $theme.gradient.bt ) }}{{ end -}}{{/* body time */}}
+{{- with $_ := set $theme.pair "G" ( printf "bg:%s fg:%s" $theme.gradient.g $theme.gradient.f  ) }}{{ end -}}{{/* head duration/status */}}
+{{- with $_ := set $theme.pair "g" ( printf "bg:%s fg:%s" $theme.gradient.g $theme.gradient.bt ) }}{{ end -}}{{/* body durtaion/status */}}
+{{- with $_ := set $theme.pair "H" ( printf "bg:%s fg:%s" $theme.gradient.h $theme.gradient.g  ) }}{{ end -}}{{/* head fin */}}
+
+# global prompt configuration ( https://starship.rs/config/#prompt )
+format = """
+[░▒▓](fg:{{ $theme.gradient.a }})\
+$os\
+[]({{ $theme.pair.B }})\
+$directory\
+[]({{ $theme.pair.C }})\
+${custom.chezmoi}\
+[]({{ $theme.pair.D }})\
+$git_branch\
+$git_status\
+[]({{ $theme.pair.E }})\
+$nodejs\
+$rust\
+$golang\
+[]({{ $theme.pair.F }})\
+$time\
+[]({{ $theme.pair.G }})\
+$cmd_duration\
+$status\
+[ ](fg:{{ $theme.gradient.g }})\
+$line_break$character"""
+
+command_timeout = 1500 # milliseconds; default is 500    
+
+[profiles]
+transient = """
+$time\
+[]({{ $theme.pair.H }})\
+$character"""
+
+
+[os]
+style = "{{ $theme.pair.a }}"
+disabled = false
+
+# Without NerdFont
+#[os.symbols]
+#Windows = " Win"
+
+# NerdFont - see https://www.nerdfonts.com/cheat-sheet
+[os.symbols]
+Windows = " "
+
+[directory]
+style = "{{ $theme.pair.b }}"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+
+[custom.chezmoi]
+symbol = "🏠"
+style = "{{ $theme.pair.c }}"
+command = "chezmoi status | wc -l"
+when = true
+format = '[[ $symbol $output ]({{ $theme.pair.c }})]($style)'
+
+[git_branch]
+symbol = ""
+style = "bg:{{ $theme.gradient.d }}"
+format = '[[ $symbol $branch ]({{ $theme.pair.d }})]($style)'
+
+[git_status]
+style = "bg:{{ $theme.gradient.d }}"
+format = '[[($all_status$ahead_behind )]({{ $theme.pair.d }})]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:{{ $theme.gradient.e }}"
+format = '[[ $symbol ($version) ]({{ $theme.pair.e }})]($style)'
+
+[rust]
+symbol = ""
+style = "bg:{{ $theme.gradient.e }}"
+format = '[[ $symbol ($version) ]({{ $theme.pair.e }})]($style)'
+
+[golang]
+symbol = ""
+style = "bg:{{ $theme.gradient.e }}"
+format = '[[ $symbol ($version) ]({{ $theme.pair.e }})]($style)'
+
+[time]
+disabled = false
+time_format = "%R" # Hour:Minute Format
+style = "bg:{{ $theme.gradient.f }}"
+format = '[[  $time ]({{ $theme.pair.f }})]($style)'
+
+[cmd_duration]
+min_time = 500 # milliseconds
+style = "bg:{{ $theme.gradient.g }}"
+# nerd font version:
+format = '[[  $duration ]({{ $theme.pair.g }})]($style)'
+# General UNICODE font version:
+# format = '[[ ⧗ $duration ]({{ $theme.pair.g }})]($style)'
+# Emoji version:
+# format = '[[ ⌛ $duration ]({{ $theme.pair.g }})]($style)'
+
+[status]
+disabled = false
+style = "{{ $theme.pair.g }}"
+format = '[[$symbol$status ]({{ $theme.pair.g }})]($style)'
+
+[character]
+disabled = false
+
+# vim: set ft=toml expandtab tabstop=2 shiftwidth=2:
+
