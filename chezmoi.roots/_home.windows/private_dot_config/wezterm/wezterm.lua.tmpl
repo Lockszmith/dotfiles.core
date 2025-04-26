@@ -1,0 +1,3 @@
+{{- output "chezmoi" "execute-template" "-f" (
+    list .chezmoi.sourceDir "../_src.all/private_dot_config/wezterm/wezterm.lua.tmpl" | join "/"
+) -}}

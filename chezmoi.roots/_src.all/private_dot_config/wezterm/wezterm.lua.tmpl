@@ -11,7 +11,7 @@ if wezterm.config_builder then
 	config = wezterm.config_builder()
 end
 
-{{- if eq .chezmoi.os "Windows" }}
+{{- if eq .chezmoi.os "windows" }}
 config.default_prog = { 'pwsh' }
 {{- end }}
 

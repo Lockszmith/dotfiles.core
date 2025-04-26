@@ -68,12 +68,12 @@ $local:CZ_ROOT_LINK=(Join-Path $env:CHEZMOI_SOURCE_DIR "$CZROOTLINK")
 
 Write-Host -ForegroundColor Green "System detected as $($env:CHEZMOI_OS)/$($env:CHEZMOI_ARCH), setting up .chezmoiroot and initializing..."
 
-if (Test-Path -PathType Leaf "$CZ_ROOT_LINK.$CZ_SYS.$CZ_CHASSIS") {
-    $CZ_ROOT_LINK = "$CZ_ROOT_LINK.$CZ_SYS.$CZ_CHASSIS"
-} elseif(Test-Path -PathType Leaf "$CZ_ROOT_LINK.$CZ_SYS") {
-    $CZ_ROOT_LINK = "$CZ_ROOT_LINK.$CZ_SYS"
-} elseif(Test-Path -PathType Leaf "$CZ_ROOT_LINK.$CZ_CHASSIS") {
-    $CZ_ROOT_LINK = "$CZ_ROOT_LINK.$CZ_CHASSIS"
+if (Test-Path -PathType Leaf "${CZ_ROOT_LINK}.${CZ_SYS}.${CZ_CHASSIS}") {
+    $CZ_ROOT_LINK = "${CZ_ROOT_LINK}.${CZ_SYS}.${CZ_CHASSIS}"
+} elseif(Test-Path -PathType Leaf "${CZ_ROOT_LINK}.$CZ_SYS") {
+    $CZ_ROOT_LINK = "${CZ_ROOT_LINK}.${CZ_SYS}"
+} elseif(Test-Path -PathType Leaf "${CZ_ROOT_LINK}.${CZ_CHASSIS}") {
+    $CZ_ROOT_LINK = "${CZ_ROOT_LINK}.${CZ_CHASSIS}"
 } else {
     Write-Host -ForegroundColor Red "Failed to find a matching .chezmoiroot. Aborting!"
     exit 1
@@ -84,11 +84,18 @@ $local:newItem = [ordered]@{
     Path = $env:CHEZMOI_SOURCE_DIR 
 
     Name = ".chezmoiroot"
-    Value = @((Get-Content -LiteralPath $CZ_ROOT_LINK).Replace('\', '/')) -join "`n"
+    Value = (Get-Content -LiteralPath $CZ_ROOT_LINK).Replace('\', '/')
 }
 $null = New-Item @newItem -ErrorAction Stop
+Remove-Item ~/.config/chezmoi/chezmoistate.boltdb
 
-Write-Host -ForegroundColor Green ".chezmoiroot initialized. You will need to run chezmoi init --apply again (the command is already in your clipboard)."
-"chezmoi init --apply" | Set-Clipboard
+Write-Host -ForegroundColor Green (
+    ".chezmoiroot initialized. You will need to remove:",
+    "    ~/.config/chezmoi/chezmoistate.boltdb",
+    "and then",
+    "    run chezmoi init --apply again",
+    "(the commands are already in your clipboard)." -join "`n"
+    )
+"Remove-Item ~/.config/chezmoi/chezmoistate.boltdb; chezmoi init --apply" | Set-Clipboard
 
 {{ end }}
