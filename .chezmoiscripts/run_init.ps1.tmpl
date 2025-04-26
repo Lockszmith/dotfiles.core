@@ -1,3 +1,4 @@
+{{- if ne .chezmoi.os "windows" -}}
 #! /usr/bin/env bash
 
 set -e
@@ -56,3 +57,38 @@ exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb \
     && chezmoi init && chezmoi apply \
     && printf "apply with externals #1/2...\n" && CZ_EXTR=1 chezmoi apply \
     && printf "apply with externals #2/2...\n" && CZ_EXTR=1 chezmoi apply'
+{{- else -}}
+#! /usr/bin/env pwsh
+$local:CZROOTLINK=Join-Path "chezmoi.roots" (Join-Path "__root_links" "base.chezmoiroot")
+
+# Get-ChildItem -LiteralPath "env:" | Where-Object Name -imatch 'cz|chezmoi'
+$local:CZ_SYS=$env:CZ_SYS
+$local:CZ_CHASSIS=$env:CZ_CHASSIS
+$local:CZ_ROOT_LINK=(Join-Path $env:CHEZMOI_SOURCE_DIR "$CZROOTLINK")
+
+Write-Host -ForegroundColor Green "System detected as $($env:CHEZMOI_OS)/$($env:CHEZMOI_ARCH), setting up .chezmoiroot and initializing..."
+
+if (Test-Path -PathType Leaf "$CZ_ROOT_LINK.$CZ_SYS.$CZ_CHASSIS") {
+    $CZ_ROOT_LINK = "$CZ_ROOT_LINK.$CZ_SYS.$CZ_CHASSIS"
+} elseif(Test-Path -PathType Leaf "$CZ_ROOT_LINK.$CZ_SYS") {
+    $CZ_ROOT_LINK = "$CZ_ROOT_LINK.$CZ_SYS"
+} elseif(Test-Path -PathType Leaf "$CZ_ROOT_LINK.$CZ_CHASSIS") {
+    $CZ_ROOT_LINK = "$CZ_ROOT_LINK.$CZ_CHASSIS"
+} else {
+    Write-Host -ForegroundColor Red "Failed to find a matching .chezmoiroot. Aborting!"
+    exit 1
+}
+
+$local:newItem = [ordered]@{
+    Type = "File"
+    Path = $env:CHEZMOI_SOURCE_DIR 
+
+    Name = ".chezmoiroot"
+    Value = @((Get-Content -LiteralPath $CZ_ROOT_LINK).Replace('\', '/')) -join "`n"
+}
+$null = New-Item @newItem -ErrorAction Stop
+
+Write-Host -ForegroundColor Green ".chezmoiroot initialized. You will need to run chezmoi init --apply again (the command is already in your clipboard)."
+"chezmoi init --apply" | Set-Clipboard
+
+{{ end }}
