@@ -1,0 +1,122 @@
+# Customized, based on tokyo-night
+
+# {{/* pallette definition */}}
+# {{- $theme := dict }}
+# {{- with $_ := set $theme "gradient_a" "#090c0c" }}{{ end -}}
+# {{- with $_ := set $theme "gradient_b" "#a3aed2" }}{{ end -}}
+# {{- with $_ := set $theme "gradient_c" "#769ff0" }}{{ end -}}
+# {{- with $_ := set $theme "gradient_d" "#e3e5e5" }}{{ end -}}
+# {{- with $_ := set $theme "gradient_e" "#      " }}{{ end -}}
+# {{- with $_ := set $theme "gradient_f" "#394260" }}{{ end -}}
+# {{- with $_ := set $theme "gradient_g" "#212736" }}{{ end -}}
+# {{- with $_ := set $theme "gradient_h" "#1d2230" }}{{ end -}}
+# {{- with $_ := set $theme "gradient_i" "#      " }}{{ end -}}
+
+# global prompt configuration ( https://starship.rs/config/#prompt )
+format = """
+[░▒▓](#a3aed2)\
+$os\
+[](bg:#769ff0 fg:#a3aed2)\
+$directory\
+[](fg:#769ff0 bg:#394260)\
+$git_branch\
+$git_status\
+[](fg:#394260 bg:#212736)\
+$nodejs\
+$rust\
+$golang\
+[](fg:#212736 bg:#1d2230)\
+$time\
+[](fg:#212736 bg:#1d2230)\
+$cmd_duration\
+$status\
+[ ](fg:#1d2230)\
+$line_break$character"""
+
+command_timeout = 1500 # milliseconds; default is 500    
+
+[profiles]
+transient = """
+$time\
+[](fg:#212736 bg:#1d2230)\
+$character"""
+
+
+[os]
+style = "bg:#a3aed2 fg:#090c0c"
+disabled = false
+
+# Without NerdFont
+#[os.symbols]
+#Windows = " Win"
+
+# NerdFont - see https://www.nerdfonts.com/cheat-sheet
+[os.symbols]
+Windows = " "
+
+[directory]
+style = "fg:#e3e5e5 bg:#769ff0"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+
+[custom.chezmoi]
+symbol = "🏠"
+style = "bg:#394260"
+command = "chezmoi status | wc -l"
+when = true
+format = '[[ $output $symbol ](fg:#769ff0 bg:#394260)]($style)'
+
+[git_branch]
+symbol = ""
+style = "bg:#394260"
+format = '[[ $symbol $branch ](fg:#769ff0 bg:#394260)]($style)'
+
+[git_status]
+style = "bg:#394260"
+format = '[[($all_status$ahead_behind )](fg:#769ff0 bg:#394260)]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:#212736"
+format = '[[ $symbol ($version) ](fg:#769ff0 bg:#212736)]($style)'
+
+[rust]
+symbol = ""
+style = "bg:#212736"
+format = '[[ $symbol ($version) ](fg:#769ff0 bg:#212736)]($style)'
+
+[golang]
+symbol = ""
+style = "bg:#212736"
+format = '[[ $symbol ($version) ](fg:#769ff0 bg:#212736)]($style)'
+
+[time]
+disabled = false
+time_format = "%R" # Hour:Minute Format
+style = "bg:#1d2230"
+format = '[[  $time ](fg:#a0a9cb bg:#1d2230)]($style)'
+
+[cmd_duration]
+min_time = 500 # milliseconds
+# nerd font version:
+format = 'prev: [[  $duration ](fg:#a0a9cb bg:#1d2230)]($style)'
+# General UNICODE font version:
+# format = '[[ ⧗ $duration ](fg:#a0a9cb bg:#1d2230)]($style)'
+# Emoji version:
+# format = '[[ ⌛ $duration ](fg:#a0a9cb bg:#1d2230)]($style)'
+
+[status]
+disabled = false
+
+[character]
+disabled = false
+
+# vim: set ft=toml expandtab tabstop=2 shiftwidth=2:
+
