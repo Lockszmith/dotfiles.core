@@ -20,7 +20,7 @@ if is_sourced; then
         && ${SUDO:-} rm -fR "$HOME/.cache/zellij"
 	[[ -d "$HOME/Library/Caches/org.Zellij-Contributors.Zellij" ]] \
         && ${SUDO:-} rm -fR "$HOME/Library/Caches/org.Zellij-Contributors.Zellij"
-        find /tmp -maxdepth 1 -mindepth 1 -type d -name 'zellij*' -print0 | ${SUDO:-} xargs -r0t rm -fR
+        find ${TMPDIR:-/tmp} -maxdepth 1 -mindepth 1 -type d -name 'zellij*' -print0 | ${SUDO:-} xargs -r0t rm -fR
         if [[ -d "$HOME/.cache/zellij" || -d "$HOME/Library/Caches/org.Zellij-Contributors.Zellij" ]]; then
             printf 'Zellij cleanup failed to remove the cache directory, you might still have a zellij session active.\n'
         else
@@ -33,10 +33,10 @@ ${SET_X-:} -x
         local bin_path=~/.local/bin/zellij
         local cached_path=~/.cache/chezmoi/tmp/zellij
         if [ -z "$(command -v zellij)" ] && [ -x "${cached_path}" ]; then
-            printf "Grabbing zellij from the web!\n"
+            printf "Grabbing zellij from the cache!\n"
             cp "${cached_path}" "${bin_path}"
         fi
-        local cached_path=/tmp/zellij/bootstrap/zellij
+        local cached_path=${TMPDIR:-/tmp}/zellij/bootstrap/zellij
         if [ -z "$(env which zellij)" ] && ! [ -x "${bin_path}" ]; then
             if [[ ! -r "${cached_path}" ]]; then
                 printf "Grabbing zellij from the web!\n"
@@ -44,7 +44,7 @@ ${SET_X-:} -x
             fi
             if [[ -r "${cached_path}" ]]; then
                 mv "${cached_path}" "${bin_path}"
-                rm -fR /tmp/zellij
+                rm -fR ${TMPDIR:-/tmp}/zellij
             fi
         fi
         refresh-zellij() { :; }
