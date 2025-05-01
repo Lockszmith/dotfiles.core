@@ -72,6 +72,7 @@ usage-get() {
         '' \
         'Commands:' \
         '  s3-releases  Get release names available on s3' \
+        '  s3-callhome  Get callhome list available on s3' \
         '' \
         ''
     exit 2
@@ -197,6 +198,11 @@ do_get_s3-releases() {
     | sed -E 's|^[[:space:]]+[^[:space:]]+[[:space:]](.+)/$|999\1|; s/^999release/111release/; s/([[:digit:]])$/\1.zzz/' \
     | sort --field-separator=- -k2,2Vr -k3,3Vr -k4,4Vr -k5,5Vr \
     | sed -Ee 's/^[[:digit:]]{3}//; s/.zzz$//'
+}
+
+do_get_s3-callhome() {
+    # Get the list of callhome bundles
+    aws s3 ls --human-readable s3://vast-callhomebundle/
 }
 
 do_get() {

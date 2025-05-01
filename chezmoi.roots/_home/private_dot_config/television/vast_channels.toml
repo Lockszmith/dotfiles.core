@@ -3,3 +3,8 @@
 name = "vast-s3-releases"
 source_command = "vast-lab get s3-releases"
 preview_command = "aws s3 ls s3://vastdata-releases/release_bundles/service-packs/{0}/"
+
+[[cable_channel]]
+name = "vast-s3-callhome"
+source_command = "vast-lab get s3-callhome"
+preview_command = "aws s3 ls s3://vast-callhomebundle/{0}/"
