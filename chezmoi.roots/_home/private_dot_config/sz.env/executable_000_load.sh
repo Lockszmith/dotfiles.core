@@ -41,13 +41,15 @@ if is_sourced; then
     
     load_all() {
         local ALL_ENV_FILES
+	local FILES DIRS
         if [ -z "$SZ_ENV_LOADED" ]; then
             SZ_ENV_LOADED=1
             LOAD_EXIT=0
 
             # The following constructs a list of load_next ... commands
+
             FIND_CMD="$( printf "%s " \
-                "find ~/.config/sz.env -xdev -type d -not -name '*.off'" \
+                "find $USER_HOME/.config/sz.env -xdev -type d -not -name '*.off' -not -path '$USER_HOME/.config/sz.env/lib' -not -path '$USER_HOME/.config/sz.env/lib/*' " \
                     "-exec sh -c '" \
                         'find "$1" -xdev -maxdepth 1 -type f' \
                             '-name "ID_*.env" -or -name "ID_*.env.'"${BASE_SHELL}"\" \
