@@ -30,6 +30,8 @@
     ) ( output "sh" "-c" "git config user.name || true"
     ) ( list .chezmoi.username " (@" $sysname ")" | join ""
     )) -}}
+{{- $promptStyle := get (get . "style" | default .) "prompt" | default "cool" -}}
+{{- $promptStyle = promptString "Prompt style (cool/hot/lux)" $promptStyle -}}
 
 {{- $scriptTempDir   := or ( get . "sz.os.scriptTempDir"   ) ( env "CZ_SCRIPT_TEMPDIR"      ) -}}
 {{- $chassisType     := or ( get . "sz.os.chassisType"     ) ( env "CZ_CHASSIS"             ) -}}
@@ -106,6 +108,11 @@ scriptTempDir={{ $scriptTempDir | quote }}
    CZ_VENDOR={{- $sysVendor | quote }}
    GITHUB_ACCESS_TOKEN={{- $githubToken | quote }}
    GITHUB_TOKEN={{- $githubToken | quote }}
+
+[style]
+{{- if ($promptStyle) }}
+   prompt={{- $promptStyle | quote }}
+{{- end }}
 
 [diff]
 #   command = "nvim"

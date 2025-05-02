@@ -1,68 +1,78 @@
 # Customized, based on tokyo-night
 
-{{/* pallette definition */}}
-{{- $theme := dict -}}
-{{- with $_ := set $theme "gradient" dict }}{{ end -}}
-{{- with $_ := set $theme.gradient "bt" "#9da7c1" }}{{ end -}}{{/* #54618c #0d0e14 #       */}}
-{{- with $_ := set $theme.gradient "a"  "#3a4e82" }}{{ end -}}{{/* #3a4e82 #777076 #090c0c */}}
-{{- with $_ := set $theme.gradient "b"  "#54618c" }}{{ end -}}{{/* #54618c #597d7c #a3aed2 */}}
-{{- with $_ := set $theme.gradient "c"  "#495479" }}{{ end -}}{{/* #495479 #252933 #769ff0 */}}
-{{- with $_ := set $theme.gradient "d"  "#3d4766" }}{{ end -}}{{/* #3d4766 #386775 #e3e5e5 */}}
-{{- with $_ := set $theme.gradient "e"  "#323a53" }}{{ end -}}{{/* #323a53 #404556 #       */}}
-{{- with $_ := set $theme.gradient "f"  "#262c40" }}{{ end -}}{{/* #262c40 #20504e #394260 */}}
-{{- with $_ := set $theme.gradient "g"  "#1f2333" }}{{ end -}}{{/* #1f2333 #60515c #212736 */}}
-{{- with $_ := set $theme.gradient "h"  "#3a4e82" }}{{ end -}}{{/* #3a4e82 #193d31 #1d2230 */}}
-{{- with $_ := set $theme.gradient "dt" "#1f2333" }}{{ end -}}{{/* #090c0c #777076 #       */}}
-{{- with $_ := set $theme "pair" dict }}{{ end -}}
-{{- with $_ := set $theme.pair "a" ( printf "bg:%s fg:%s" $theme.gradient.a $theme.gradient.bt ) }}{{ end -}}{{/* body os */}}
-{{- with $_ := set $theme.pair "B" ( printf "bg:%s fg:%s" $theme.gradient.b $theme.gradient.a  ) }}{{ end -}}{{/* head Dir */}}
-{{- with $_ := set $theme.pair "b" ( printf "bg:%s fg:%s" $theme.gradient.b $theme.gradient.bt ) }}{{ end -}}{{/* body Dir */}}
-{{- with $_ := set $theme.pair "C" ( printf "bg:%s fg:%s" $theme.gradient.c $theme.gradient.b  ) }}{{ end -}}{{/* head chezmoi */}}
-{{- with $_ := set $theme.pair "c" ( printf "bg:%s fg:%s" $theme.gradient.c $theme.gradient.bt ) }}{{ end -}}{{/* body chezmoi */}}
-{{- with $_ := set $theme.pair "D" ( printf "bg:%s fg:%s" $theme.gradient.d $theme.gradient.c  ) }}{{ end -}}{{/* head git */}}
-{{- with $_ := set $theme.pair "d" ( printf "bg:%s fg:%s" $theme.gradient.d $theme.gradient.bt ) }}{{ end -}}{{/* body git */}}
-{{- with $_ := set $theme.pair "E" ( printf "bg:%s fg:%s" $theme.gradient.e $theme.gradient.d  ) }}{{ end -}}{{/* head nodejs/rust/golang */}}
-{{- with $_ := set $theme.pair "e" ( printf "bg:%s fg:%s" $theme.gradient.e $theme.gradient.a  ) }}{{ end -}}{{/* body nodejs/rust/golang */}}
-{{- with $_ := set $theme.pair "F" ( printf "bg:%s fg:%s" $theme.gradient.f $theme.gradient.e  ) }}{{ end -}}{{/* head time */}}
-{{- with $_ := set $theme.pair "f" ( printf "bg:%s fg:%s" $theme.gradient.f $theme.gradient.bt ) }}{{ end -}}{{/* body time */}}
-{{- with $_ := set $theme.pair "G" ( printf "bg:%s fg:%s" $theme.gradient.g $theme.gradient.f  ) }}{{ end -}}{{/* head duration/status */}}
-{{- with $_ := set $theme.pair "g" ( printf "bg:%s fg:%s" $theme.gradient.g $theme.gradient.bt ) }}{{ end -}}{{/* body durtaion/status */}}
-{{- with $_ := set $theme.pair "H" ( printf "bg:%s fg:%s" $theme.gradient.h $theme.gradient.g  ) }}{{ end -}}{{/* head fin */}}
-
+palette = {{ get (get . "style" | default .) "prompt" | default "cool" | quote }}
 # global prompt configuration ( https://starship.rs/config/#prompt )
 format = """
-[░▒▓](fg:{{ $theme.gradient.a }})\
+[░▒▓](fg:gradient_a)\
 $os\
-[]({{ $theme.pair.B }})\
+[](bg:gradient_b fg:gradient_a)\
 $directory\
-[]({{ $theme.pair.C }})\
+[](bg:gradient_c fg:gradient_b)\
 ${custom.chezmoi}\
-[]({{ $theme.pair.D }})\
+[](bg:gradient_d fg:gradient_c)\
 $git_branch\
 $git_status\
-[]({{ $theme.pair.E }})\
+[](bg:gradient_e fg:gradient_d)\
 $nodejs\
 $rust\
 $golang\
-[]({{ $theme.pair.F }})\
+[](bg:gradient_f fg:gradient_e)\
 $time\
-[]({{ $theme.pair.G }})\
+[](bg:gradient_g fg:gradient_f)\
 $cmd_duration\
 $status\
-[ ](fg:{{ $theme.gradient.g }})\
+[ ](fg:gradient_g)\
 $line_break$character"""
 
 command_timeout = 1500 # milliseconds; default is 500    
 
+[palettes.cool]
+gradient_a  = "#3a4e82"
+gradient_b  = "#54618c"
+gradient_c  = "#495479"
+gradient_d  = "#3d4766"
+gradient_e  = "#323a53"
+gradient_f  = "#262c40"
+gradient_g  = "#1f2333"
+gradient_h  = "#3a4e82"
+text_bright = "#9da7c1"
+text_dark   = "#1f2333"
+
+[palettes.lux]
+gradient_a  = "#5e3a82"   # Plum
+gradient_b  = "#6d548c"   # Dusty violet
+gradient_c  = "#5f4979"   # Deep mauve
+gradient_d  = "#523d66"   # Grape
+gradient_e  = "#443253"   # Aubergine
+gradient_f  = "#352640"   # Very dark violet
+gradient_g  = "#2a1f33"   # Blackened purple
+gradient_h  = "#5e3a82"   # Loop to plum
+
+text_bright = "#c1a7d3"   # Soft lavender-pink
+text_dark   = "#2a1f33"   # Matches darkest gradient
+
+[palettes.hot]
+gradient_a  = "#823a3a"   # Rich warm crimson
+gradient_b  = "#8c5454"   # Muted brick red
+gradient_c  = "#794949"   # Desaturated rosewood
+gradient_d  = "#664343"   # Deep red-brown
+gradient_e  = "#533232"   # Wine red
+gradient_f  = "#402626"   # Burnt umber
+gradient_g  = "#331f1f"   # Near black with red undertones
+gradient_h  = "#823a3a"   # Wraparound to top of gradient
+
+text_bright = "#c1a79d"   # Soft warm beige
+text_dark   = "#331f1f"   # Same as deepest gradient for cohesion
+
 [profiles]
 transient = """
 $time\
-[]({{ $theme.pair.H }})\
+[](bg:gradient_h fg:gradient_g)\
 $character"""
 
 
 [os]
-style = "{{ $theme.pair.a }}"
+style = "bg:gradient_a fg:text_bright"
 disabled = false
 
 # Without NerdFont
@@ -74,7 +84,7 @@ disabled = false
 Windows = " "
 
 [directory]
-style = "{{ $theme.pair.b }}"
+style = "bg:gradient_b fg:text_bright"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
@@ -87,55 +97,55 @@ truncation_symbol = "…/"
 
 [custom.chezmoi]
 symbol = "🏠"
-style = "{{ $theme.pair.c }}"
+style = "bg:gradient_c fg:text_bright"
 command = "chezmoi status | wc -l"
 when = true
-format = '[[ $symbol $output ]({{ $theme.pair.c }})]($style)'
+format = '[[ $symbol $output ](bg:gradient_c fg:text_bright)]($style)'
 
 [git_branch]
 symbol = ""
-style = "bg:{{ $theme.gradient.d }}"
-format = '[[ $symbol $branch ]({{ $theme.pair.d }})]($style)'
+style = "bg:gradient_d"
+format = '[[ $symbol $branch ](bg:gradient_d fg:text_bright)]($style)'
 
 [git_status]
-style = "bg:{{ $theme.gradient.d }}"
-format = '[[($all_status$ahead_behind )]({{ $theme.pair.d }})]($style)'
+style = "bg:gradient_d"
+format = '[[($all_status$ahead_behind )](bg:gradient_d fg:text_bright)]($style)'
 
 [nodejs]
 symbol = ""
-style = "bg:{{ $theme.gradient.e }}"
-format = '[[ $symbol ($version) ]({{ $theme.pair.e }})]($style)'
+style = "bg:gradient_e"
+format = '[[ $symbol ($version) ](bg:gradient_e fg:gradient_a)]($style)'
 
 [rust]
 symbol = ""
-style = "bg:{{ $theme.gradient.e }}"
-format = '[[ $symbol ($version) ]({{ $theme.pair.e }})]($style)'
+style = "bg:gradient_e"
+format = '[[ $symbol ($version) ](bg:gradient_e fg:gradient_a)]($style)'
 
 [golang]
 symbol = ""
-style = "bg:{{ $theme.gradient.e }}"
-format = '[[ $symbol ($version) ]({{ $theme.pair.e }})]($style)'
+style = "bg:gradient_e"
+format = '[[ $symbol ($version) ](bg:gradient_e fg:gradient_a)]($style)'
 
 [time]
 disabled = false
 time_format = "%R" # Hour:Minute Format
-style = "bg:{{ $theme.gradient.f }}"
-format = '[[  $time ]({{ $theme.pair.f }})]($style)'
+style = "bg:gradient_f"
+format = '[[  $time ](bg:gradient_f fg:text_bright)]($style)'
 
 [cmd_duration]
 min_time = 500 # milliseconds
-style = "bg:{{ $theme.gradient.g }}"
+style = "bg:gradient_g"
 # nerd font version:
-format = '[[  $duration ]({{ $theme.pair.g }})]($style)'
+format = '[[  $duration ](bg:gradient_g fg:text_bright)]($style)'
 # General UNICODE font version:
-# format = '[[ ⧗ $duration ]({{ $theme.pair.g }})]($style)'
+# format = '[[ ⧗ $duration ](bg:gradient_g fg:text_bright)]($style)'
 # Emoji version:
-# format = '[[ ⌛ $duration ]({{ $theme.pair.g }})]($style)'
+# format = '[[ ⌛ $duration ](bg:gradient_g fg:text_bright)]($style)'
 
 [status]
 disabled = false
-style = "{{ $theme.pair.g }}"
-format = '[[$symbol$status ]({{ $theme.pair.g }})]($style)'
+style = "bg:gradient_g fg:text_bright"
+format = '[[$symbol$status ](bg:gradient_g fg:text_bright)]($style)'
 
 [character]
 disabled = false
