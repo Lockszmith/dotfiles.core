@@ -202,7 +202,8 @@ do_get_s3-releases() {
 
 do_get_s3-callhome() {
     # Get the list of callhome bundles
-    aws s3 ls --human-readable s3://vast-callhomebundle/
+    aws s3 ls --human-readable s3://vast-callhomebundle/ \
+    | sed -E 's|^[[:space:]]+[^[:space:]]+[[:space:]](.+)/$|\1|;'
 }
 
 do_get() {
