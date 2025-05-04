@@ -1,6 +1,6 @@
 # Customized, based on tokyo-night
 
-palette = {{ get (get . "style" | default .) "prompt" | default "cool" | quote }}
+palette = {{ dig "style" "prompt" "cool" . | quote }}
 # global prompt configuration ( https://starship.rs/config/#prompt )
 format = """
 [░▒▓](fg:gradient_a)\

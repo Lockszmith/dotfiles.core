@@ -1,15 +1,17 @@
 # source by .chezmoi.toml.tmpl, it is recommended to edit with
 #   cz edit-config-template && cz init
 
-{{- $githubToken := or (
+{{- $githubToken := get . "githubToken" | default "" -}}
+{{- $githubToken = or (
         env "CZ_GITHUB_ACCESS_TOKEN"
     ) ( env "CHEZMOI_GITHUB_ACCESS_TOKEN"
     ) ( env "GITHUB_ACCESS_TOKEN"
     ) ( env "GITHUB_TOKEN"
-    ) ( promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)"
+    ) ( promptStringOnce . "githubToken" "Public GITHUB token (mostly for rate limits - !insecure!)" $githubToken
     ) -}}
 {{- $sysname := promptStringOnce . "sysname" "System name" (or (
-        env "CZ_SYSNAME"
+        get . "sysname"
+    ) ( env "CZ_SYSNAME"
     ) ( .chezmoi.hostname
     )) -}}
 {{- $sysgroup := promptStringOnce . "sysgroup" "System group" (or (
@@ -30,8 +32,11 @@
     ) ( output "sh" "-c" "git config user.name || true"
     ) ( list .chezmoi.username " (@" $sysname ")" | join ""
     )) -}}
-{{- $promptStyle := get (get . "style" | default .) "prompt" | default "cool" -}}
-{{- $promptStyle = promptString "Prompt style (cool/hot/lux)" $promptStyle -}}
+{{- $promptStyleChoices := list "cool" "hot" "lux" -}}
+{{- $zellijStyleChoices := list "-locked-full" "-locked" "-normal" -}}
+{{- $promptStyle := dig "style" "prompt" "cool" . -}}
+{{- $promptStyle = promptChoice "Prompt style" $promptStyleChoices $promptStyle -}}
+{{- $zellijStyle := promptChoiceOnce . "style.zellij" "Zellij default style" $zellijStyleChoices "-locked-full" -}}
 
 {{- $scriptTempDir   := or ( get . "sz.os.scriptTempDir"   ) ( env "CZ_SCRIPT_TEMPDIR"      ) -}}
 {{- $chassisType     := or ( get . "sz.os.chassisType"     ) ( env "CZ_CHASSIS"             ) -}}
@@ -112,6 +117,9 @@ scriptTempDir={{ $scriptTempDir | quote }}
 [data.style]
 {{- if ($promptStyle) }}
    prompt={{- $promptStyle | quote }}
+{{- end }}
+{{- if ($zellijStyle) }}
+   zellij={{- $zellijStyle | quote }}
 {{- end }}
 
 [diff]
