@@ -1,0 +1,18 @@
+#! /usr/bin/env bash
+
+BASE_0=${BASE_0:-$0}
+BASE_SHELL="${BASE_SHELL:-$(basename "$SHELL")}"
+
+BASE="config.kdl" ROOT=~/.config/zellij
+SRC="${BASE}.${1:{{- dig "style" "zellij" "?Mode missing" . -}}}"
+[[ -s "${ROOT}/${SRC}" ]] \
+|| ( printf 'Mode "%s" must exists!\n' "${1}" >&2; return 1 )
+[[ -L "${ROOT}/${BASE}" || ! -e "${ROOT}/${BASE}" ]] \
+|| ( printf 'config.kdl is an actual file, will not replace\n' >&2; return 2 )
+if [[ "$RESET" == 'reset' ]]; then
+    [[ -e "${ROOT}/${BASE}" ]] && rm "${ROOT}/${BASE}"
+    cp "${ROOT}/${SRC}" "${ROOT}/${BASE}"
+else
+    (cd "${ROOT}"; ln -sf "${SRC}" "${BASE}")
+fi
+

@@ -1,0 +1,29 @@
+#! /usr/bin/env bash
+
+KEYBIND="${1:-Ctrl g}"
+NEWKEYBIND="${2:-${KEYBIND}}"
+
+set -e
+
+SRC_BASE=~/.config/zellij/config.kdl
+SRC=${SRC_BASE}.default
+[ -r "$SRC" ] || mv ~/.config/zellij/config.kdl ~/.config/zellij/config.kdl.default
+[ ! -e "$SRC_BASE" ] || rm "$SRC_BASE"
+
+[ -r "$SRC" ] && < "$SRC" sed -Ee '
+    /^[[:space:]]+tmux \{/,/^[[:space:]]+\{/ {
+        d
+    }' \
+| sed -Ee '
+    s/bind "'"${KEYBIND}"'"/bind "'"${NEWKEYBIND}"'"/;
+    s/(shared_except .* )"tmux" /\1/;
+    s/(shared_except "locked")/\1 "tmux"/;
+    s/shared {/shared_except "tmux" {/;
+    s/("prompt") "tmux" {/\1 {/;
+    s/([[:space:]]+)(pane {)/\1tmux {\n\1\1bind "'"${NEWKEYBIND}"'" { SwitchToMode "locked"; }\n\1}\n\1normal {\n\1\1bind "'"${NEWKEYBIND}"'" { SwitchToMode "tmux"; }\n\1}\n\1\2/;
+' > ~/.config/zellij/config.kdl.locked
+
+LNOPT="-s"
+[ "$(uname)" = "Darwin" ] || LNOPT="${LNOPT}r"
+ln ${LNOPT} ~/.config/zellij/config.kdl.locked ~/.config/zellij/config.kdl
+

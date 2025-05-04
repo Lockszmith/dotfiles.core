@@ -1,0 +1,30 @@
+layout {
+    cwd "/Users/gal.szkolnik"
+    tab name="RTP:IceLake" hide_floating_panes=true {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        pane command="zsh" cwd="/Users/gal.szkolnik" size="50%" {
+            args "-ic" "ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa 10.117.10.121"
+            start_suspended true
+        }
+        pane size="50%" split_direction="vertical" {
+            pane command="zsh" cwd="/Users/gal.szkolnik" size="33%" {
+                args "-ic" "ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa 10.117.10.124"
+                start_suspended true
+            }
+            pane command="zsh" cwd="/Users/gal.szkolnik" size="33%" {
+                args "-ic" "ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa 10.117.10.122"
+                start_suspended true
+            }
+            pane command="zsh" cwd="/Users/gal.szkolnik" size="33%" {
+                args "-ic" "ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa 10.117.10.123"
+                start_suspended true
+            }
+        }
+        pane size=1 borderless=true {
+            plugin location="zellij:status-bar"
+        }
+    }
+}
+

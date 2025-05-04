@@ -32,11 +32,21 @@
     ) ( output "sh" "-c" "git config user.name || true"
     ) ( list .chezmoi.username " (@" $sysname ")" | join ""
     )) -}}
-{{- $promptStyleChoices := list "cool" "hot" "lux" -}}
+
+{{- $zellijStyle := "-normal" -}}
+{{- if not (dig "style" "zellij" "" .) -}}
+{{- $zellijStyle = dig "style" "zellij" $zellijStyle . -}}
 {{- $zellijStyleChoices := list "-locked-full" "-locked" "-normal" -}}
+{{- $zellijStyleSelected := promptMultichoice "Choose zellij style* (only first selection is chosen)" $zellijStyleChoices (list $zellijStyle) -}}
+{{- $zellijStyle = first $zellijStyleSelected | default $zellijStyle -}}
+{{/*{{- $zellijStyle := promptChoiceOnce . "style.zellij" "Zellij default style" $zellijStyleChoices "-locked-full" -}}*/}}
+{{- end -}}
+
 {{- $promptStyle := dig "style" "prompt" "cool" . -}}
-{{- $promptStyle = promptChoice "Prompt style" $promptStyleChoices $promptStyle -}}
-{{- $zellijStyle := promptChoiceOnce . "style.zellij" "Zellij default style" $zellijStyleChoices "-locked-full" -}}
+{{- $promptStyleChoices := list "cool" "hot" "lux" -}}
+{{- $promptStyleSelected := promptMultichoice "Choose prompt style* (only first selection is chose - default is 'cool')" $promptStyleChoices -}}
+{{- $promptStyle = first $promptStyleSelected | default $promptStyle -}}
+{{/*{{- $promptStyle = promptChoice "Prompt style" $promptStyleChoices $promptStyle -}}*/}}
 
 {{- $scriptTempDir   := or ( get . "sz.os.scriptTempDir"   ) ( env "CZ_SCRIPT_TEMPDIR"      ) -}}
 {{- $chassisType     := or ( get . "sz.os.chassisType"     ) ( env "CZ_CHASSIS"             ) -}}
