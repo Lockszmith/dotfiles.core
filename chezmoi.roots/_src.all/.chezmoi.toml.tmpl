@@ -44,7 +44,7 @@
 
 {{- $promptStyle := dig "style" "prompt" "cool" . -}}
 {{- $promptStyleChoices := list "cool" "hot" "lux" -}}
-{{- $promptStyleSelected := promptMultichoice "Choose prompt style* (only first selection is chose - default is 'cool')" $promptStyleChoices -}}
+{{- $promptStyleSelected := promptMultichoice (list "Choose prompt style* (only first selection is chose - default is '" $promptStyle "')" | join "") $promptStyleChoices -}}
 {{- $promptStyle = first $promptStyleSelected | default $promptStyle -}}
 {{/*{{- $promptStyle = promptChoice "Prompt style" $promptStyleChoices $promptStyle -}}*/}}
 
