@@ -358,7 +358,7 @@
 
 {{/* cargo-binstall besed sources */}}
 {{- if and (lookPath "jq") (lookPath "cargo-binstall") -}}
-{{- $path_prefix = or (get (dict "linux" "./") .chezmoi.os) "" -}}
+{{- $path_prefix = (env "CZ_EZA_PREFIX") -}}
 {{- with $app_name := "eza" -}}
 {{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
 {{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
