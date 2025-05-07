@@ -11,6 +11,7 @@ is_sourced() {
 }
 
 BASE_0=${BASE_0:-$0}
+export SHELL="${SHELL:-${shell:+$(command -v ${shell})}}"
 BASE_SHELL=$(basename "$SHELL")
 
 is_cmd() {
