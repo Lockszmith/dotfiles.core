@@ -157,6 +157,7 @@ scriptTempDir={{ $scriptTempDir | quote }}
    leader-key={{- $zellijLeaderKey | quote }}
 {{- end }}
 
+{{- if lookPath "delta" }}
 [diff]
 #   command = "nvim"
 #   args = ["-d",  "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
@@ -164,5 +165,6 @@ scriptTempDir={{ $scriptTempDir | quote }}
    command = "delta"
    args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
    pager = "moar"
+{{- end -}}
 
 # vim: set ft=toml expandtab tabstop=2 shiftwidth=2:
