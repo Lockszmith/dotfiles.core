@@ -143,6 +143,21 @@
 ) -}}
 {{- end -}} {{/* linux only */}}
 
+{{/* jless doesn't have -musl release, but has -gnu release in linux */}}
+{{- $myArch = $myArch | replace "-musl" "-gnu" -}}
+
+{{- with $app_name := "jless" -}}
+{{- with $repo := (printf "%s/%s" "PaulJuliusMartinez" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.zip" $repo $version $app_name $version $myArch)
+        "path" (printf "%s" $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
+
 {{/*
 # valid arch strings:
 # darwin_amd64
