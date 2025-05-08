@@ -39,7 +39,7 @@
 # oauthScopes = read_repository
 [core]
     editor = vim
-    {{- if lookPath "delta" -}}
+{{ if lookPath "delta" -}}
     # delta will used as the default pager for git
     # and ov as the default pager for delta
     # the pager will be overloaded via the [pager] section for a few commands
@@ -54,7 +54,7 @@
     # It allows to maintain a simpler config file and avoid escaping quotes
     diff = delta --features ov-diff
     log  = delta --features ov-log
-    {{- end -}}
+{{- end }}
 
 [interactive]
     diffFilter = delta --color-only
