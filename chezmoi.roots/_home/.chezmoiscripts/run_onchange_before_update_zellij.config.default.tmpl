@@ -11,6 +11,7 @@ if is_cmd zellij; then
         s/^keybinds \{/keybinds clear-defaults=true {/;
         s/"Ctrl g"/{''{ list (dig "style" "zellij" "leader-modifer" "Alt" .) (dig "style" "zellij" "leader-key" "a" .) | join " " | quote }''}/g;
         s/"Ctrl ([a-z])"/"{''{ dig "style" "zellij" "leader-modifer" "Alt" . }''} \1"/g;
+        s!// pane_frames true$!pane_frames {''{ get (dict "n" "false") ( dig "style" "zellij" "frames" "y" .) | default "true" }''}!;
         s!^// theme "default"$!theme {''{ dig "style" "zellij" "theme" "default" . | quote }''}!
     ' \
     > "$CHEZMOI_SOURCE_DIR/private_dot_config/zellij/config.kdl.tmpl"
