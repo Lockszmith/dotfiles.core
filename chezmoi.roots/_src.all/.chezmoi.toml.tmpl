@@ -33,18 +33,32 @@
     ) ( list .chezmoi.username " (@" $sysname ")" | join ""
     )) -}}
 
-{{- $zellijStyle := "-normal" -}}
-{{- if not (dig "style" "zellij" "" .) -}}
-{{- $zellijStyle = dig "style" "zellij" $zellijStyle . -}}
-{{- $zellijStyleChoices := list "-locked-full" "-locked" "-normal" -}}
-{{- $zellijStyleSelected := promptMultichoice "Choose zellij style* (only first selection is chosen)" $zellijStyleChoices (list $zellijStyle) -}}
-{{- $zellijStyle = first $zellijStyleSelected | default $zellijStyle -}}
-{{/*{{- $zellijStyle := promptChoiceOnce . "style.zellij" "Zellij default style" $zellijStyleChoices "-locked-full" -}}*/}}
-{{- end -}}
+{{- $zellijLeaderModifier := list (dig "style" "zellij" "leader-modifier" "Alt" .) "dummy" | join " " | splitList " " -}}
+{{- $zellijLeaderModifier  = slice $zellijLeaderModifier 0 (sub (len $zellijLeaderModifier) 1) -}}
+{{- $zellijLeaderModifierChoices := list "Alt" "Ctrl" -}}
+{{- $zellijLeaderModifierSelected := promptMultichoice "Choose zellij Leader Modifyer" $zellijLeaderModifierChoices $zellijLeaderModifier -}}
+{{- $zellijLeaderModifier = $zellijLeaderModifierSelected | join " " -}}
+
+{{- $zellijLeaderKey := promptString "Choose zellij Leader Key" (dig "style" "zellij" "leader-key" "a" .) -}}
+
+{{- $zellijFrames := dig "style" "zellij" "frames" "y" . -}}
+{{- $zellijFrames  = promptChoice "Should zellij show pane frames? (y/n)" (list "y" "n" ) $zellijFrames -}}
+
+{{- $zellijTheme := dig "style" "zellij" "theme" "default" . -}}
+{{- $zellijThemeChoices := list "default"
+        "ansi" "ao" "atelier-sulphurpool" "ayu_mirage" "ayu_dark"
+        "catppuccin-frappe" "catppuccin-macchiato" "cyber-noir" "blade-runner"
+        "retro-wave" "dracula" "everforest-dark" "gruvbox-dark" "iceberg-dark"
+        "kanagawa" "lucario" "menace" "molokai-dark" "night-owl" "nightfox"
+        "nord" "one-half-dark" "onedark" "solarized-dark" "tokyo-night-dark"
+        "tokyo-night-storm" "tokyo-night" "vesper"
+-}}
+{{- $zellijThemeSelected := promptMultichoice (list "Choose zellij theme *(only first selection is chose - default is '" $zellijTheme "')" | join "") $zellijThemeChoices -}}
+{{- $zellijTheme = first $zellijThemeSelected | default $zellijTheme -}}
 
 {{- $promptStyle := dig "style" "prompt" "cool" . -}}
 {{- $promptStyleChoices := list "cool" "hot" "lux" -}}
-{{- $promptStyleSelected := promptMultichoice (list "Choose prompt style* (only first selection is chose - default is '" $promptStyle "')" | join "") $promptStyleChoices -}}
+{{- $promptStyleSelected := promptMultichoice (list "Choose prompt style *(only first selection is chose - default is '" $promptStyle "')" | join "") $promptStyleChoices -}}
 {{- $promptStyle = first $promptStyleSelected | default $promptStyle -}}
 {{/*{{- $promptStyle = promptChoice "Prompt style" $promptStyleChoices $promptStyle -}}*/}}
 
@@ -128,8 +142,19 @@ scriptTempDir={{ $scriptTempDir | quote }}
 {{- if ($promptStyle) }}
    prompt={{- $promptStyle | quote }}
 {{- end }}
-{{- if ($zellijStyle) }}
-   zellij={{- $zellijStyle | quote }}
+
+[data.style.zellij]
+{{- if ($zellijFrames) }}
+   frames={{- $zellijFrames | quote }}
+{{- end }}
+{{- if ($zellijTheme) }}
+   theme={{- $zellijTheme | quote }}
+{{- end }}
+{{- if ($zellijLeaderModifier) }}
+   leader-modifier={{- $zellijLeaderModifier | quote }}
+{{- end }}
+{{- if ($zellijLeaderKey) }}
+   leader-key={{- $zellijLeaderKey | quote }}
 {{- end }}
 
 [diff]
