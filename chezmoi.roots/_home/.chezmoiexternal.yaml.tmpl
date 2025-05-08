@@ -134,7 +134,19 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- with $app_name := "jnv" -}}
+{{- with $repo := (printf "%s/%s" "ynqa" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.xz" $repo $version $app_name $myArch)
+        "path" (printf "%s-%s/%s" $app_name $myArch $app_name )
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{- if (eq .chezmoi.os "linux") -}}
+{{/* This is the linux installation of broot, the Apple section is below, it is based on cargo-binstall */}}
 {{-   $_ := set $externals ".local/bin/broot" (dict
         "type" "file"
         "url" (printf "https://dystroy.org/broot/download/%s/broot" $myArch)
@@ -142,21 +154,6 @@
         "refreshPeriod" $defaultRefresh
 ) -}}
 {{- end -}} {{/* linux only */}}
-
-{{/* jless doesn't have -musl release, but has -gnu release in linux */}}
-{{- $myArch = $myArch | replace "-musl" "-gnu" -}}
-
-{{- with $app_name := "jless" -}}
-{{- with $repo := (printf "%s/%s" "PaulJuliusMartinez" $app_name) -}}
-{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
-{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
-        "type" "archive-file"
-        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.zip" $repo $version $app_name $version $myArch)
-        "path" (printf "%s" $app_name)
-        "executable" true
-        "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}
-
 
 {{/*
 # valid arch strings:
@@ -373,6 +370,7 @@
 
 {{/* cargo-binstall besed sources */}}
 {{- if and (lookPath "jq") (lookPath "cargo-binstall") -}}
+{{- if not (env "IGNORE_EZA") -}}
 {{- $path_prefix = (env "CZ_EZA_PREFIX") -}}
 {{- with $app_name := "eza" -}}
 {{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
@@ -398,7 +396,7 @@
         "path" (printf "./target/completions-%s/_%s" $version $app_name)
         "executable" true
         "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
+) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
 
 
 {{- with $app_name := "vivid" -}}
@@ -420,6 +418,7 @@
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{- if (eq .chezmoi.os "darwin") -}}
+{{/* This is the apple installation of broot, based on cargo-binstall, linux is above */}}
 {{- with $app_name := "broot" -}}
 {{- with $bin_url := (output "sh" "-c" (
       list
