@@ -8,7 +8,7 @@ is_cmd() { [[ -n "$(command -v "${1}")" ]] ; }
 if is_cmd zellij; then
     zellij setup --dump-config \
     | sed -Ee '
-        s/^keybinds {/keybinds clear-defaults=true{/;
+        s/^keybinds \{/keybinds clear-defaults=true {/;
         s/"Ctrl g"/{''{ list (dig "style" "zellij" "leader-modifer" "Alt" .) (dig "style" "zellij" "leader-key" "a" .) | join " " | quote }''}/g;
         s/"Ctrl ([a-z])"/"{''{ dig "style" "zellij" "leader-modifer" "Alt" . }''} \1"/g;
         s!^// theme "default"$!theme {''{ dig "style" "zellij" "theme" "default" . | quote }''}!
