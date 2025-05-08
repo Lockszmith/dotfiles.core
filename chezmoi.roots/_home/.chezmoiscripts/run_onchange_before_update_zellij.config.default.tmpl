@@ -1,5 +1,10 @@
 #! /usr/bin/env bash
 
+{{- if not (stat (list .chezmoi.destDir ".config" "zellij" "config.kdl" | join .chezmoi.pathSeparator )) }}
+# missing config, forcing regeneration: {{- randAlpha 64 }}
+# {{ stat ".config/zellij/config.kdl" }}
+# {{ output "pwd" }}
+{{- end }}
 set -e
 
 echo "Generating zellij/config.kdl.tmpl..."
