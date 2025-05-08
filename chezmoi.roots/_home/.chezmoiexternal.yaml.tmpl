@@ -314,7 +314,7 @@
 {{- if (eq .chezmoi.os "darwin" ) -}}
 {{-   $myArch = list .sz.os.arch_alt "macos" | join "-" -}}
 {{- else -}}
-{{-   $myArch = list .chezmoi.os .chezmoi.arch | join "-" -}}
+{{-   $myArch = list "linux-musl" .sz.os.arch_alt | join "-" -}}
 {{- end -}}
 
 {{- with $app_name := "lnav" -}}
