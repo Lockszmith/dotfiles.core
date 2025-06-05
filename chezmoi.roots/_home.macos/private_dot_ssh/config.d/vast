@@ -5,6 +5,11 @@
 Host crater-kfs2
     HostName crater-kfs2
 
+Host cs-dbg-tmp l3136
+    HostName l3136
+    User vastdata
+    IdentityFile ~/.ssh/vast.id_rsa
+
 Host my-loop sales-devvm-gal-szkolnik-spot
     User centos
     HostName 10.91.1.10
