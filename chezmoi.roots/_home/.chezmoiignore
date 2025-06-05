@@ -2,4 +2,7 @@
 /**/.git/**
 
 .config/vim/autoload
+.config/raycast/node_modules
+!.config/raycast/extensions/*/package.json
+.config/raycast/extensions/*/*/**
 
