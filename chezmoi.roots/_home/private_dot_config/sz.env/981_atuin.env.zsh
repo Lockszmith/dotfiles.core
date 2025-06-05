@@ -2,8 +2,12 @@
 
 if is_cmd atuin; then
 
-    # . <( atuin init "${BASE_SHELL}" )
-    zinit light atuinsh/atuin
+    if [ -n "$ZI_HOME" ]; then
+        # . <( atuin init "${BASE_SHELL}" )
+        zinit light atuinsh/atuin
+    else
+        znap source atuinsh/atuin
+    fi
 
     [[ -n "${DBG}" ]] && echo "atuin loaded."
 fi
