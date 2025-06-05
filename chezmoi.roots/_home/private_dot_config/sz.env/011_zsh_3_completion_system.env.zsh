@@ -24,7 +24,7 @@ else
     # bindkey -M menuselect  '^[[C'  .forward-char  '^[OC'  .forward-char
 
     # `znap install` adds new commands and completions.
-    znap install aureliojargas/clitest zsh-users/zsh-completions
+    znap install aureliojargas/clitest zsh-users/zsh-completions zdharma-continuum/fast-syntax-highlighting
 fi
 
 # vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
