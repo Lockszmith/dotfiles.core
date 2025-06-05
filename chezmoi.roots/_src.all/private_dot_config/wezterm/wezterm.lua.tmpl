@@ -284,10 +284,14 @@ config.keys = {
 --	{ key = 'Q',              mods = 'SHIFT|CTRL',     action = act.QuitApplication },
 --	{ key = 'R',              mods = 'CTRL',           action = act.ReloadConfiguration },
 --	{ key = 'R',              mods = 'SHIFT|CTRL',     action = act.ReloadConfiguration },
-	{ key = 'T',              mods = 'CTRL',           action = act.ShowLauncher },
-	{ key = 't',              mods = 'CTRL',           action = act.ShowLauncher },
-	{ key = 't',              mods = 'SUPER',          action = act.ShowLauncher },
-	{ key = 'T',              mods = 'SUPER',          action = act.ShowLauncher },
+--	{ key = 'T',              mods = 'CTRL',           action = act.ShowLauncher },
+--	{ key = 't',              mods = 'CTRL',           action = act.ShowLauncher },
+	{ key = 'T',              mods = 'SHIFT|CTRL',     action = act.ShowLauncher },
+	{ key = 't',              mods = 'SHIFT|CTRL',     action = act.ShowLauncher },
+--	{ key = 't',              mods = 'SUPER',          action = act.ShowLauncher },
+--	{ key = 'T',              mods = 'SUPER',          action = act.ShowLauncher },
+	{ key = 't',              mods = 'SHIFT|SUPER',    action = act.ShowLauncher },
+	{ key = 'T',              mods = 'SHIFT|SUPER',    action = act.ShowLauncher },
 	{ key = 'U',              mods = 'CTRL',           action = act.CharSelect{ copy_on_select = true, copy_to =  'ClipboardAndPrimarySelection' } },
 	{ key = 'U',              mods = 'SHIFT|CTRL',     action = act.CharSelect{ copy_on_select = true, copy_to =  'ClipboardAndPrimarySelection' } },
 	{ key = 'V',              mods = 'CTRL',           action = act.PasteFrom 'Clipboard' },
@@ -354,6 +358,10 @@ config.keys = {
 
 	{ key = 'PageUp',         mods = 'SUPER',          action = act.ActivateTabRelative(-1) },
 	{ key = 'PageDown',       mods = 'SUPER',          action = act.ActivateTabRelative(1) },
+
+    { key = 'd',              mods = 'SUPER',          action = wezterm.action.SendKey { key = 'd', mods = 'CTRL' } },
+    { key = 'c',              mods = 'SUPER',          action = wezterm.action.SendKey { key = 'c', mods = 'CTRL' } },
+    { key = 'r',              mods = 'SUPER',          action = wezterm.action.SendKey { key = 'r', mods = 'CTRL' } },
 
 }
   
