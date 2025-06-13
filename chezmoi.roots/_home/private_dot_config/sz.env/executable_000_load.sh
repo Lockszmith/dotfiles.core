@@ -13,6 +13,8 @@ is_sourced() {
 BASE_0=${BASE_0:-$0}
 export SHELL="${SHELL:-${shell:+$(command -v ${shell})}}"
 BASE_SHELL=$(basename "$SHELL")
+_NL='
+'
 
 is_cmd() {
     type -p -- "${@}" 2> /dev/null 1> /dev/null
@@ -39,48 +41,38 @@ if is_sourced; then
         #shellcheck source=/dev/null
         . "${1}"
     }
-    
+
     load_all() {
-        local ALL_ENV_FILES
-	local FILES DIRS
+        ${DBG:+:} local LOAD_ENV_FILES ALL_ENV_FILES
+        local FILES DIRS
         if [ -z "$SZ_ENV_LOADED" ]; then
             SZ_ENV_LOADED=1
             LOAD_EXIT=0
 
             # The following constructs a list of load_next ... commands
+            # Find all .env files, exclude lib directory
+            ALL_ENV_FILES="$(find $USER_HOME/.config/sz.env -type f -name '*.env' -or -name "*.env.$BASE_SHELL" -not -path '*/lib/*' | sort)"
 
-            FIND_CMD="$( printf "%s " \
-                "find $USER_HOME/.config/sz.env -xdev -type d -not -name '*.off' -not -path '$USER_HOME/.config/sz.env/lib' -not -path '$USER_HOME/.config/sz.env/lib/*' " \
-                    "-exec sh -c '" \
-                        'find "$1" -xdev -maxdepth 1 -type f' \
-                            '-name "ID_*.env" -or -name "ID_*.env.'"${BASE_SHELL}"\" \
-                        "| sort' shell '{}' ';'" \
-                    "-exec sh -c '" \
-                        'find "$1" -xdev -maxdepth 1 -type f' \
-                            '-name "???_PATH_*.env" -or -name "???_PATH_*.env.'"${BASE_SHELL}"\" \
-                        "| sort' shell '{}' ';'" \
-                    "-exec sh -c '" \
-                        'find "$1" -xdev -maxdepth 1 -type f' \
-                            '-name "*.env" -or -name "*.env.'"${BASE_SHELL}"\" \
-                        '| grep -Ev "/[[:digit:]]+_(PATH|ID)_[^/]+$"' \
-                        "| sort' shell '{}' ';'" \
-                    "-exec sh -c '" \
-                        'find "$1" -xdev -maxdepth 1 -type f -name "999_PATH_zz_cleanup.env"' \
-                    "' shell '{}' ';'"
-            )"
-            ALL_ENV_FILES="$(
-                eval "$FIND_CMD" | sed -e 's/^/load_next "/; s/$/";/'
-            )"
-            ${DBG/%1/:} unset FIND_CMD
+            # Collect _PATH_ files first
+            LOAD_ENV_FILES="$(echo "$ALL_ENV_FILES" | grep -E '/[[:digit:]]{3}_(ID|PATH)_')"
+
+            # Collect the rest of the .env files
+            LOAD_ENV_FILES="${LOAD_ENV_FILES:+${LOAD_ENV_FILES}${_NL}}$(echo "$ALL_ENV_FILES" | grep -Ev '/[[:digit:]]{3}_(ID|PATH)_')"
+
+            # Add the cleanup file if it exists
+            LOAD_ENV_FILES="${LOAD_ENV_FILES:+${LOAD_ENV_FILES}${_NL}}$(echo "$LOAD_ENV_FILES" | grep '999_PATH_zz_cleanup.env$')"
+
+            # prefix each file with load_next
+            LOAD_ENV_FILES="$( <<<"$LOAD_ENV_FILES" sed -e 's/^/load_next "/; s/$/";/' )"
+
             if [ -n "$DBG_NO_SZ_LOAD" ]; then
-               ALL_ENV_FILES=$(<<<"$ALL_ENV_FILES" sed -Ee '
+               LOAD_ENV_FILES=$(<<<"$LOAD_ENV_FILES" sed -Ee '
                    /PATH_/!s/^(load_next )/# \1/
                ')
-	       printf 'Loading limited environment...\n'
+            printf 'Loading limited environment...\n'
             fi
             # Run the constructed (see above) list
-            eval "$ALL_ENV_FILES"
-            ${DBG/%1/:} unset ALL_ENV_FILES
+            eval "$LOAD_ENV_FILES"
         fi
     }
     load_all
