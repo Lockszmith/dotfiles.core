@@ -180,22 +180,25 @@ _do_search() {
             else ""
             end)
             + "cluster_psnt=\(.metadata.labels.cluster_psnt),"
-            + "hostname=\(.spec.hostname)"
+            + "hostname=\(.spec.hostname),"
+            + "teleport.internal/resource-id=\(.metadata.labels["teleport.internal/resource-id"])"
         '
     )"
 
     if [[ -z "$BATCH" && "${OPTIONS}" == *$'\n'* ]]; then
-        SELECTED="$( tv --no-preview <<<"$OPTIONS" )"
+        SELECTED_RAW="$( tv --no-preview <<<"$OPTIONS" )"
     else
-        SELECTED="$OPTIONS"
+        SELECTED_RAW="$OPTIONS"
     fi
 
-    if [[ -z "$SELECTED" ]]; then
+    if [[ -z "$SELECTED_RAW" ]]; then
         ${SILENT:+:} printf 'Aborted (empty response)\n' >&2
         exit 2
+    else
+        SELECTED="$(<<<"$SELECTED_RAW" awk -F',' '{ print $4 }' )"
     fi
 
-    ${SILENT:+:} printf '\n%s selected.\n' "$SELECTED" >&2
+    ${SILENT:+:} printf '\n%s selected.\n' "$SELECTED_RAW" >&2
     echo "$SELECTED"
 }
 
