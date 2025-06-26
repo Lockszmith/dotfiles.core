@@ -75,7 +75,7 @@ keybinds clear-defaults=true {
         bind "Tab" { ToggleTab; }
     }
     scroll {
-        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} s" { SwitchToMode "Normal"; }
+        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} Shift s" { SwitchToMode "Normal"; }
         bind "e" { EditScrollback; SwitchToMode "Normal"; }
         bind "s" { SwitchToMode "EnterSearch"; SearchInput 0; }
         bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} c" { ScrollToBottom; SwitchToMode "Normal"; }
@@ -89,7 +89,7 @@ keybinds clear-defaults=true {
         // bind "Alt c" { Copy; }
     }
     search {
-        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} s" { SwitchToMode "Normal"; }
+        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} Shift s" { SwitchToMode "Normal"; }
         bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} c" { ScrollToBottom; SwitchToMode "Normal"; }
         bind "j" "Down" { ScrollDown; }
         bind "k" "Up" { ScrollUp; }
@@ -117,7 +117,7 @@ keybinds clear-defaults=true {
     }
     session {
         bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} o" { SwitchToMode "Normal"; }
-        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} s" { SwitchToMode "Scroll"; }
+        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} Shift s" { SwitchToMode "Scroll"; }
         bind "d" { Detach; }
         bind "w" {
             LaunchOrFocusPlugin "session-manager" {
@@ -174,7 +174,7 @@ keybinds clear-defaults=true {
     shared_except "locked" {
         bind {{ list (dig "style" "zellij" "leader-modifer" "Alt" .) (dig "style" "zellij" "leader-key" "a" .) | join " " | quote }} { SwitchToMode "Locked"; }
         bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} q" { Quit; }
-        bind "Alt Shift f" { ToggleFloatingPanes; }
+        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} Shift f" { ToggleFloatingPanes; }
         bind "Alt n" { NewPane; }
         bind "Alt i" { MoveTab "Left"; }
         bind "Alt o" { MoveTab "Right"; }
@@ -197,7 +197,7 @@ keybinds clear-defaults=true {
         bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} n" { SwitchToMode "Resize"; }
     }
     shared_except "scroll" "locked" {
-        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} s" { SwitchToMode "Scroll"; }
+        bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} Shift s" { SwitchToMode "Scroll"; }
     }
     shared_except "session" "locked" {
         bind "{{ dig "style" "zellij" "leader-modifer" "Alt" . }} o" { SwitchToMode "Session"; }
