@@ -8,6 +8,11 @@ DEST_DIR="${DEST_DIR:-${1}}"
 is_cmd() {
     type -p -- "${@}" 2> /dev/null 1> /dev/null
 }
+
+# cleanup dead links, otherwise chezmoi can't function at all
+SCRIPT_ROOT=$( cd -- "$( dirname -- "${0}" )" &> /dev/null && pwd )
+find "${SCRIPT_ROOT}" -type l ! -exec test -e {} \; -print -delete
+
 if is_cmd chezmoi && [[ -z "$RESET" && -z "$SRC_DIR" && -z "$DEST_DIR" ]]; then
     DEST_DIR="$(chezmoi data | jq -r '.chezmoi.sourceDir | split("/") | last')"
 fi
