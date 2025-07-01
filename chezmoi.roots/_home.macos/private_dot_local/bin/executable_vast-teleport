@@ -62,14 +62,27 @@ usage-search() {
         "  [SILENT=1] [BATCH=1] [QUERY='query syntax'] ${SCRIPT_NAME} search [<options>] <search string>" \
         '' \
         'Usage:' \
+        '  BATCH=1  env/prefix - skip fuzzy search (tv/fzf) UX' \
+        '  SILENT=1 env/prefix - supress teleport prompts' \
+        '  QUERY    env/prefix - tsh query syntax' \
+        '  <search string>     - tsh --search syntax' \
+        '' \
+        'Description:' \
+        '  Perform a search (after making sure user is logged in) on the VAST Data Teleport instance' \
+        '  If a single value is returned, output it. If more results are presented, feed them into' \
+        '  a fuzzy search UI (tv/fzf).' \
+        '' \
+        '  Can also be used to just generate lists using the BATCH=1 environment variable' \
         '' \
         'Examples:' \
-        "  \$ BATCH=1 ${SCRIPT_NAME} search tesla" \
+        "  \$ BATCH=1 ${SCRIPT_NAME} search tesla # show all matches for tesla, without fuzzy search UI" \
         '  cluster_psnt=VAST-TESLA-AUS-1,hostname=aus08p1vstfs01-cn1-DO-NOT-LOGIN' \
         '  cluster_psnt=VA22374479,hostname=c-0-1' \
         '  cluster_psnt=VA22465472,hostname=c-0-1' \
         '' \
-        "  ${SCRIPT_NAME} search tsh-get tesla " \
+        "  ${SCRIPT_NAME} search tesla,472 # will connect to cluster_psnt=VA22465472,hostname=c-0-1" \
+        '' \
+        "  ${SCRIPT_NAME} search . # Will present complete list in fuzzy search UI" \
         ''
     exit 2
 }
@@ -83,6 +96,13 @@ usage-launch() {
         '' \
         'Options:' \
         '  --no-mux  no multiplexing, even if it exists' \
+        '' \
+        'Description:' \
+        "  'launch' uses 'search' to locate a host, if a single match is found, it" \
+        "  launches immedietly. If more than one option exists, a fuzzy search UI" \
+        "  will be presented. " \
+        "" \
+        "  run '${SCRIPT_NAME} search [--help]' for more detail and example searches." \
         ''
     exit 2
 }
@@ -247,6 +267,7 @@ _do_ssh_with_tunnel() {
 _go_launch() {
     local SRCH=() NO_MUX=0 DEST='' ECHO=':' LOGIN='_do_login'
     local ZELLIJ_DEST=/tmp/vast-teleport/zellij/teleport
+    [[ -n "$1" ]] || usage-launch
     while [[ -n "$1" ]]; do
         case $1 in
             '--help')           usage-launch ;;
