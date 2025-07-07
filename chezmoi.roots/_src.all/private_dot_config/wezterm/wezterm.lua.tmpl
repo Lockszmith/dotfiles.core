@@ -1,6 +1,6 @@
 -- Pull in the wezterm API
 local wezterm = require("wezterm")
-local act = wezterm.action
+local act     = wezterm.action
 
 -- This table will hold the configuration.
 local config = {}
@@ -11,7 +11,111 @@ if wezterm.config_builder then
 	config = wezterm.config_builder()
 end
 
-{{- if eq .chezmoi.os "windows" }}
+-- simple file-exists helper
+local function exists(path)
+    local f = io.open(path, "r")
+    if f then f:close(); return true end
+    return false
+end
+
+-- paths
+local windows_dim_state_path = wezterm.config_dir .. "\\windows_dim.lua" 
+
+local function save_window_state(win, pane)
+    wezterm.log_info("🔍 save_window_state called; saving state to " .. windows_dim_state_path)
+
+    
+	local tab_size = pane:tab():get_size()
+	local w, h = tab_size["cols"], tab_size["rows"] + 2 -- Without the +2, the window doesn't maximize
+
+    --local dim = win:get_dimensions()                -- { pixel_width, pixel_height, ... }
+    --local w, h = dim.pixel_width, dim.pixel_height
+    local x, y = -1, -1
+
+    -- if not dim or not (dim.x and dim.y and dim.width and dim.height) then
+    --     wezterm.log_error("get_window_state() returned invalid data")
+    --     return
+    -- end
+
+    local windows_dim_state_file = assert(io.open(windows_dim_state_path, 'w'))
+    windows_dim_state_file:write(string.format(
+        "return { x = %d, y = %d, width = %d, height = %d }\n",
+        x, y, w, h
+    ))
+    windows_dim_state_file:close()
+end
+
+wezterm.on("augment-command-palette", function(win, pane)
+    return {
+        {
+            brief = "Save Window State",
+            -- optional: pick any nerd-font icon, or omit this line
+            icon   = "fae_floppy",
+            action = wezterm.action_callback(function(win, pane)
+                save_window_state(win, pane)
+            end),        
+            },
+    }
+end)
+
+local function load_last_session(win)
+    local last = { x = -1, y = -1, width = -1, height = -1 }
+    if exists(windows_dim_state_path) then
+        local ok, last = pcall(dofile, windows_dim_state_path)
+        if not ok or not last then
+            -- last wasn't properly loaded, let's set dynamic defaults
+            local active_screen = wezterm.gui.screens()["active"]
+
+            -- Big screen: open in the center
+            last.x = math.floor(active_screen.width * 0.2)
+            last.y = math.floor(active_screen.height * 0.2)
+            if active_screen.width < 2560 then
+                -- Small screen: open full screen
+                window:gui_window():maximize()
+                last = nil
+            else
+                last.width  = math.floor(active_screen.width * 0.4)
+                last.height = math.floor(active_screen.height * 0.6)
+            end
+        else
+            wezterm.log_info("🔍 loaded " .. windows_dim_state_path)
+        end
+    end
+
+    if last then
+        local spawn_args = cmd or {}
+        local window = win
+        if not win then
+            if not (last.x == -1 and last.y == -1) then
+                spawn_args.position = { x = last.x, y = last.y }
+            end
+    
+            -- create the first window with that position
+            _, _, window = wezterm.mux.spawn_window(spawn_args)
+        end
+        local gui = window:mux_window():gui_window()
+        local cell = { width = 1, height = 1 }
+  
+        -- now set the size (cols/rows) if you like:
+        gui:set_position( last.x, last.y )
+        --gui:set_window_size( last.width, last.height )
+        gui:set_inner_size(
+            math.floor(last.width  / cell.width),
+            math.floor(last.height / cell.height)
+        )
+    end
+
+end
+
+wezterm.on("window-config-reloaded", function(win)
+    load_last_session(win)
+end)
+
+wezterm.on("gui-startup", function(cmd)
+    local last = load_last_session(nil)
+end)
+
+{{ if eq .chezmoi.os "windows" -}}
 config.default_prog = { 'pwsh' }
 {{- end }}
 
@@ -272,8 +376,8 @@ config.keys = {
 --	{ key = 'H',              mods = 'SHIFT|CTRL',     action = act.HideApplication },
 --	{ key = 'K',              mods = 'CTRL',           action = act.ClearScrollback 'ScrollbackOnly' },
 --	{ key = 'K',              mods = 'SHIFT|CTRL',     action = act.ClearScrollback 'ScrollbackOnly' },
---	{ key = 'L',              mods = 'CTRL',           action = act.ShowDebugOverlay },
---	{ key = 'L',              mods = 'SHIFT|CTRL',     action = act.ShowDebugOverlay },
+	{ key = 'L',              mods = 'CTRL',           action = act.ShowDebugOverlay },
+	{ key = 'L',              mods = 'SHIFT|CTRL',     action = act.ShowDebugOverlay },
 --	{ key = 'M',              mods = 'CTRL',           action = act.Hide },
 --	{ key = 'M',              mods = 'SHIFT|CTRL',     action = act.Hide },
 --	{ key = 'N',              mods = 'CTRL',           action = act.SpawnWindow },
