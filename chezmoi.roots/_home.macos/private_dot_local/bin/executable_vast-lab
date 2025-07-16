@@ -12,6 +12,7 @@ usage() {
         '' \
         'Commands:' \
         '  prerpmac     Configure MacOS network interfaces for lab physcal NIC connection' \
+        '  ssh          Connect over ssh (to CS-DBG by default)' \
         '  cs-dbg       Connect to CS-DBG' \
         '  get          various VAST related queries'
         '' \
@@ -215,8 +216,32 @@ do_get() {
     ${DO_CMD} "$@"
 }
 
+do_ssh() {
+    if [[ $# -eq 0 ]]; then
+        do_ssh cs-dbg
+        return $?
+    fi
+    [ -r "$HOME/.config/zellij/layouts/ssh_${1}.kdl" ] \
+    && rm  "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+
+    SSH_DEFAULT_ARGS='-o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa'
+    TAB_NAME="$( echo "${1}" | tr '[:lower:]' '[:upper:]' )"
+    SSH_ARGS="${SSH_ARGS:-${SSH_DEFAULT_ARGS}} "
+    SSH_CMD="${*}"
+    cat "$HOME/.config/zellij/layouts/ssh_tmpl.kdl.tmpl" | \
+    TAB_NAME="$TAB_NAME" SSH_ARGS="$SSH_ARGS" SSH_CMD="$SSH_CMD" envsubst \
+    > "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+
+    if [ -r "$HOME/.config/zellij/layouts/ssh_${1}.kdl" ]; then
+        zellij action new-tab --layout=ssh_${1}
+        ${NO_RM} rm  "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+    else
+        echo "Some bad 💩 happened, couldn't find (or create) ssh_$1 layout."
+    fi
+}
+
 do_cs-dbg() {
-    zellij action new-tab --layout=cs-dbg
+    do_ssh cs-dbg
 }
 
 _main_() {
