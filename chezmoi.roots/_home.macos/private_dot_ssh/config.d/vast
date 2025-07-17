@@ -10,8 +10,8 @@ Host cs-dbg-tmp l3136
     User vastdata
     IdentityFile ~/.ssh/vast.id_rsa
 
-Host my-loop sales-devvm-gal-szkolnik-spot
-    User centos
-    HostName 10.91.1.10
+Host bonzo2 v60 10.27.200.60
+    User vastdata
+    IdentityFile ~/.ssh/vast.id_rsa
 
 # vim: set ft=sshconfig sw=4 sts=4 et:

@@ -4,7 +4,7 @@ if [ -n "$ZI_HOME" ]; then
     zinit light 'marlonrichert/zsh-autocomplete'
     zinit light 'zsh-users/zsh-autosuggestions'
 else
-    znap source 'marlonrichert/zsh-autocomplete'
+    #znap source 'marlonrichert/zsh-autocomplete'
     znap source 'zsh-users/zsh-autosuggestions'
 
     # Make Tab and ShiftTab cycle completions on the command line
@@ -12,12 +12,12 @@ else
     # bindkey "$terminfo[kcbt]" reverse-menu-complete
 
     # Make Tab and ShiftTab go to the menu
-    bindkey              '^I' menu-select
-    bindkey "$terminfo[kcbt]" menu-select
+                                bindkey              '^I' menu-select
+    [ -z "$terminfo[kcbt]" ] || bindkey "$terminfo[kcbt]" menu-select
 
     # Make Tab and ShiftTab change the selection in the menu
-    bindkey -M menuselect              '^I'         menu-complete
-    bindkey -M menuselect "$terminfo[kcbt]" reverse-menu-complete
+                                 bindkey -M menuselect              '^I'         menu-complete
+     [ -z "$terminfo[kcbt]" ] || bindkey -M menuselect "$terminfo[kcbt]" reverse-menu-complete
 
     # Make ← and → always move the cursor on the command line
     # bindkey -M menuselect  '^[[D' .backward-char  '^[OD' .backward-char

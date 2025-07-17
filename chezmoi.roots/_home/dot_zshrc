@@ -1,3 +1,7 @@
+#!/usr/bin/env -S zsh -c 'echo "Not a user script. source(aka .) only"'
+
+# ~/.zshrc: executed by zsh(1) for non-login shells.
+
 ## Generated for envman. Do not edit.
 #[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
 #

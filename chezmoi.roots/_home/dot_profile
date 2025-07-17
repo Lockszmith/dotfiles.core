@@ -8,6 +8,7 @@
 # for ssh logins, install and configure the libpam-umask package.
 #umask 022
 
+HOME="${HOME:-.}"
 # if running bash
 if [ -n "$BASH_VERSION" ]; then
     # include .bashrc if it exists
@@ -28,4 +29,4 @@ fi
 
 # Generated for envman. Do not edit.
 # [ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
-[ -s "$HOME/.config/sz.env/_.load.sh" ] && . <( "$HOME/.config/sz.env/_.load.sh" - )
+
