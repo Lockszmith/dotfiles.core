@@ -1,1 +1,0 @@
-../../../_home/private_dot_config/sz.env/remove_980_atuin.env.bash

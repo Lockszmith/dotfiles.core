@@ -1,10 +1,13 @@
 #!/usr/bin/env -S zsh -c 'echo "Not a user script. source(aka .) only"'
 
 if [ -n "$ZI_HOME" ]; then
-    zinit light 'marlonrichert/zsh-autocomplete'
+    #zinit light 'marlonrichert/zsh-autocomplete'
+    zinit light 'zsh-users/zsh-completions'
     zinit light 'zsh-users/zsh-autosuggestions'
 else
-    #znap source 'marlonrichert/zsh-autocomplete'
+    znap source 'zdharma-continuum/fast-syntax-highlighting'
+    znap source 'marlonrichert/zsh-autocomplete'
+    znap source 'zsh-users/zsh-completions'
     znap source 'zsh-users/zsh-autosuggestions'
 
     # Make Tab and ShiftTab cycle completions on the command line
@@ -22,9 +25,6 @@ else
     # Make ← and → always move the cursor on the command line
     # bindkey -M menuselect  '^[[D' .backward-char  '^[OD' .backward-char
     # bindkey -M menuselect  '^[[C'  .forward-char  '^[OC'  .forward-char
-
-    # `znap install` adds new commands and completions.
-    znap install aureliojargas/clitest zsh-users/zsh-completions zdharma-continuum/fast-syntax-highlighting
 fi
 
 # vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

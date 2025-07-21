@@ -1,1 +1,0 @@
-../../../_home/private_dot_config/sz.env/091_zsh_9_zinit_fin.env.zsh

@@ -1,1 +1,0 @@
-../../../_home/private_dot_config/sz.env/remove_011_zsh_2_zinit.env.zsh

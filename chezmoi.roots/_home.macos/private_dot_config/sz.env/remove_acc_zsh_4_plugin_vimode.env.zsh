@@ -1,1 +1,0 @@
-../../../_home/private_dot_config/sz.env/remove_acc_zsh_4_plugin_vimode.env.zsh
