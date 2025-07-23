@@ -164,7 +164,8 @@ scriptTempDir={{ $scriptTempDir | quote }}
 
    command = "delta"
    args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
-   pager = "moar"
-{{- end -}}
+   pager = "delta" # Required until https://github.com/twpayne/chezmoi/issues/3523 is resolved.
+   # pager = "moar"
+{{- end }}
 
 # vim: set ft=toml expandtab tabstop=2 shiftwidth=2:
