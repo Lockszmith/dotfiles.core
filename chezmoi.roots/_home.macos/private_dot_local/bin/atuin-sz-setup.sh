@@ -1,0 +1,1 @@
+../../../_home/private_dot_local/bin/atuin-sz-setup.sh
