@@ -170,6 +170,11 @@ _go_get_version_server_major() {
 
 is_cmd() { type -p -- "${@}" 2> /dev/null 1> /dev/null; }
 
+_test_target() {
+    local TARGET="${1:-${TARGET}}"
+    [ "$(tsh ssh --no-relogin "${TARGET}" echo ok)" == "ok" ] || return $?
+}
+
 _do_search() {
     if [[ $# -eq 0 || "$1" == "--help" ]]; then
         usage-search
@@ -187,6 +192,7 @@ _do_search() {
     fi
     local SILENT=${SILENT:-${BATCH:+1}}
     local SEARCH="$1"
+    local SSHUSER="${2:-${SSHUSER}}"
     local QUERY="${QUERY:+--query=${QUERY}}"
 
     ${SILENT:+:} printf 'Searching for %s...' "$SEARCH" >&2
@@ -201,7 +207,8 @@ _do_search() {
             end)
             + "cluster_psnt=\(.metadata.labels.cluster_psnt),"
             + "hostname=\(.spec.hostname),"
-            + "teleport.internal/resource-id=\(.metadata.labels["teleport.internal/resource-id"])"
+            + "teleport.internal/resource-id=\(.metadata.labels["teleport.internal/resource-id"]),"
+            + "name=\(.metadata.name)"
         '
     )"
 
@@ -215,7 +222,18 @@ _do_search() {
         ${SILENT:+:} printf 'Aborted (empty response)\n' >&2
         exit 2
     else
+        TESTED=0
         SELECTED="$(<<<"$SELECTED_RAW" awk -F',' '{ print $4 }' )"
+
+        [ -z "$SSHUSER" ] || \
+        if ! _test_target "$SSHUSER"@"${SELECTED}"; then
+            _test_target "$SSHUSER"@"${RAW_SELECTED}" \
+            && SELECTED="${RAW_SELECTED}" \
+            && TESTED=1
+        else
+            TESTED=1
+        fi
+        [ "$TESTED" != 1 ] || SELECTED="${SSHUSER}@${SELECTED}"
     fi
 
     ${SILENT:+:} printf '\n%s selected.\n' "$SELECTED_RAW" >&2
@@ -229,29 +247,70 @@ _do_login() {
 _do_ssh() {
     local ECHO=${ECHO:-:}
     local SEARCH="$1"
-    local SSHUSER="${SSHUSER:-vastdata}"
+    local SSHUSER="${SSHUSER:-}"
+
+    local TARGET="${TARGET:-${SSHUSER:+${SSHUSER}@}$(_do_search "$SEARCH" "$SSHUSER")}"
+    local MUX_THIS="${MUX_THIS:-0}"
+
+    local RUN="${RUN:-}"
+    if [[ -z "$RUN" && "$MUX_THIS" != "0" ]]; then
+        local MUX_NAME="${TUNNEL:+${TUNNEL}>}${TARGET}|${SEARCH}|${SCRIPT_NAME}"
+        if [[ "$MUX_THIS" == "1" ]]; then
+            if [[ -n "$(command -v zellij)" ]]; then
+                MUX_THIS="zellij run --floating --pinned 'true' --name '\${MUX_NAME}' --"
+            elif [[ -n "$(command -v tmux)" ]]; then
+                # TODO: Define tmux muxing cli
+                MUX_THIS=""
+            else
+                MUX_THIS=""
+            fi
+        fi
+        eval "RUN=\"${MUX_THIS}\""
+    fi
     local TUNNEL="${TUNNEL:+-L ${TUNNEL}}"
 
-    local TARGET="${SSHUSER}@${TARGET:-$(_do_search "$SEARCH" "$SSHUSER")}"
+    local MSG="Connecting to ${TARGET}"
+    [ -z "${TUNNEL}" ] || MSG="${MSG}, with tunnel (${TUNNEL})"
+    [ $# -lt 2 ] || MSG="${MSG}, running \`${*:2}\`"
+    MSG="${MSG}..."
+    printf "%s\n" "$MSG"
 
-    $ECHO "Connecting to ${TARGET}"
-    tsh ssh ${TUNNEL} "${TARGET}" "${@:2}"
+    eval "${RUN} tsh ssh --no-relogin ${SSH_OPTS} ${TUNNEL} '${TARGET}' ${*:2}"
 }
 
 _do_ssh_with_tunnel() {
     local ECHO=${ECHO:-:}
+    local SEARCH="$1"
+    local SSHUSER="${SSHUSER:-}"
+    local SSH_OPTS="${SSH_OPTS:-}"
+
     local LOCAL_PORT="${LOCAL_PORT:-8443}"
     local TARGET_PORT="${TARGET_PORT:-443}"
-    local SEARCH="$1"
-    local SSHUSER="${SSHUSER:-vastdata}"
 
-    local TARGET="${SSHUSER}@${TARGET:-$(_do_search "$SEARCH" "$SSHUSER")}"
-
-    local VMS="${VMS:-"$(tsh ssh "${TARGET}" -- cat /vast/vman/mgmt-vip)"}"
-
+    local VMS="${VMS:-"$(tsh ssh --no-relogin "${TARGET}" -- cat /vast/vman/mgmt-vip)"}"
     local TUNNEL="${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
 
+    local MUX_THIS="${MUX_THIS:-0}"
     local RUN="${RUN:-}"
+
+    [[ $# -gt 1 ]] || SSH_OPTS="${SSH_OPTS:--N}"
+
+    ECHO="${ECHO}" SSHUSER="${SSHUSER}" SSH_OPTS="${SSH_OPTS}" TARGET="${TARGET}" TUNNEL="${TUNNEL}" MUX_THIS="${MUX_THIS}" RUN="${RUN}" _do_ssh "$@"
+}
+
+_old_do_ssh_with_tunnel() {
+    local ECHO=${ECHO:-:}
+    local SEARCH="$1"
+    local SSHUSER="${SSHUSER:-vastdata}"
+    local LOCAL_PORT="${LOCAL_PORT:-8443}"
+    local TARGET_PORT="${TARGET_PORT:-443}"
+
+    local MUX_THIS="${MUX_THIS:-0}"
+    local RUN="${RUN:-}"
+
+    local VMS="${VMS:-"$(tsh ssh --no-relogin "${TARGET}" -- cat /vast/vman/mgmt-vip)"}"
+    local TUNNEL="${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+
     if [[ -z "$RUN" && -n "$(command -v zellij)" ]]; then
         RUN="zellij run --floating --pinned 'true' --name '${TUNNEL}|${TARGET}|${SEARCH}|${SCRIPT_NAME}' --"
     fi
@@ -260,13 +319,14 @@ _do_ssh_with_tunnel() {
     local SSH_OPTS="${SSH_OPTS:--N}"
 
     $ECHO "Creating tunnel (${TUNNEL}) to ${TARGET}..."
-    printf "Executing: %s ...\n" "tsh ssh ${TUNNEL} ${TARGET} ${*:2}" >&2
-    eval "${RUN} tsh ssh ${SSH_OPTS} ${TUNNEL} '${TARGET}' ${*:2}"
+    printf "Executing: %s ...\n" "tsh ssh --no-relogin ${TUNNEL} ${TARGET} ${*:2}" >&2
+    eval "${RUN} tsh ssh --no-relogin ${SSH_OPTS} ${TUNNEL} '${TARGET}' ${*:2}"
 }
 
 _go_launch() {
     local SRCH=() NO_MUX=0 DEST='' ECHO=':' LOGIN='_do_login'
     local ZELLIJ_DEST=/tmp/vast-teleport/zellij/teleport
+    local SSHUSER="${SSHUSER:-vastdata}"
     [[ -n "$1" ]] || usage-launch
     while [[ -n "$1" ]]; do
         case $1 in
@@ -275,7 +335,7 @@ _go_launch() {
             '--no-login')       LOGIN=: ;;
             '--no-mux')         NO_MUX=1 ;;
             '--from-zellij')    FROM_ZELLIJ=1 ;;
-            *)                  SRCH=("${SRCH[@]}" "$1") ;;
+            *)                  SRCH=( "${SRCH[@]}" "$1" $SSHUSER ) ;;
         esac
         shift
     done
@@ -299,9 +359,8 @@ _go_launch() {
         zellij action new-tab --layout=teleport
     else
         if [[ "$FROM_ZELLIJ" -eq 1 ]]; then
-            TARGET="${DEST}" _do_ssh_with_tunnel
+            TARGET="${DEST}" MUX_THIS=1 _do_ssh_with_tunnel
         fi
-        $ECHO "connecting to ${DEST}"
 
         TARGET="${DEST}" _do_ssh
         ! [ -r "$ZELLIJ_DEST" ] || rm "$ZELLIJ_DEST"

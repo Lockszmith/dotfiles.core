@@ -1,1 +1,16 @@
-../../../../_home/private_dot_config/zellij/layouts/teleport.kdl
+layout {
+    cwd "/Users/gal.szkolnik"
+    tab name="Teleport" hide_floating_panes=true {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        pane command="zsh" cwd="/Users/gal.szkolnik" size="85%" {
+            args "-ic" "vast-teleport launch --from-zellij"
+            start_suspended true
+        }
+        pane size=1 borderless=true {
+            plugin location="zellij:status-bar"
+        }
+    }
+}
+
