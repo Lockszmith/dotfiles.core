@@ -5,7 +5,7 @@ SCRIPT_DIR=${SCRIPT_DIR:-"$( cd -- "$( dirname -- "$0" )" &> /dev/null && pwd )"
 
 SRC=${1:-$(cd $SCRIPT_DIR/../.. && pwd)}
 printf 'SRC=%s\n' "$SRC"
-cd $SRC
+[ "$SRC" = ":" ] || cd $SRC
 (
     cd "${2:-${HOME}}"
     echo cleanup, phase 1...
@@ -20,6 +20,7 @@ cd $SRC
     find . -mindepth 1 -maxdepth 2 -type l -print -delete
     mkdir -p .config
 
+    [ "$SRC" != ":" ] || exit 99
     echo linking...
     (
         cd $SRC; (
