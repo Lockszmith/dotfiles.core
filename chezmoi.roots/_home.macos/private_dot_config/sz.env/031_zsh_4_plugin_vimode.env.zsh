@@ -1,0 +1,1 @@
+../../../_home/private_dot_config/sz.env/031_zsh_4_plugin_vimode.env.zsh
