@@ -1,0 +1,8 @@
+{{ if (env "CZ_EXTR") -}}
+{{- $defaultRefresh := "168h" -}}
+".config/sz.env/lib/ble.sh.curl":
+  type: "archive"
+  url: "https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz"
+  refreshPeriod: "{{ $defaultRefresh }}"
+
+{{ end -}}

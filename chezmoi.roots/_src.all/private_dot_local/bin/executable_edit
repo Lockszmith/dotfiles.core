@@ -1,0 +1,34 @@
+#! /usr/bin/env bash
+
+set -e
+
+SCRIPT_NAME="${0##/*}"
+usage() {
+    printf '%s\n' \
+        'My editor proxy script' \
+        '' \
+        'Usage:' \
+        "  ${SCRIPT_NAME} [options] [--] <path1> [<path2>...]" \
+        '' \
+        'Description:' \
+	'  Launch my favorite editor, providing a fuzzy-find file path, and' \
+	'  present a selector with preview more than a single path is matched.' \
+	'' \
+        'Arguments:' \
+        '' \
+        'Examples:' \
+        "  ${SCRIPT_NAME} " \
+        ''
+    exit 2
+}
+
+if [[ $# -eq 0 ]]; then
+    usage
+fi
+
+while [[ $# -gt 0 ]]; do
+    :
+done
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+

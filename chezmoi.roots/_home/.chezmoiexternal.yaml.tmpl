@@ -145,6 +145,17 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- with $app_name := "ripgrep" -}}
+{{- with $bin_name := "rg" -}}
+{{- with $repo := (printf "%s/%s" "BurntSushi" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $bin_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz" $repo $version $app_name $version $myArch)
+        "path" (printf "%s-%s-%s/%s" $app_name $version $myArch $bin_name)
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{- if (eq .chezmoi.os "linux") -}}
 {{/* This is the linux installation of broot, the Apple section is below, it is based on cargo-binstall */}}
 {{-   $_ := set $externals ".local/bin/broot" (dict
@@ -362,7 +373,7 @@
 ) -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
         "type" "archive-file"
-        "url" (printf "https://cdn.teleport.dev/teleport-%s-%s-bin.tar.gz" $version $myArch)
+        "url" (printf "https://cdn.teleport.dev/teleport-%s-%s-bin.tar.gz" $version $myArch) 
         "path" (printf "teleport/%s" $app_name)
         "executable" true
         "refreshPeriod" $defaultRefresh
@@ -441,41 +452,17 @@
 {{- else -}}
 # This is a truncated version of .chezmoiexternal because CZ_EXTR env is undefined
 
+{{ $nextTmpl := dict }}
+{{/*
+{{ set $nextTmpl "data" ( includeTemplate "ext_delta_themes" . ) -}}
+{{ if (get $nextTmpl "data") }}{{ get $nextTmpl "data" }}{{ end }}
+{{ template "ext_lib_bash_preexec" . }}
+{{ template "ext_lib_ble" . }}
+{{ template "ext_lib_complete-alias" . }}
+{{ template "ext_nvim" . }}
+{{ template "ext_nvim_config" . }}
+{{ template "ext_zellij" . }}
+*/}}
 {{- end }}
-
-".config/nvim":
-  type: "git-repo"
-  url: "https://code.lksz.me/szmedia/kickstart-modular.nvim.sz.git"
-  clone.args: --branch sz
-  pullr.args: --autostash --rebase
-  refreshPeriod: "{{ $defaultRefresh }}"
-
-".config/sz.env/lib/ble.sh.curl":
-  type: "archive"
-  url: "https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz"
-  refreshPeriod: "{{ $defaultRefresh }}"
-
-".config/sz.env/lib/delta.themes.gitconfig":
-  type: "file"
-  url: "https://raw.githubusercontent.com/dandavison/delta/refs/heads/main/themes.gitconfig"
-  refreshPeriod: "{{ $defaultRefresh }}"
-
-".config/sz.env/lib/bash-preexec/bash-preexec.sh":
-  type: "file"
-  url: "https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh"
-  refreshPeriod: "{{ $defaultRefresh }}"
-
-".config/sz.env/lib/complete-alias":
-  type: "file"
-  url: "https://github.com/cykerway/complete-alias/raw/refs/heads/master/complete_alias"
-  refreshPeriod: "{{ $defaultRefresh }}"
-
-{{ if (and ( eq .chezmoi.os "linux" ) ( ne .chezmoi.osRelease.id "centos" )) -}}
-".local/bin/nvim.AppImage":
-  type: "file"
-  url: "https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage"
-  executable: true
-  refreshPeriod: "{{ $defaultRefresh }}"
-{{- end -}}
 
 # vim: set ft=yaml expandtab tabstop=2 shiftwidth=2:

@@ -1,0 +1,8 @@
+{{ if (env "CZ_EXTR") -}}
+{{- $defaultRefresh := "168h" -}}
+".config/sz.env/lib/complete-alias":
+  type: "file"
+  url: "https://github.com/cykerway/complete-alias/raw/refs/heads/master/complete_alias"
+  refreshPeriod: "{{ $defaultRefresh }}"
+
+{{ end -}}

@@ -1,0 +1,8 @@
+{{ if (env "CZ_EXTR") -}}
+{{- $defaultRefresh := "168h" -}}
+".config/sz.env/lib/delta.themes.gitconfig":
+  type: "file"
+  url: "https://raw.githubusercontent.com/dandavison/delta/refs/heads/main/themes.gitconfig"
+  refreshPeriod: "{{ $defaultRefresh }}"
+
+{{ end -}}

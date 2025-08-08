@@ -1,0 +1,8 @@
+{{ if (env "CZ_EXTR") -}}
+{{- $defaultRefresh := "168h" -}}
+".config/sz.env/lib/bash-preexec/bash-preexec.sh":
+  type: "file"
+  url: "https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh"
+  refreshPeriod: "{{ $defaultRefresh }}"
+
+{{ end -}}

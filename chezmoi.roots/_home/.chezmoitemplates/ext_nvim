@@ -1,0 +1,9 @@
+{{ if and (env "CZ_EXTR") (and ( eq .chezmoi.os "linux" ) ( ne .chezmoi.osRelease.id "centos" )) -}}
+{{- $defaultRefresh := "168h" -}}
+".local/bin/nvim.AppImage":
+  type: "file"
+  url: "https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage"
+  executable: true
+  refreshPeriod: "{{ $defaultRefresh }}"
+
+{{ end -}}
