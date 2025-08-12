@@ -273,7 +273,7 @@
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
 {{- if (or true (not (eq .chezmoi.os "darwin"))) -}}
-{{- with $app_name := "moar" -}}
+{{- with $app_name := "moor" -}}
 {{- with $repo := (printf "%s/%s" "walles" $app_name) -}}
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
@@ -283,7 +283,7 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
 
-{{- $myArch = or (get (dict "darwin" "macos-universal") .chezmoi.os) $myArch }}
+{{- $myArch = or (get (dict "darwin" ( printf "macos-%s" .sz.os.arch_alt )) .chezmoi.os) $myArch }}
 
 {{- with $app_name := "fastfetch" -}}
 {{- with $repo := (printf "%s/%s" "fastfetch-cli" $app_name) -}}
