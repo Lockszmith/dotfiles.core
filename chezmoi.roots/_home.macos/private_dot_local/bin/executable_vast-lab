@@ -221,22 +221,32 @@ do_ssh() {
         do_ssh cs-dbg
         return $?
     fi
-    [ -r "$HOME/.config/zellij/layouts/ssh_${1}.kdl" ] \
-    && rm  "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
 
     SSH_DEFAULT_ARGS='-o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa'
-    TAB_NAME="$( echo "${1}" | tr '[:lower:]' '[:upper:]' )"
     SSH_ARGS="${SSH_ARGS:-${SSH_DEFAULT_ARGS}} "
     SSH_CMD="${*}"
-    cat "$HOME/.config/zellij/layouts/ssh_tmpl.kdl.tmpl" | \
-    TAB_NAME="$TAB_NAME" SSH_ARGS="$SSH_ARGS" SSH_CMD="$SSH_CMD" envsubst \
-    > "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
 
-    if [ -r "$HOME/.config/zellij/layouts/ssh_${1}.kdl" ]; then
-        zellij action new-tab --layout=ssh_${1}
-        ${NO_RM} rm  "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+    if [ "$MUX" = "zellij" ]; then
+        [ -r "$HOME/.config/zellij/layouts/ssh_${1}.kdl" ] \
+        && rm  "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+
+        TAB_NAME="$( echo "${1}" | tr '[:lower:]' '[:upper:]' )"
+        cat "$HOME/.config/zellij/layouts/ssh_tmpl.kdl.tmpl" | \
+        TAB_NAME="$TAB_NAME" SSH_ARGS="$SSH_ARGS" SSH_CMD="$SSH_CMD" envsubst \
+        > "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+
+        MUX_CMD="$(eval "echo \"${MUX_CMD:-action new-tab}\"")"
+        [ "$MUX_CMD" != "run" ] \
+        || MUX_CMD="run --name='$TAB_NAME' -- ssh $SSH_ARGS $SSH_CMD # "
+
+        if [ -r "$HOME/.config/zellij/layouts/ssh_${1}.kdl" ]; then
+            eval "$MUX $MUX_CMD '--layout=ssh_${1}'"
+            ${NO_RM} rm "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+        else
+            echo "Some bad 💩 happened, couldn't find (or create) ssh_$1 layout."
+        fi
     else
-        echo "Some bad 💩 happened, couldn't find (or create) ssh_$1 layout."
+        eval "$MUX ssh $SSH_ARGS ${SSH_CMD}"
     fi
 }
 
@@ -246,6 +256,12 @@ do_cs-dbg() {
 
 _main_() {
     local DO_CMD='usage'
+
+    MUX="${MUX:-zellij}"
+    [ "$MUX" = ":" ] || [ "$MUX" = "0" ] || [ "$SZ_NOMUX" = "1" ] \
+        || [ -z "$ZELLIJ_SESSION_NAME" ] || [ "$ZELLIJ_SESSION_NAME" = '__NO_LOAD__' ] \
+        && unset MUX
+
     if [[ $# -gt 0 ]] && declare -f "do_${1}" > /dev/null; then
         DO_CMD="do_${1}"
         shift
