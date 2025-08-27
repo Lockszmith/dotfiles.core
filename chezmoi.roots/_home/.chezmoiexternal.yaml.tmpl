@@ -466,13 +466,13 @@
 {{/*
 {{ set $nextTmpl "data" ( includeTemplate "ext_delta_themes" . ) -}}
 {{ if (get $nextTmpl "data") }}{{ get $nextTmpl "data" }}{{ end }}
+*/}}
 {{ template "ext_lib_bash_preexec" . }}
 {{ template "ext_lib_ble" . }}
 {{ template "ext_lib_complete-alias" . }}
 {{ template "ext_nvim" . }}
 {{ template "ext_nvim_config" . }}
 {{ template "ext_zellij" . }}
-*/}}
 {{- end }}
 
 # vim: set ft=yaml expandtab tabstop=2 shiftwidth=2:
