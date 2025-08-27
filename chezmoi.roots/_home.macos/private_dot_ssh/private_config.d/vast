@@ -10,7 +10,7 @@ Host cs-dbg-tmp l3136
     User vastdata
     IdentityFile ~/.ssh/vast.id_rsa
 
-Host bonzo2 v60 10.27.200.60
+Host v3106 bonzo2 v60 10.27.200.60
     User vastdata
     IdentityFile ~/.ssh/vast.id_rsa
 
