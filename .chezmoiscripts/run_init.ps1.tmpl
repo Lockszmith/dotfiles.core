@@ -53,10 +53,12 @@ fi
 # Brute force remove chezmoistate lock and initialize chezmoi
 # apply with CZ_EXTR=1 will run twice as some logic in chemzoiexternal
 # requires tools that are downloaded with chezmoiexternal
-exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb \
+PATH="$HOME/bin:$PATH" exec sh -c 'rm ~/.config/chezmoi/chezmoistate.boltdb \
     && chezmoi init && chezmoi apply \
-    && printf "apply with externals #1/2...\n" && CZ_EXTR=1 chezmoi apply \
-    && printf "apply with externals #2/2...\n" && CZ_EXTR=1 chezmoi apply'
+    && printf "apply with externals #1/2...\n" && CZ_EZA_PREFIX= CZ_EXTR=1 chezmoi apply || CZ_EZA_PREFIX=./ CZ_EXTR=1 chezmoi apply || IGNORE_EZA=1 CZ_EXTR=1 chezmoi apply \
+    && printf "apply with externals #2/2...\n" && CZ_EXTR=1 chezmoi apply; \
+    chezmoi init --promptDefaults && exec $SHELL -l
+'
 {{- else -}}
 #! /usr/bin/env pwsh
 $local:CZROOTLINK=Join-Path "chezmoi.roots" (Join-Path "__root_links" "base.chezmoiroot")

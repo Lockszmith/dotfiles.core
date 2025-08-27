@@ -42,7 +42,8 @@ mkdir -p "${CZ_SCRIPT_TEMPDIR}"
 [[ -z "${CZ_DEBUG}" ]] || chezmoi cat-config
 
 # Destroy existing chezmoi state
-rm -fR ~/.config/chezmoi ~/.local/share/chezmoi/.chezmoiroot
+! [ -e ~/.config/chezmoi ] || rm -fR ~/.config/chezmoi
+! [ -e ~/.local/share/chezmoi/.chezmoiroot ] || rm ~/.local/share/chezmoi/.chezmoiroot
 
 # Create a temporary chezmoi configuration bypass /tmp noexec situation
 mkdir -p ~/.config/chezmoi
