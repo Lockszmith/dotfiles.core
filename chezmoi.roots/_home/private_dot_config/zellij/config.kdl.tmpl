@@ -35,6 +35,7 @@ keybinds clear-defaults=true {
         bind "n" { NewPane; SwitchToMode "Normal"; }
         bind "d" { NewPane "Down"; SwitchToMode "Normal"; }
         bind "r" { NewPane "Right"; SwitchToMode "Normal"; }
+        bind "s" { NewPane "stacked"; SwitchToMode "Normal"; }
         bind "x" { CloseFocus; SwitchToMode "Normal"; }
         bind "f" { ToggleFocusFullscreen; SwitchToMode "Normal"; }
         bind "z" { TogglePaneFrames; SwitchToMode "Normal"; }
@@ -193,6 +194,8 @@ keybinds clear-defaults=true {
         bind "Alt -" { Resize "Decrease"; }
         bind "Alt [" { PreviousSwapLayout; }
         bind "Alt ]" { NextSwapLayout; }
+        bind "Alt p" { TogglePaneInGroup; }
+        bind "Alt Shift p" { ToggleGroupMarking; }
     }
     shared_except "normal" "locked" {
         bind "Enter" "Esc" { SwitchToMode "Normal"; }
@@ -429,37 +432,6 @@ theme {{ dig "style" "zellij" "theme" "default" . | quote }}
 //
 // support_kitty_keyboard_protocol false
 
-// Whether to stack panes when resizing beyond a certain size
-// Default: true
-//
-// stacked_resize false
-
-// Whether to show release notes on first version run
-// Default: true
-//
-// show_release_notes false
-
-// Whether to show startup tips on session start
-// Default: true
-//
-// show_startup_tips false
-
-// Whether to enable mouse hover effects and pane grouping functionality
-// Default: true
-//
-// advanced_mouse_actions false
-
-// A command to run (will be wrapped with sh -c and provided the RESURRECT_COMMAND env variable)
-// after Zellij attempts to discover a command inside a pane when resurrecting sessions, the STDOUT
-// of this command will be used instead of the discovered RESURRECT_COMMAND
-// can be useful for removing wrappers around commands
-// Note: be sure to escape backslashes and similar characters properly
-//
-// post_command_discovery_hook "echo $RESURRECT_COMMAND | sed <your_regex_here>"
-
-// Web Server
-// For more details read https://zellij.dev/documentation/web-client.html
-//
 // Whether to make sure a local web server is running when a new Zellij session starts.
 // This web server will allow creating new sessions and attaching to existing ones that have
 // opted in to being shared in the browser.
@@ -475,7 +447,7 @@ theme {{ dig "style" "zellij" "theme" "default" . | quote }}
 // - false
 // Default: false
 //
-web_server true
+// web_server true
 
 // Whether to allow sessions started in the terminal to be shared through a local web server, assuming one is
 // running (see the `web_server` option for more details).
@@ -490,31 +462,31 @@ web_server true
 // - "disabled" (do not allow web sharing and do not permit sessions started in the terminal to opt-in to it)
 // Default: "off"
 // 
-web_sharing "on"
+// web_sharing "on"
 
 // The ip address the web server should listen on when it starts
 // Default: "127.0.0.1"
 // (Requires restart)
 //
 // web_server_ip "127.0.0.1"
-web_server_ip "0.0.0.0"
+
 
 // A path to a certificate file to be used when setting up the web client to serve the
 // connection over HTTPs
 //
-web_server_cert ".config/zellij/server.crt"
+// web_server_cert "/path/to/my/cert.pem"
 
 // A path to a key file to be used when setting up the web client to serve the
 // connection over HTTPs
 //
-web_server_key ".config/zellij/server.key"
+// web_server_key "/path/to/my/key.pem"
 
 // Whether to enforce https connections to the web server when it is bound to localhost
 // (127.0.0.0/8)
 //
 // Note: https is ALWAYS enforced when bound to non-local interfaces
 //
-// Default<D-M><D-R>false
+// Default: false
 //
 // enforce_https_for_localhost true
 
@@ -524,41 +496,31 @@ web_server_key ".config/zellij/server.key"
 //
 // web_server_port 8082
 
-// 
+// Whether to stack panes when resizing beyond a certain size
+// Default: true
+//
+// stacked_resize false
+
+// Whether to show release notes on first version run
+// Default: true
+//
+// show_release_notes false
+
+// Whether to enable mouse hover effects and pane grouping functionality
+// Default: true
+//
+// advanced_mouse_actions false
+
+// A command to run (will be wrapped with sh -c and provided the RESURRECT_COMMAND env variable)
+// after Zellij attempts to discover a command inside a pane when resurrecting sessions, the STDOUT
+// of this command will be used instead of the discovered RESURRECT_COMMAND
+// can be useful for removing wrappers around commands
+// Note: be sure to escape backslashes and similar characters properly
+//
+// post_command_discovery_hook "echo $RESURRECT_COMMAND | sed <your_regex_here>"
+
+
 web_client {
     font "monospace"
-    // font "Iosevka Term" // default is "monospace" - deferring this decision to the browser/os
-    // cursor_blink true // default is false
-    // cursor_style "block" // possibilities: "block", "bar", "underline"
-    // cursor_inactive_style "outline" // possibilities: "outline", "block", "bar", "underline"
-    // mac_option_is_meta false // default is true
-    // theme {
-    //     // NOTE: this is the theme of the terminal web client which is separate from Zellij's theme
-    //     //
-    //     // all values are optional and should be in the form of "r g b" (eg. 10 20 30)
-    //     background 10 20 30
-    //     foreground 10 20 30
-    //     black 10 20 30
-    //     blue 10 20 30
-    //     bright_black 10 20 30
-    //     bright_blue 10 20 30
-    //     bright_cyan 10 20 30
-    //     bright_green 10 20 30
-    //     bright_magenta 10 20 30
-    //     bright_red 10 20 30
-    //     bright_white 10 20 30
-    //     bright_yellow 10 20 30
-    //     cursor 10 20 30
-    //     cursor_accent 10 20 30
-    //     cyan 10 20 30
-    //     green 10 20 30
-    //     magenta 10 20 30
-    //     red 10 20 30
-    //     white 10 20 30
-    //     yellow 10 20 30
-    //     selection_background 10 20 30
-    //     selection_foreground 10 20 30
-    //     selection_inactive_background 10 20 30
-    // }
 }
 
