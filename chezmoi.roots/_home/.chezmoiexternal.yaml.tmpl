@@ -458,6 +458,17 @@
 {{- end -}} {{/* os = darwin */}}
 {{- end -}} {{/* cargo-binstall section */}}
 
+{{/*
+{{- with $app_name := "bash-completion" -}}
+{{- with $repo := (printf "%s/%s" "scop" $app_name) -}}
+{{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".config/sz.env/lib/%s.curl" $app_name) (dict
+        "type" "archive"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.xz" $repo $version $app_name $version)
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+*/}}
+
 {{- $externals | toYaml -}}
 {{- else -}}
 # This is a truncated version of .chezmoiexternal because CZ_EXTR env is undefined
@@ -467,12 +478,12 @@
 {{ set $nextTmpl "data" ( includeTemplate "ext_delta_themes" . ) -}}
 {{ if (get $nextTmpl "data") }}{{ get $nextTmpl "data" }}{{ end }}
 */}}
+{{ template "ext_zellij" . }}
+{{- end }}
+
 {{ template "ext_lib_bash_preexec" . }}
 {{ template "ext_lib_ble" . }}
 {{ template "ext_lib_complete-alias" . }}
 {{ template "ext_nvim" . }}
 {{ template "ext_nvim_config" . }}
-{{ template "ext_zellij" . }}
-{{- end }}
-
 # vim: set ft=yaml expandtab tabstop=2 shiftwidth=2:
