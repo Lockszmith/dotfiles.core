@@ -218,40 +218,47 @@ do_get() {
 
 do_ssh() {
     if [[ $# -eq 0 ]]; then
-        do_ssh cs-dbg
+        do_cs-dbg
         return $?
     fi
 
     SSH_DEFAULT_ARGS='-o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa'
-    SSH_ARGS="${SSH_ARGS:-${SSH_DEFAULT_ARGS}} "
+    SSH_UNSAFE='-q -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null ${SSH_DEFAULT_ARGS}'
+    SSH_ARGS="${SSH_ARGS:-\${SSH_DEFAULT_ARGS}} "
     SSH_CMD="${*}"
+    [ -z "$SSHPASS" ] || SSH_PASS="${SSH_PASS:-sshpass -e}"
 
     if [ "$MUX" = "zellij" ]; then
-        [ -r "$HOME/.config/zellij/layouts/ssh_${1}.kdl" ] \
-        && rm  "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+        KDL_PATH="$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+
+        [ -r "$KDL_PATH" ] \
+        && rm  "$KDL_PATH"
 
         TAB_NAME="$( echo "${1}" | tr '[:lower:]' '[:upper:]' )"
         cat "$HOME/.config/zellij/layouts/ssh_tmpl.kdl.tmpl" | \
-        TAB_NAME="$TAB_NAME" SSH_ARGS="$SSH_ARGS" SSH_CMD="$SSH_CMD" envsubst \
-        > "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+        SSHPASS="$SSHPASS" SSH_PASS="$SSH_PASS" SSH_ARGS="$SSH_ARGS" SSH_CMD="$SSH_CMD" \
+        TAB_NAME="$TAB_NAME" \
+        envsubst \
+        > "$KDL_PATH"
 
         MUX_CMD="$(eval "echo \"${MUX_CMD:-action new-tab}\"")"
         [ "$MUX_CMD" != "run" ] \
-        || MUX_CMD="run --name='$TAB_NAME' -- ssh $SSH_ARGS $SSH_CMD # "
+        || MUX_CMD="run --name='$TAB_NAME' -- $SSH_PASS ssh $SSH_ARGS $SSH_CMD # "
 
-        if [ -r "$HOME/.config/zellij/layouts/ssh_${1}.kdl" ]; then
-            eval "$MUX $MUX_CMD '--layout=ssh_${1}'"
-            ${NO_RM} rm "$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+        
+        if [ -r "$KDL_PATH" ]; then
+            eval "$MUX $MUX_CMD '--layout=$KDL_PATH'"
+            ${NO_RM} rm "$KDL_PATH"
         else
             echo "Some bad 💩 happened, couldn't find (or create) ssh_$1 layout."
         fi
     else
-        eval "$MUX ssh $SSH_ARGS ${SSH_CMD}"
+        eval "$MUX $SSH_PASS ssh $SSH_ARGS ${SSH_CMD}"
     fi
 }
 
 do_cs-dbg() {
-    do_ssh cs-dbg
+    do_ssh var-cs-dbg
 }
 
 _main_() {
@@ -271,4 +278,3 @@ _main_() {
 _main_ "$@"
 
 # vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
-
