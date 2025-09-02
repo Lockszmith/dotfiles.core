@@ -54,9 +54,9 @@ ${SET_X-:} -x
     zellij() {
         refresh-zellij
         if [[ $# -eq 0 ]]; then
-            env zellij attach -c $USER@$(hostname)
+            ${ZELLIJ_EXEC:-} env zellij attach -c $USER@$(hostname)
         else
-            env zellij "${@}"
+            ${ZELLIJ_EXEC:-} env zellij "${@}"
         fi
     }
 
