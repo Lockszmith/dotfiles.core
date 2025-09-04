@@ -13,8 +13,8 @@ usage() {
         'Commands:' \
         '  prerpmac     Configure MacOS network interfaces for lab physcal NIC connection' \
         '  ssh          Connect over ssh (to CS-DBG by default)' \
-        '  cs-dbg       Connect to CS-DBG' \
-        '  get          various VAST related queries'
+        "  cs-dbg       Connect to CS-DBG (${CS_DBG}) utilizes 'ssh' command (above)" \
+        '  get          various VAST related queries' \
         '' \
         ''
     exit 2
@@ -216,15 +216,58 @@ do_get() {
     ${DO_CMD} "$@"
 }
 
+usage-ssh() {
+    printf '%s\n' \
+        'SSH into remote hosts/nodes with some useful defaults and tooling' \
+        '' \
+        'Usage:' \
+        "  [<ENV VARS>] ${SCRIPT_NAME} ssh [<ssh_args>]" \
+        '' \
+        'By default, ssh connection will be opened in a new mux (zellij) tab.' \
+        "If no arguments are passed, the connection will be to '${CS_DBG}'" \
+        '' \
+        'The following ENV variables would change the behavior:' \
+        '    SSH_PASS   sshpass command line override, if SSHPASS var exists, it will' \
+        '               default to `sshpass -e`' \
+        '    SSHPASS    activates default SSH_PASS behavior (see above)' \
+        '    SSH_ARGS   by default, the value is \$SSH_DEFAULT_ARGS' \
+        '               Another preset is \$SSH_UNSAFE' \
+        "    MUX        This is the multiplexer's command" \
+        '               Default value is `zellij`' \
+        '               MUX=0 will disable zellij use' \
+        '    MUX_CMD    Arguments for the MUX command' \
+        "               default is \"run --name='\$TAB_NAME' -- \$SSH_PASS ssh \$SSH_ARGS \$SSH_CMD # \"" \
+        '' \
+        'Examples:' \
+        '  The following command lines will:' \
+        '    * Open a new zellij tab titled VASTDATA@192.168.2.2' \
+        '      (To disable this, add MUX=0)' \
+        '    * connect to the techport IP Address (192.168.2.2)' \
+        '    * as the "vastdata" user' \
+        '    * pass "vastdata" plaintext password' \
+        '    * use the \$SSH_UNSAFE template to bypass host validation keys' \
+        '' \
+        "    SSHPASS=vastdata SSH_ARGS=\\\$SSH_UNSAFE ${SCRIPT_NAME} ssh vastdata@192.168.2.2 # connect to tech port" \
+        '' \
+        '  The following commands will open a new zellij tab to ${CS_DBG}:' \
+        "    ${SCRIPT_NAME} ssh" \
+        "    ${SCRIPT_NAME} ssh ${CS_DBG}" \
+        ''
+    exit 2
+}
+
 do_ssh() {
     if [[ $# -eq 0 ]]; then
         do_cs-dbg
+        return $?
+    else [[ "$1" == '--help' ]]
+        usage-ssh
         return $?
     fi
 
     SSH_DEFAULT_ARGS='-o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa'
     SSH_UNSAFE='-q -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null ${SSH_DEFAULT_ARGS}'
-    SSH_ARGS="${SSH_ARGS:-\${SSH_DEFAULT_ARGS}} "
+    SSH_ARGS="$(eval "echo \"${SSH_ARGS:-"\${SSH_DEFAULT_ARGS}"} \"")"
     SSH_CMD="${*}"
     [ -z "$SSHPASS" ] || SSH_PASS="${SSH_PASS:-sshpass -e}"
 
@@ -257,8 +300,9 @@ do_ssh() {
     fi
 }
 
+CS_DBG="${CS_DBG:-var-cs-dbg}"
 do_cs-dbg() {
-    do_ssh var-cs-dbg
+    do_ssh ${CS_DBG}
 }
 
 _main_() {
