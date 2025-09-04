@@ -59,7 +59,7 @@ usage-prepmac() {
         '    169.254.3.254/24  ' \
         '' \
         'Examples:' \
-        "    ${SCRIPT_NAME} 192.168.2.2 # connect to tech port" \
+        "    ${SCRIPT_NAME} prepmac 192.168.2.2 # connect to tech port" \
         ''
     exit 2
 }
