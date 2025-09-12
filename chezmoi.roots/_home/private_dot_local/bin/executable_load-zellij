@@ -54,7 +54,7 @@ ${SET_X-:} -x
     zellij() {
         refresh-zellij
         if [[ $# -eq 0 ]]; then
-            ${ZELLIJ_EXEC:-} env zellij attach -c $USER@$(hostname)
+            ${ZELLIJ_EXEC:-} env zellij attach -c "$USER@$( (hostname || uname -n || sysctl -n kernel.hostname) 2>/dev/null || printf '??' )"
         else
             ${ZELLIJ_EXEC:-} env zellij "${@}"
         fi
