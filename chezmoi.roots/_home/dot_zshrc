@@ -1,6 +1,7 @@
 #!/usr/bin/env -S zsh -c 'echo "Not a user script. source(aka .) only"'
-
 # ~/.zshrc: executed by zsh(1) for non-login shells.
+
+if [ "$IS_DOCKER_SH" = "1" ]; then export PS1="dockersh $PS1"; fi
 
 ## Generated for envman. Do not edit.
 #[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"

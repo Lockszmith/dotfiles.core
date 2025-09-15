@@ -1,0 +1,11 @@
+#! /usr/bin/env bash
+
+_r() {
+    local prefered_shell="$(command -v zsh 2>/dev/null)"
+    [ -z "$prefered_shell" ] || export SHELL="$prefered_shell"
+    exec $SHELL -l
+}
+
+alias _rdbg="DBG=1 exec -l $SHELL -l"
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+
