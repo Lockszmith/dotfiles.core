@@ -192,7 +192,7 @@ _do_search() {
     fi
     local SILENT=${SILENT:-${BATCH:+1}}
     local SEARCH="$1"
-    local SSHUSER="${2:-${SSHUSER}}"
+    local SSHUSER="${2:-${SSHUSER:-}}"
     local QUERY="${QUERY:+--query=${QUERY}}"
 
     ${SILENT:+:} printf 'Searching for %s...' "$SEARCH" >&2
@@ -247,9 +247,10 @@ _do_login() {
 _do_ssh() {
     local ECHO=${ECHO:-:}
     local SEARCH="$1"
-    local SSHUSER="${SSHUSER:-}"
+    local SSHUSER="${2:-${SSHUSER:-vastdata}}"
 
-    local TARGET="${TARGET:-${SSHUSER:+${SSHUSER}@}$(_do_search "$SEARCH" "$SSHUSER")}"
+    local TARGET="${TARGET:-$(_do_search "$SEARCH")}"
+    [[ "$TARGET" =~ @ ]] || TARGET="${SSHUSER:+${SSHUSER}@}$TARGET}"
     local MUX_THIS="${MUX_THIS:-0}"
 
     local RUN="${RUN:-}"
@@ -326,7 +327,7 @@ _old_do_ssh_with_tunnel() {
 _go_launch() {
     local SRCH=() NO_MUX=0 DEST='' ECHO=':' LOGIN='_do_login'
     local ZELLIJ_DEST=/tmp/vast-teleport/zellij/teleport
-    local SSHUSER="${SSHUSER:-vastdata}"
+    local SSHUSER="${SSHUSER:-}"
     [[ -n "$1" ]] || usage-launch
     while [[ -n "$1" ]]; do
         case $1 in
