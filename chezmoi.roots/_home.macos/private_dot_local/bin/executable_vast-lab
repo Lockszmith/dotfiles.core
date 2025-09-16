@@ -260,7 +260,7 @@ do_ssh() {
     if [[ $# -eq 0 ]]; then
         do_cs-dbg
         return $?
-    else [[ "$1" == '--help' ]]
+    elif [[ "$1" == '--help' ]]; then
         usage-ssh
         return $?
     fi
