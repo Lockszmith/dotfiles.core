@@ -1,1 +1,0 @@
-../../../_home/private_dot_config/sz.env/011_zsh_2_znap.env.zsh

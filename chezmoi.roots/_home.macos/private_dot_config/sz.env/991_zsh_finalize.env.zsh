@@ -1,1 +1,0 @@
-../../../_home/private_dot_config/sz.env/991_zsh_finalize.env.zsh

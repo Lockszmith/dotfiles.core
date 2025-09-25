@@ -1,1 +1,0 @@
-../../../_home/private_dot_config/sz.env/981_atuin.env.bash

@@ -2,6 +2,15 @@
 
 set -e
 
+if [ $# -eq 0 ]; then
+    printf '%s\n' \
+        "${0#/*} - | [Address [... Address]]" \
+        "" \
+        "Perform copy-ssh-id where key based ssh auth is failing" \
+        ""
+    exit 2
+fi
+
 REMOTE_HOST=("${@:--}")
 
 if [[ "${#REMOTE_HOST}" -eq 1 && "${REMOTE_HOST[0]}" == '-' ]]; then
@@ -11,22 +20,30 @@ fi
 ssh_do() {
     local USER="${1}" HOST="${2:?}"
     # BLINDLY Trust host keys ( https://stackoverflow.com/a/74410573/799379 )
-    [ 1 -eq "${NO_REFRESH}" ] || (
-        ssh-keygen -F "$HOST" &>/dev/null && ssh-keygen -R "$HOST" &>/dev/null
+    [ 1 -eq "${NO_REFRESH:-0}" ] || (
+        ssh-keygen -F "$HOST" &>/dev/null \
+        && ssh-keygen -R "$HOST" &>/dev/null \
+        || true
     )
     ssh-keygen -F "$HOST" &>/dev/null || (
-        ssh-keyscan -Ht ed25519 "$HOST" || ssh-keyscan -H "$HOST"
+        ssh-keyscan -Ht ed25519 "$HOST" \
+        || ssh-keyscan -H "$HOST"
     ) | grep -v '^#' >> "$HOME/.ssh/known_hosts"
 
     SSH_ASKPASS_REQUIRE=never \
     ssh \
         -o PasswordAuthentication=no \
         -o LogLevel=ERROR \
-        -o BatchMode=yes \
-        -o ConnectTimeout=2 \
+	-o BatchMode=yes \
+	-o ConnectTimeout=2 \
         -ttn \
         "${USER:+${USER}@}${HOST}" -- "${@:3}" \
-    || (printf '\n'; printf 'Exit code: %s\n' "$?" >&2)
+    || (
+ 	local XC=$?
+        printf '\n'
+        printf 'Exit code: %s\n' "$XC" >&2
+	return $XC
+    )
 }
 
 for _host in "${REMOTE_HOST[@]}"; do
@@ -39,4 +56,3 @@ for _host in "${REMOTE_HOST[@]}"; do
     fi 
 done
 
-# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:

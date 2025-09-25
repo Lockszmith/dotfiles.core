@@ -1,1 +1,0 @@
-../../../_home/private_dot_config/sz.env/011_zsh_3_completion_system.env.zsh
