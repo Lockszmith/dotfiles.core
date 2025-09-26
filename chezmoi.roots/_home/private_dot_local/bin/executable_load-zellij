@@ -53,10 +53,17 @@ ${SET_X-:} -x
     }
     zellij() {
         refresh-zellij
+
+        # ZELLIJ_EXEC is a single event, once zellij has loaded, we should not have it set by default.
+        TMP_ZELLIJ_EXEC=${ZELLIJ_EXEC:-}
+        export ZELLIJ_EXEC='OFF'
+        # only 'exec' is a valid value, anything else should be discarded
+        [ "${TMP_ZELLIJ_EXEC}" = "exec" ] || TMP_ZELLIJ_EXEC=
+
         if [[ $# -eq 0 ]]; then
-            ${ZELLIJ_EXEC:-} env zellij attach -c "$USER@$( (hostname || uname -n || sysctl -n kernel.hostname) 2>/dev/null || printf '??' )"
+            ${TMP_ZELLIJ_EXEC:-} env zellij attach -c "$USER@$( (hostname || uname -n || sysctl -n kernel.hostname) 2>/dev/null || printf '??' )"
         else
-            ${ZELLIJ_EXEC:-} env zellij "${@}"
+            ${TMP_ZELLIJ_EXEC:-} env zellij "${@}"
         fi
     }
 
