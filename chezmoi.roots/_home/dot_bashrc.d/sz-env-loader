@@ -1,11 +1,15 @@
 #! /usr/bin/env bash
 
+unalias _r 2>/dev/null || true
 _r() {
     local prefered_shell="$(command -v zsh 2>/dev/null)"
+    [ -z "$prefered_shell" ] || "$prefered_shell" -c '[[ "$(<<<$ZSH_VERSION cut -d. -f1-2)" -ge 5.8 ]]' || prefered_shell=''
     [ -z "$prefered_shell" ] || export SHELL="$prefered_shell"
-    exec $SHELL -l
+    [ -z "$prefered_shell" ] || exec $SHELL -l
+
+    [ -s "$HOME/.config/sz.env/000_load.sh" ] && . <( "$HOME/.config/sz.env/000_load.sh" - )
 }
 
-alias _rdbg="DBG=1 exec -l $SHELL -l"
+alias _rdbg="DBG=1 _r"
 # vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
 
