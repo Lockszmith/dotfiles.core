@@ -1,0 +1,18 @@
+#! /usr/bin/env bash
+
+ROOTDIR="${ROOT_DIR:-/file_server_var2}"
+DIR="${ROOTDIR}/CUSTOMERS/Hudson-River-Trading"
+FORCE=${FORCE:-}
+[ "${FORCE}" = "f" ] || FORCE=
+
+ln -${FORCE}vsr "${DIR}/VA22111844-1"    "${DIR}/shavast01"
+ln -${FORCE}vsr "${DIR}/VA22111844-2"    "${DIR}/rd1vast01"
+ln -${FORCE}vsr "${DIR}/VA22353109"      "${DIR}/shavast02"
+ln -${FORCE}vsr "${DIR}/VA22413109"      "${DIR}/rd1vast02"
+ln -${FORCE}vsr "${DIR}/VA23105392-1"    "${DIR}/chqlabvast01"
+ln -${FORCE}vsr "${DIR}/VA23235392-2"    "${DIR}/rd1labvast01"
+ln -${FORCE}vsr "${DIR}/VA24261830"      "${DIR}/chqvast02"
+ln -${FORCE}vsr "${DIR}/VA25211397201"   "${DIR}/shavast03"
+ln -${FORCE}vsr "${DIR}/VA25211397202"   "${DIR}/chqvast03"
+ln -${FORCE}vsr "${DIR}/VAIS253615669"   "${DIR}/chqvast01"
+
