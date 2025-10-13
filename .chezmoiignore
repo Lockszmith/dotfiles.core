@@ -5,3 +5,7 @@
 *
 ! .chezmoiscripts/
 ! .chezmoiscripts/**
+{{ if not (stat (joinPath .chezmoi.homeDir "VAST/dockersh.home" )) -}}
+VAST/dockersh.home/
+VAST/dockersh.home/**
+{{ end -}}
