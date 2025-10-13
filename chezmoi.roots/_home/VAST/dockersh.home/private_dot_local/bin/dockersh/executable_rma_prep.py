@@ -123,6 +123,8 @@ class DBox:
     drives: List[Drive] = field(default_factory=list)
     fans: List[Fan] = field(default_factory=list)
     psus: List[PSU] = field(default_factory=list)
+    manufacturer_id: Optional[str] = None
+    product_id: Optional[str] = None
     
     @property
     def has_dtrays(self) -> bool:
@@ -610,6 +612,36 @@ def extract_board_serial_from_fru(fru_file_path):
         
         # Look for Board Serial line
         match = re.search(r'Board Serial\s+:\s+(\S+)', content)
+        if match:
+            return match.group(1)
+    except (FileNotFoundError, IOError):
+        pass
+    return None
+
+
+def extract_manufacturer_id_from_mc_info(mc_info_file_path):
+    """Extract Manufacturer ID from ipmitool mc info file."""
+    try:
+        with open(mc_info_file_path, 'r') as f:
+            content = f.read()
+        
+        # Look for Manufacturer ID line (format: "Manufacturer ID           : 9237")
+        match = re.search(r'Manufacturer ID\s+:\s+(\d+)', content)
+        if match:
+            return match.group(1)
+    except (FileNotFoundError, IOError):
+        pass
+    return None
+
+
+def extract_product_id_from_mc_info(mc_info_file_path):
+    """Extract Product ID from ipmitool mc info file."""
+    try:
+        with open(mc_info_file_path, 'r') as f:
+            content = f.read()
+        
+        # Look for Product ID line (format: "Product ID                : 238 (0x00ee)")
+        match = re.search(r'Product ID\s+:\s+(\d+)', content)
         if match:
             return match.group(1)
     except (FileNotFoundError, IOError):
@@ -1410,7 +1442,7 @@ def find_drive_in_bundles(drive_serial, bundle_dirs):
 # Data Model Builders (Build hardware models from extracted data)
 # ============================================================================
 
-def build_drive_rma_form_from_legacy_data(drive_info, node_info, sibling_nodes_data, case_number):
+def build_drive_rma_form_from_legacy_data(drive_info, node_info, sibling_nodes_data, case_number, bundle_dir=None):
     """Build a DriveRMAForm from legacy data structures"""
     # Build NetworkInfo for associated node
     network = NetworkInfo(
@@ -1469,10 +1501,22 @@ def build_drive_rma_form_from_legacy_data(drive_info, node_info, sibling_nodes_d
     
     # Build DBox (with all nodes)
     all_nodes = [associated_node] + sibling_nodes
+    
+    # Extract manufacturer_id and product_id from mc_info file if bundle_dir is provided
+    manufacturer_id = None
+    product_id = None
+    if bundle_dir:
+        mc_info_file = bundle_dir / 'ipmitool' / 'ipmitool_mc_info.txt'
+        if mc_info_file.exists():
+            manufacturer_id = extract_manufacturer_id_from_mc_info(mc_info_file)
+            product_id = extract_product_id_from_mc_info(mc_info_file)
+    
     dbox = DBox(
         serial_number=node_info.get('box_serial', ''),
         nodes=all_nodes,
-        drives=[drive]  # Only this drive for now
+        drives=[drive],  # Only this drive for now
+        manufacturer_id=manufacturer_id,
+        product_id=product_id
     )
     
     # Format case number to 8 characters
@@ -1626,11 +1670,22 @@ def find_node_in_bundles(node_name, bundle_dirs):
             bundle_box_serial = extract_box_serial_from_fru(fru_file)
             bundle_board_serial = extract_board_serial_from_fru(fru_file)
         
+        # Extract Manufacturer ID and Product ID from mc_info file
+        manufacturer_id = None
+        product_id = None
+        mc_info_file = bundle_dir / 'ipmitool' / 'ipmitool_mc_info.txt'
+        if mc_info_file.exists():
+            manufacturer_id = extract_manufacturer_id_from_mc_info(mc_info_file)
+            product_id = extract_product_id_from_mc_info(mc_info_file)
+        
         if data_ip and bundle_box_serial:
             node_info['box_serial'] = bundle_box_serial
             # Override system_serial_number with board serial if available
             if bundle_board_serial:
                 node_info['serial_number'] = bundle_board_serial
+            # Add manufacturer and product IDs
+            node_info['manufacturer_id'] = manufacturer_id
+            node_info['product_id'] = product_id
             all_nodes.append(node_info)
             
             # Group nodes by Box serial number
@@ -1907,11 +1962,22 @@ def list_available_nodes(bundle_dirs):
             bundle_box_serial = extract_box_serial_from_fru(fru_file)
             bundle_board_serial = extract_board_serial_from_fru(fru_file)
         
+        # Extract Manufacturer ID and Product ID from mc_info file
+        manufacturer_id = None
+        product_id = None
+        mc_info_file = bundle_dir / 'ipmitool' / 'ipmitool_mc_info.txt'
+        if mc_info_file.exists():
+            manufacturer_id = extract_manufacturer_id_from_mc_info(mc_info_file)
+            product_id = extract_product_id_from_mc_info(mc_info_file)
+        
         if data_ip and bundle_box_serial:
             node_info['box_serial'] = bundle_box_serial
             # Override system_serial_number with board serial if available
             if bundle_board_serial:
                 node_info['serial_number'] = bundle_board_serial
+            # Add manufacturer and product IDs
+            node_info['manufacturer_id'] = manufacturer_id
+            node_info['product_id'] = product_id
             bundle_to_node[bundle_dir] = node_info
             
             # Group nodes by Box serial number
@@ -1940,7 +2006,7 @@ def list_available_nodes(bundle_dirs):
     
     # Add header row
     table.add_row("Name", "Type", "Position", "Data IP", "MGMT IP", "IPMI IP", 
-                  "Node S/N", "Box S/N", "MAC Address", "Create Time", "Bundle Path")
+                  "Node S/N", "Box S/N", "Mfr ID", "Prod ID", "MAC Address", "Create Time", "Bundle Path")
     table.add_separator()
     
     # Display nodes grouped by box
@@ -1965,12 +2031,15 @@ def list_available_nodes(bundle_dirs):
             ipmi_ip = node.get('ipmi_ip') or 'Unknown'
             node_serial = node.get('serial_number') or 'Unknown'
             box_serial_val = node.get('box_serial') or 'Unknown'
+            manufacturer_id = node.get('manufacturer_id') or ''
+            product_id = node.get('product_id') or ''
             mac_address = node.get('mac_address') or 'Unknown'
             create_time = node.get('create_time') or 'Unknown'
             bundle_path = node.get('bundle_path') or 'Unknown'
             
             table.add_row(node_name, node_type, position, data_ip, mgmt_ip, ipmi_ip,
-                         node_serial, box_serial_val, mac_address, create_time, bundle_path)
+                         node_serial, box_serial_val, manufacturer_id, product_id,
+                         mac_address, create_time, bundle_path)
     
     # Render and print the table
     print("Available Nodes:")
@@ -2003,7 +2072,7 @@ def display_matched_nodes(matched_nodes, match_type="multiple"):
     
     # Add header row
     table.add_row("Name", "Type", "Position", "Data IP", "MGMT IP", "IPMI IP", 
-                  "Node S/N", "Box S/N", "MAC Address", "Create Time", "Bundle Path")
+                  "Node S/N", "Box S/N", "Mfr ID", "Prod ID", "MAC Address", "Create Time", "Bundle Path")
     table.add_separator()
     
     # Sort boxes by MGMT IP of first node in each group
@@ -2038,12 +2107,15 @@ def display_matched_nodes(matched_nodes, match_type="multiple"):
             ipmi_ip = node.get('ipmi_ip') or 'Unknown'
             node_serial = node.get('serial_number') or 'Unknown'
             box_serial_val = node.get('box_serial') or 'Unknown'
+            manufacturer_id = node.get('manufacturer_id') or ''
+            product_id = node.get('product_id') or ''
             mac_address = node.get('mac_address') or 'Unknown'
             create_time = node.get('create_time') or 'Unknown'
             bundle_path = node.get('bundle_path') or 'Unknown'
             
             table.add_row(node_name, node_type, position, data_ip, mgmt_ip, ipmi_ip,
-                         node_serial, box_serial_val, mac_address, create_time, bundle_path)
+                         node_serial, box_serial_val, manufacturer_id, product_id,
+                         mac_address, create_time, bundle_path)
     
     # Render and print the table
     print(render_table(table))
@@ -2335,7 +2407,7 @@ Examples:
         
         # Build RMA form using new data model
         rma_form = build_drive_rma_form_from_legacy_data(
-            drive_info, node_info, sibling_nodes, args.case
+            drive_info, node_info, sibling_nodes, args.case, bundle_dir
         )
         
         # Render and print drive replacement output
