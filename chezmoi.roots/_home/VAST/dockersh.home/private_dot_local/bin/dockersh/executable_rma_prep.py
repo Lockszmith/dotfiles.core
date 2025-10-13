@@ -1063,40 +1063,10 @@ def find_drive_in_bundle(drive_serial, bundle_dir):
     logging.debug(f"Searching for drive '{drive_serial}' in bundle: {bundle_dir}")
     
     try:
-        # First check nvme_list.json as primary source
-        nvme_list_file = bundle_dir / 'nvme_list.json'
-        if nvme_list_file.exists():
-            logging.debug(f"Reading primary source: {nvme_list_file}")
-            with open(nvme_list_file, 'r') as f:
-                nvme_data = json.load(f)
-            
-            devices = nvme_data.get('Devices', [])
-            logging.debug(f"Found {len(devices)} devices in nvme_list.json")
-            
-            for i, device in enumerate(devices):
-                device_serial = device.get('SerialNumber')
-                logging.debug(f"  Device {i}: serial='{device_serial}', model='{device.get('ModelNumber')}'")
-                if device_serial == drive_serial:
-                    model = device.get('ModelNumber')
-                    path = device.get('DevicePath')
-                    drive_type = determine_drive_type(model, path)
-                    logging.debug(f"Found drive '{drive_serial}' in nvme_list.json: {model} at {path} (type: {drive_type})")
-                    return {
-                        'serial': device.get('SerialNumber'),
-                        'model': model,
-                        'path': path,
-                        'size': device.get('PhysicalSize'),
-                        'firmware_rev': device.get('Firmware'),
-                        'index': device.get('Index'),
-                        'drive_type': drive_type
-                    }
-        else:
-            logging.debug(f"Primary source not found: {nvme_list_file}")
-        
-        # Fallback: check nvme_cli_list.json for extended info
+        # First check nvme_cli_list.json as primary source (has location data)
         nvme_cli_file = bundle_dir / 'nvme_cli_list.json'
         if nvme_cli_file.exists():
-            logging.debug(f"Reading fallback source: {nvme_cli_file}")
+            logging.debug(f"Reading primary source: {nvme_cli_file}")
             with open(nvme_cli_file, 'r') as f:
                 nvme_data = json.load(f)
             
@@ -1127,7 +1097,37 @@ def find_drive_in_bundle(drive_serial, bundle_dir):
                         'drive_type': drive_type
                     }
         else:
-            logging.debug(f"Fallback source not found: {nvme_cli_file}")
+            logging.debug(f"Primary source not found: {nvme_cli_file}")
+        
+        # Fallback: check nvme_list.json (basic info only, no location)
+        nvme_list_file = bundle_dir / 'nvme_list.json'
+        if nvme_list_file.exists():
+            logging.debug(f"Reading fallback source: {nvme_list_file}")
+            with open(nvme_list_file, 'r') as f:
+                nvme_data = json.load(f)
+            
+            devices = nvme_data.get('Devices', [])
+            logging.debug(f"Found {len(devices)} devices in nvme_list.json")
+            
+            for i, device in enumerate(devices):
+                device_serial = device.get('SerialNumber')
+                logging.debug(f"  Device {i}: serial='{device_serial}', model='{device.get('ModelNumber')}'")
+                if device_serial == drive_serial:
+                    model = device.get('ModelNumber')
+                    path = device.get('DevicePath')
+                    drive_type = determine_drive_type(model, path)
+                    logging.debug(f"Found drive '{drive_serial}' in nvme_list.json: {model} at {path} (type: {drive_type})")
+                    return {
+                        'serial': device.get('SerialNumber'),
+                        'model': model,
+                        'path': path,
+                        'size': device.get('PhysicalSize'),
+                        'firmware_rev': device.get('Firmware'),
+                        'index': device.get('Index'),
+                        'drive_type': drive_type
+                    }
+        else:
+            logging.debug(f"Fallback source not found: {nvme_list_file}")
             
     except (FileNotFoundError, IOError, json.JSONDecodeError) as e:
         logging.debug(f"Error reading drive data from {bundle_dir}: {e}")
@@ -1146,31 +1146,64 @@ def list_drives_in_bundle(bundle_dir):
     drives = []
     
     try:
-        # Check nvme_list.json as primary source
-        nvme_list_file = bundle_dir / 'nvme_list.json'
-        if nvme_list_file.exists():
-            logging.debug(f"Reading primary source: {nvme_list_file}")
-            with open(nvme_list_file, 'r') as f:
+        # Check nvme_cli_list.json as primary source (has location data)
+        nvme_cli_file = bundle_dir / 'nvme_cli_list.json'
+        if nvme_cli_file.exists():
+            logging.debug(f"Reading primary source: {nvme_cli_file}")
+            with open(nvme_cli_file, 'r') as f:
                 nvme_data = json.load(f)
             
-            devices = nvme_data.get('Devices', [])
-            logging.debug(f"Found {len(devices)} devices in nvme_list.json")
+            # Check both drives and nvrams sections
+            drives_list = nvme_data.get('drives', [])
+            nvrams_list = nvme_data.get('nvrams', [])
+            all_drives = drives_list + nvrams_list
+            logging.debug(f"Found {len(drives_list)} drives and {len(nvrams_list)} nvrams in nvme_cli_list.json")
             
-            for device in devices:
-                model = device.get('ModelNumber')
-                path = device.get('DevicePath')
+            for drive in all_drives:
+                model = drive.get('model')
+                path = drive.get('path')
                 drive_type = determine_drive_type(model, path)
                 drives.append({
-                    'serial': device.get('SerialNumber'),
+                    'serial': drive.get('serial'),
                     'model': model,
                     'path': path,
-                    'size': device.get('PhysicalSize'),
-                    'firmware_rev': device.get('Firmware'),
-                    'index': device.get('Index'),
+                    'size': drive.get('size'),
+                    'pci_switch_position': drive.get('pci_switch_position'),
+                    'pci_switch_slot': drive.get('pci_switch_slot'),
+                    'firmware_rev': drive.get('firmware_rev'),
+                    'temperature': drive.get('temperature'),
+                    'device_minor': drive.get('device_minor'),
+                    'index': drive.get('device_minor'),  # Use device_minor as index
                     'drive_type': drive_type
                 })
         else:
-            logging.debug(f"Primary source not found: {nvme_list_file}")
+            logging.debug(f"Primary source not found: {nvme_cli_file}")
+            
+            # Fallback: check nvme_list.json (basic info only, no location)
+            nvme_list_file = bundle_dir / 'nvme_list.json'
+            if nvme_list_file.exists():
+                logging.debug(f"Reading fallback source: {nvme_list_file}")
+                with open(nvme_list_file, 'r') as f:
+                    nvme_data = json.load(f)
+                
+                devices = nvme_data.get('Devices', [])
+                logging.debug(f"Found {len(devices)} devices in nvme_list.json")
+                
+                for device in devices:
+                    model = device.get('ModelNumber')
+                    path = device.get('DevicePath')
+                    drive_type = determine_drive_type(model, path)
+                    drives.append({
+                        'serial': device.get('SerialNumber'),
+                        'model': model,
+                        'path': path,
+                        'size': device.get('PhysicalSize'),
+                        'firmware_rev': device.get('Firmware'),
+                        'index': device.get('Index'),
+                        'drive_type': drive_type
+                    })
+            else:
+                logging.debug(f"Fallback source not found: {nvme_list_file}")
     
     except Exception as e:
         logging.debug(f"Error reading drive data from {bundle_dir}: {e}")
@@ -1253,22 +1286,36 @@ def render_drive_list_table(drives, drive_type_label="Drives"):
     drive_table = Table()
     
     # Add drive header
-    drive_table.add_row("Node", "Index", "Type", "DevicePath", "Model", "Serial", style="default")
+    drive_table.add_row("Type", "Serial", "Location", "Node", "Index", "DevicePath", "Model", style="default")
     drive_table.add_separator()
     
-    # Sort drives by node name, then by index
-    sorted_drives = sorted(drives, key=lambda d: (d.get('node_name', 'Unknown'), d.get('index', 999)))
+    # Sort drives by slot number (from pci_switch_slot), then by node name
+    def sort_key(drive):
+        slot = drive.get('pci_switch_slot', 999)  # Use high number for missing slots
+        node_name = drive.get('node_name', 'Unknown')
+        return (slot, node_name)
+    
+    sorted_drives = sorted(drives, key=sort_key)
     
     # Add each drive
     for drive in sorted_drives:
         node_name = drive.get('node_name', 'Unknown')
         index = str(drive.get('index', 'N/A'))
+        
+        # Calculate location from pci_switch_position and pci_switch_slot
+        pci_position = drive.get('pci_switch_position')
+        pci_slot = drive.get('pci_switch_slot')
+        if pci_position and pci_slot:
+            location = f"{pci_position}-{pci_slot}"
+        else:
+            location = 'Unknown'
+        
         drive_type = drive.get('drive_type', 'Unknown')
         path = drive.get('path', 'Unknown')
         model = drive.get('model', 'Unknown')
         serial = drive.get('serial', 'Unknown')
         
-        drive_table.add_row(node_name, index, drive_type, path, model, serial)
+        drive_table.add_row(drive_type, serial, location, node_name, index, path, model)
     
     outputs.append(render_table(drive_table))
     
@@ -1403,11 +1450,19 @@ def build_drive_rma_form_from_legacy_data(drive_info, node_info, sibling_nodes_d
         sibling_nodes.append(sibling_node)
     
     # Build Drive
+    # Calculate location from pci_switch_position and pci_switch_slot
+    pci_position = drive_info.get('pci_switch_position')
+    pci_slot = drive_info.get('pci_switch_slot')
+    if pci_position and pci_slot:
+        location = f"{pci_position}-{pci_slot}"
+    else:
+        location = drive_info.get('location', 'Unknown')
+    
     drive = Drive(
         serial_number=drive_info.get('serial'),
         model_number=drive_info.get('model', ''),
         device_path=drive_info.get('path', ''),
-        location_in_box=drive_info.get('location', 'Unknown'),
+        location_in_box=location,
         drive_type=drive_info.get('drive_type', 'ssd'),
         size=drive_info.get('size')
     )
