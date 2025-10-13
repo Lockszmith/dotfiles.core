@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Node and SSD Information Extractor
+RMA Preparation Tool
 
 This script extracts node information (dnodes and cnodes) and SSD information from 
 bundle directories and formats it according to the specified output format. It can 
@@ -39,6 +39,13 @@ Examples:
     python rma_prep.py '172.16.1.11'
     python rma_prep.py 'BOX.*123'
     python rma_prep.py --ssd PHAC2070006C30PGGN
+
+
+This is a refactored version of rma_prep.py that follows Luna's architectural patterns:
+- Object-oriented design with cached properties
+- Hierarchical data model (Cluster -> Bundle -> Node -> Device)
+- Separation of data loading from presentation
+- Lazy evaluation for performance
 """
 
 import sys
@@ -51,233 +58,716 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Optional, Literal, Union
+from typing import List, Optional, Dict, Any, Union
+from functools import cached_property
 
 
 # ============================================================================
-# Data Model Classes (see MODEL.md for detailed documentation)
+# Utility Decorators (Luna-style)
 # ============================================================================
 
-@dataclass
+def cached_method(func):
+    """Cache method results (similar to Luna's locking_cache)"""
+    cache_attr = f'_cached_{func.__name__}'
+    
+    def wrapper(self, *args, **kwargs):
+        if not hasattr(self, cache_attr):
+            setattr(self, cache_attr, {})
+        cache = getattr(self, cache_attr)
+        
+        key = (args, tuple(sorted(kwargs.items())))
+        if key not in cache:
+            cache[key] = func(self, *args, **kwargs)
+        return cache[key]
+    
+    return wrapper
+
+
+# ============================================================================
+# Core Data Model (Luna-inspired hierarchy)
+# ============================================================================
+
 class NetworkInfo:
     """Network configuration for a node"""
-    mgmt_ip: Optional[str] = None
-    ipmi_ip: Optional[str] = None
-    mac_address: Optional[str] = None
-    data_ip: Optional[str] = None
+    def __init__(self, mgmt_ip=None, ipmi_ip=None, mac_address=None, data_ip=None):
+        self.mgmt_ip = mgmt_ip
+        self.ipmi_ip = ipmi_ip
+        self.mac_address = mac_address
+        self.data_ip = data_ip
 
 
-@dataclass
+class Device:
+    """Base device class (SSD or NVRAM)"""
+    
+    def __init__(self, serial: str, bundle: 'Bundle'):
+        self.serial = serial
+        self._bundle = bundle
+        self._raw_data = None
+    
+    def __repr__(self):
+        return f'<{self.__class__.__name__}-{self.serial}>'
+    
+    def __eq__(self, other):
+        return self.serial == other.serial
+    
+    def __hash__(self):
+        return hash(self.serial)
+    
+    @cached_property
+    def data(self) -> Optional[Dict[str, Any]]:
+        """Load device data from bundle (lazy)"""
+        # Try primary source: nvme_cli_list.json
+        nvme_cli_file = self._bundle.path / 'nvme_cli_list.json'
+        if nvme_cli_file.exists():
+            try:
+                with open(nvme_cli_file, 'r') as f:
+                    nvme_data = json.load(f)
+                
+                all_drives = nvme_data.get('drives', []) + nvme_data.get('nvrams', [])
+                for drive in all_drives:
+                    if drive.get('serial') == self.serial:
+                        return drive
+            except (json.JSONDecodeError, IOError):
+                pass
+        
+        # Fallback: nvme_list.json
+        nvme_list_file = self._bundle.path / 'nvme_list.json'
+        if nvme_list_file.exists():
+            try:
+                with open(nvme_list_file, 'r') as f:
+                    nvme_data = json.load(f)
+                
+                devices = nvme_data.get('Devices', [])
+                for device in devices:
+                    if device.get('SerialNumber') == self.serial:
+                        return {
+                            'serial': device.get('SerialNumber'),
+                            'model': device.get('ModelNumber'),
+                            'path': device.get('DevicePath'),
+                            'size': device.get('PhysicalSize'),
+                            'firmware_rev': device.get('Firmware'),
+                            'index': device.get('Index'),
+                        }
+            except (json.JSONDecodeError, IOError):
+                pass
+        
+        return None
+    
+    @cached_property
+    def model(self) -> str:
+        return self.data.get('model', 'Unknown') if self.data else 'Unknown'
+    
+    @cached_property
+    def path(self) -> str:
+        return self.data.get('path', 'Unknown') if self.data else 'Unknown'
+    
+    @cached_property
+    def size(self) -> Optional[str]:
+        return self.data.get('size') if self.data else None
+    
+    @cached_property
+    def pci_switch_position(self) -> Optional[str]:
+        return self.data.get('pci_switch_position') if self.data else None
+    
+    @cached_property
+    def pci_switch_slot(self) -> Optional[int]:
+        return self.data.get('pci_switch_slot') if self.data else None
+    
+    @cached_property
+    def location_in_box(self) -> str:
+        """Calculate location from PCI switch info"""
+        if self.pci_switch_position and self.pci_switch_slot:
+            return f"{self.pci_switch_position}-{self.pci_switch_slot}"
+        return 'Unknown'
+    
+    @cached_property
+    def drive_type(self) -> str:
+        """Determine if this is SSD or NVRAM"""
+        model_lower = self.model.lower()
+        path_lower = self.path.lower()
+        
+        nvram_indicators = ['optane', 'dcpmm', 'ssdpe21k', 'scm', 'nvdimm', 'pmem', 'pascari']
+        
+        for indicator in nvram_indicators:
+            if indicator in model_lower or indicator in path_lower:
+                return 'nvram'
+        
+        return 'ssd'
+    
+    @cached_property
+    def node(self) -> Optional['Node']:
+        """Get the node this device belongs to"""
+        return self._bundle.node
+
+
 class Node:
-    """A compute node (CNode) or data node (DNode)"""
-    name: str
-    serial_number: str
-    position: str  # "top", "bottom"
-    network: NetworkInfo
-    node_type: Literal["dnode", "cnode"]
-    is_smbus_master: bool = False
-
-
-@dataclass
-class Drive:
-    """Storage drive (SSD or NVRAM)"""
-    serial_number: str
-    model_number: str
-    device_path: str
-    location_in_box: str  # e.g., "A-1", "B-2"
-    drive_type: Literal["ssd", "nvram"]
-    size: Optional[str] = None
-
-
-@dataclass
-class PSU:
-    """Power Supply Unit"""
-    serial_number: str
-    location_in_box: str
-    model_number: Optional[str] = None
-
-
-@dataclass
-class Fan:
-    """Cooling fan"""
-    serial_number: str
-    location_in_box: Optional[str] = None
-    location_in_node: Optional[str] = None
-    associated_node: Optional[str] = None
-    model_number: Optional[str] = None
-
-
-@dataclass
-class DTray:
-    """Data Tray - contains DNodes within a DBox"""
-    position: str  # "top", "bottom"
-    nodes: List[Node] = field(default_factory=list)
-
-
-@dataclass
-class DBox:
-    """Data Box - contains drives and DNodes"""
-    serial_number: str
-    nodes: List[Node] = field(default_factory=list)
-    dtrays: List[DTray] = field(default_factory=list)
-    drives: List[Drive] = field(default_factory=list)
-    fans: List[Fan] = field(default_factory=list)
-    psus: List[PSU] = field(default_factory=list)
-    manufacturer_id: Optional[str] = None
-    product_id: Optional[str] = None
+    """Represents a compute or data node"""
     
-    @property
-    def has_dtrays(self) -> bool:
-        """Check if this DBox uses DTray configuration"""
-        return len(self.dtrays) > 0
+    def __init__(self, bundle: 'Bundle'):
+        self._bundle = bundle
     
-    @property
-    def smbus_master_node(self) -> Optional[Node]:
-        """Find the SMBus master node in this box"""
-        for node in self.nodes:
-            if node.is_smbus_master:
-                return node
+    def __repr__(self):
+        return f'<{self.__class__.__name__}-{self.name}>'
+    
+    @cached_property
+    def _monitor_data(self) -> Optional[Dict[str, Any]]:
+        """Load monitor_result.json (lazy)"""
+        monitor_file = self._bundle.path / 'monitor_result.json'
+        if not monitor_file.exists():
+            return None
+        
+        try:
+            with open(monitor_file, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return None
+    
+    @cached_property
+    def _node_info(self) -> Dict[str, Any]:
+        """Extract node info from monitor data"""
+        if not self._monitor_data:
+            return {}
+        
+        node_info = self._monitor_data.get('node', {}).get('info', {})
+        return {
+            'name': node_info.get('system_product_name', ''),
+            'position': node_info.get('position', ''),
+            'serial_number': node_info.get('system_serial_number', ''),
+        }
+    
+    @cached_property
+    def hostname(self) -> Optional[str]:
+        """Extract hostname from systemctl output"""
+        systemctl_file = self._bundle.path / 'systemctl_output' / 'systemctl_status.txt'
+        if not systemctl_file.exists():
+            return None
+        
+        try:
+            with open(systemctl_file, 'r') as f:
+                first_line = f.readline().strip()
+            
+            if first_line.startswith('●'):
+                return first_line[1:].strip()
+        except (IOError, OSError):
+            pass
+        
+        return None
+    
+    @cached_property
+    def name(self) -> str:
+        """Node name (hostname preferred, fallback to system_product_name)"""
+        return self.hostname or self._node_info.get('name', 'Unknown')
+    
+    @cached_property
+    def serial_number(self) -> str:
+        """Board serial number from FRU or system serial"""
+        # Check FRU for board serial
+        fru_file = self._bundle.path / 'ipmitool' / 'ipmitool_fru_list.txt'
+        if fru_file.exists():
+            board_serial = self._extract_board_serial_from_fru(fru_file)
+            if board_serial:
+                return board_serial
+        
+        return self._node_info.get('serial_number', 'Unknown')
+    
+    @cached_property
+    def position(self) -> str:
+        return self._node_info.get('position', 'Unknown')
+    
+    @cached_property
+    def network(self) -> NetworkInfo:
+        """Network configuration (lazy)"""
+        if not self._monitor_data:
+            return NetworkInfo()
+        
+        nics = self._monitor_data.get('nics', {})
+        mgmt_ip = None
+        mac_address = None
+        data_ips = []
+        
+        for nic_name, nic_info in nics.items():
+            nic_data = nic_info.get('info', {})
+            address = nic_data.get('address', '')
+            nic_mac = nic_data.get('mac_address', '')
+            
+            # Management IP (10.x.x.x)
+            if address and address.startswith('10.') and not mgmt_ip:
+                mgmt_ip = address
+                mac_address = nic_mac
+            
+            # Data IP (172.16.x.x)
+            if address and address.startswith('172.16.'):
+                data_ips.append(address)
+        
+        data_ip = min(data_ips) if data_ips else None
+        ipmi_ip = self._extract_ipmi_ip()
+        
+        return NetworkInfo(
+            mgmt_ip=mgmt_ip,
+            ipmi_ip=ipmi_ip,
+            mac_address=mac_address,
+            data_ip=data_ip
+        )
+    
+    @cached_property
+    def node_type(self) -> str:
+        """Determine node type (dnode/cnode) from hostname or data IP"""
+        # First: check hostname
+        if self.hostname:
+            hostname_lower = self.hostname.lower()
+            if 'dnode' in hostname_lower:
+                return 'dnode'
+            elif 'cnode' in hostname_lower:
+                return 'cnode'
+        
+        # Fallback: use data IP last octet
+        if self.network.data_ip:
+            try:
+                last_octet = int(self.network.data_ip.split('.')[-1])
+                return 'dnode' if last_octet >= 100 else 'cnode'
+            except (ValueError, IndexError):
+                pass
+        
+        return 'unknown'
+    
+    @cached_property
+    def box_serial(self) -> Optional[str]:
+        """Box serial number from FRU"""
+        fru_file = self._bundle.path / 'ipmitool' / 'ipmitool_fru_list.txt'
+        if fru_file.exists():
+            return self._extract_box_serial_from_fru(fru_file)
+        return None
+    
+    @cached_property
+    def manufacturer_id(self) -> Optional[str]:
+        """Manufacturer ID from mc_info"""
+        mc_info_file = self._bundle.path / 'ipmitool' / 'ipmitool_mc_info.txt'
+        if mc_info_file.exists():
+            return self._extract_manufacturer_id(mc_info_file)
+        return None
+    
+    @cached_property
+    def product_id(self) -> Optional[str]:
+        """Product ID from mc_info"""
+        mc_info_file = self._bundle.path / 'ipmitool' / 'ipmitool_mc_info.txt'
+        if mc_info_file.exists():
+            return self._extract_product_id(mc_info_file)
+        return None
+    
+    @cached_property
+    def devices(self) -> List[Device]:
+        """List all devices on this node (lazy)"""
+        devices = []
+        
+        # Try nvme_cli_list.json
+        nvme_cli_file = self._bundle.path / 'nvme_cli_list.json'
+        if nvme_cli_file.exists():
+            try:
+                with open(nvme_cli_file, 'r') as f:
+                    nvme_data = json.load(f)
+                
+                drives_list = nvme_data.get('drives', [])
+                nvrams_list = nvme_data.get('nvrams', [])
+                all_drives = drives_list + nvrams_list
+                
+                for drive_data in all_drives:
+                    serial = drive_data.get('serial')
+                    if serial:
+                        devices.append(Device(serial, self._bundle))
+            except (json.JSONDecodeError, IOError):
+                pass
+        
+        return devices
+    
+    # Private helper methods
+    def _extract_ipmi_ip(self) -> Optional[str]:
+        """Extract IPMI IP from lan print files"""
+        ipmitool_dir = self._bundle.path / 'ipmitool'
+        if not ipmitool_dir.exists():
+            return None
+        
+        for lan_file in ipmitool_dir.glob('ipmitool_lan_print_*.txt'):
+            try:
+                with open(lan_file, 'r') as f:
+                    content = f.read()
+                
+                match = re.search(r'IP Address\s+:\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', content)
+                if match:
+                    ipmi_ip = match.group(1)
+                    if ipmi_ip != '0.0.0.0':
+                        return ipmi_ip
+            except IOError:
+                continue
+        
+        return None
+    
+    @staticmethod
+    def _extract_box_serial_from_fru(fru_file_path: Path) -> Optional[str]:
+        """Extract Box serial from FRU file"""
+        try:
+            with open(fru_file_path, 'r') as f:
+                content = f.read()
+            match = re.search(r'Chassis Serial\s+:\s+(\S+)', content)
+            if match:
+                return match.group(1)
+        except IOError:
+            pass
+        return None
+    
+    @staticmethod
+    def _extract_board_serial_from_fru(fru_file_path: Path) -> Optional[str]:
+        """Extract Board serial from FRU file"""
+        try:
+            with open(fru_file_path, 'r') as f:
+                content = f.read()
+            match = re.search(r'Board Serial\s+:\s+(\S+)', content)
+            if match:
+                return match.group(1)
+        except IOError:
+            pass
+        return None
+    
+    @staticmethod
+    def _extract_manufacturer_id(mc_info_file: Path) -> Optional[str]:
+        """Extract Manufacturer ID from mc_info"""
+        try:
+            with open(mc_info_file, 'r') as f:
+                content = f.read()
+            match = re.search(r'Manufacturer ID\s+:\s+(\d+)', content)
+            if match:
+                return match.group(1)
+        except IOError:
+            pass
+        return None
+    
+    @staticmethod
+    def _extract_product_id(mc_info_file: Path) -> Optional[str]:
+        """Extract Product ID from mc_info"""
+        try:
+            with open(mc_info_file, 'r') as f:
+                content = f.read()
+            match = re.search(r'Product ID\s+:\s+(\d+)', content)
+            if match:
+                return match.group(1)
+        except IOError:
+            pass
         return None
 
 
-@dataclass
-class CBox:
-    """Compute Box - contains CNodes"""
-    serial_number: str
-    nodes: List[Node] = field(default_factory=list)
-    boot_drives: List[Drive] = field(default_factory=list)
-    fans: List[Fan] = field(default_factory=list)
-    psus: List[PSU] = field(default_factory=list)
+class Bundle:
+    """Represents a bundle directory (similar to Luna's harvest)"""
     
-    @property
-    def smbus_master_node(self) -> Optional[Node]:
-        """Find the SMBus master node in this box"""
-        for node in self.nodes:
-            if node.is_smbus_master:
-                return node
+    def __init__(self, path: Path, display_path: Optional[str] = None):
+        self.path = path
+        self.display_path = display_path or str(path)
+    
+    def __repr__(self):
+        return f'<Bundle-{self.path.name}>'
+    
+    @cached_property
+    def node(self) -> Optional[Node]:
+        """Get the node for this bundle (lazy)"""
+        return Node(self)
+    
+    @cached_property
+    def create_time(self) -> Optional[str]:
+        """Extract bundle creation time from BUNDLE_ARGS"""
+        bundle_args_file = self.path / 'METADATA' / 'BUNDLE_ARGS'
+        if not bundle_args_file.exists():
+            return None
+        
+        try:
+            with open(bundle_args_file, 'r') as f:
+                content = f.read()
+            
+            # Look for create_time or start_time
+            for pattern in [r'create_time:\s+(.+)', r'start_time:\s+(.+)']:
+                match = re.search(pattern, content)
+                if match:
+                    time_str = match.group(1).split('.')[0]  # Remove microseconds
+                    return time_str
+        except IOError:
+            pass
+        
+        return None
+    
+    @cached_property
+    def create_datetime(self) -> Optional[datetime]:
+        """Parse create_time as datetime object"""
+        if self.create_time:
+            try:
+                return datetime.strptime(self.create_time, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                pass
+        return None
+    
+    def find_device(self, serial: str) -> Optional[Device]:
+        """Find a specific device by serial number"""
+        for device in self.node.devices:
+            if device.serial == serial:
+                return device
         return None
 
 
-@dataclass
-class RMAContext:
-    """Site location and case tracking information"""
-    case_number: str  # 8-char format: "00090597" or "000...."
-    cluster: str
-    tracking: str = "FedEx #  <TBD>"
-    delivery_eta: str = ""
-    room_rack_ru: str = ""
-
-
-@dataclass
-class DriveRMAForm:
-    """RMA form for SSD/NVRAM drive replacement"""
-    context: RMAContext
-    drive: Drive
-    dbox: DBox
+class Cluster:
+    """Cluster-level operations (similar to Luna's Cluster object)"""
     
-    @property
-    def title(self) -> str:
-        return "SSD Replacement" if self.drive.drive_type == "ssd" else "NVRAM Replacement"
+    def __init__(self, bundles: List[Bundle]):
+        self._bundles = bundles
     
-    @property
-    def fru_part(self) -> str:
-        return "FRU_..."
+    def __repr__(self):
+        return f'<Cluster with {len(self._bundles)} bundles>'
     
-    @property
-    def associated_node(self) -> Optional[Node]:
-        """Primary DNode associated with this drive (by index/position)"""
-        # For now, return first node if available
-        # TODO: Match by drive index calculation
-        return self.dbox.nodes[0] if self.dbox.nodes else None
+    @cached_property
+    def bundles(self) -> List[Bundle]:
+        """All bundles in this cluster"""
+        return self._bundles
     
-    @property
-    def sibling_nodes(self) -> List[Node]:
-        """Other DNodes in the same DBox"""
-        if not self.associated_node:
-            return self.dbox.nodes
-        return [n for n in self.dbox.nodes if n != self.associated_node]
-
-
-@dataclass
-class NodeRMAForm:
-    """RMA form for node replacement"""
-    context: RMAContext
-    node: Node
-    box: Union[DBox, CBox]
-    dtray: Optional[DTray] = None
+    @cached_property
+    def nodes(self) -> List[Node]:
+        """All nodes in this cluster (lazy)"""
+        return [bundle.node for bundle in self._bundles if bundle.node]
     
-    @property
-    def title(self) -> str:
-        return f"{self.node.node_type.upper()} Replacement"
+    @cached_property
+    def dnodes(self) -> List[Node]:
+        """All data nodes"""
+        return [node for node in self.nodes if node.node_type == 'dnode']
     
-    @property
-    def fru_part(self) -> str:
-        return f"FRU-___-{self.node.node_type.upper()}-___"
+    @cached_property
+    def cnodes(self) -> List[Node]:
+        """All compute nodes"""
+        return [node for node in self.nodes if node.node_type == 'cnode']
     
-    @property
-    def sibling_nodes(self) -> List[Node]:
-        """Other nodes in the same box/dtray"""
-        if self.dtray:
-            return [n for n in self.dtray.nodes if n != self.node]
-        return [n for n in self.box.nodes if n != self.node]
-
-
-@dataclass
-class PSURMAForm:
-    """RMA form for PSU replacement"""
-    context: RMAContext
-    psu: PSU
-    box: Union[DBox, CBox]
+    @cached_property
+    def cluster_names(self) -> List[str]:
+        """Extract all cluster names from nodes"""
+        names = set()
+        
+        for node in self.nodes:
+            # Try to extract from hostname (e.g., "shavast02-dnode143" -> "shavast02")
+            if node.hostname:
+                # Split on dash and take first part
+                parts = node.hostname.split('-')
+                if len(parts) >= 2:
+                    # Check if it looks like a cluster name (not just "dnode" or "cnode")
+                    cluster_part = parts[0]
+                    if cluster_part.lower() not in ['dnode', 'cnode', 'node']:
+                        names.add(cluster_part)
+        
+        # Also try to extract from vast-configure_network.py-params.ini
+        for bundle in self._bundles:
+            config_file = bundle.path / 'vast-configure_network.py-params.ini'
+            if config_file.exists():
+                try:
+                    with open(config_file, 'r') as f:
+                        for line in f:
+                            if line.startswith('cluster_name'):
+                                match = re.search(r'cluster_name\s*=\s*["\']?([^"\']+)["\']?', line)
+                                if match:
+                                    names.add(match.group(1).strip())
+                except (IOError, OSError):
+                    pass
+        
+        return sorted(list(names))
     
-    @property
-    def title(self) -> str:
-        return "PSU Replacement"
+    @cached_property
+    def cluster_name(self) -> str:
+        """Get single cluster name or comma-separated list"""
+        names = self.cluster_names
+        if not names:
+            return "Unknown"
+        return ", ".join(names)
     
-    @property
-    def fru_part(self) -> str:
-        return "FRU_..."
+    @cached_method
+    def nodes_by_box(self, box_serial: str) -> List[tuple[Node, Bundle]]:
+        """Get all nodes in a specific box"""
+        results = []
+        for bundle in self._bundles:
+            node = bundle.node
+            if node and node.box_serial == box_serial:
+                results.append((node, bundle))
+        return results
     
-    @property
-    def smbus_master(self) -> Optional[Node]:
-        return self.box.smbus_master_node
+    @cached_method
+    def find_device(self, serial: str) -> Optional[tuple[Device, Node, Bundle]]:
+        """Find a device across all bundles"""
+        for bundle in self._bundles:
+            device = bundle.find_device(serial)
+            if device:
+                return device, bundle.node, bundle
+        return None
     
-    @property
-    def all_nodes(self) -> List[Node]:
-        return self.box.nodes
-
-
-@dataclass
-class FanRMAForm:
-    """RMA form for fan replacement"""
-    context: RMAContext
-    fan: Fan
-    box: Union[DBox, CBox]
-    associated_node: Optional[Node] = None
-    
-    @property
-    def title(self) -> str:
-        return "Fan Replacement"
-    
-    @property
-    def fru_part(self) -> str:
-        return "FRU_..."
-    
-    @property
-    def smbus_master(self) -> Optional[Node]:
-        return self.box.smbus_master_node
-    
-    @property
-    def all_nodes(self) -> List[Node]:
-        return self.box.nodes
+    @cached_method
+    def find_node(self, identifier: str) -> List[tuple[Node, Bundle]]:
+        """Find node(s) by name, serial, IP, or regex pattern"""
+        results = []
+        
+        # Try exact match first
+        for bundle in self._bundles:
+            node = bundle.node
+            if not node:
+                continue
+            
+            if (node.name == identifier or
+                node.serial_number == identifier or
+                node.network.mgmt_ip == identifier or
+                node.network.data_ip == identifier):
+                results.append((node, bundle))
+        
+        if results:
+            return results
+        
+        # Try regex match
+        try:
+            pattern = re.compile(identifier, re.IGNORECASE)
+            for bundle in self._bundles:
+                node = bundle.node
+                if not node:
+                    continue
+                
+                if (pattern.search(node.name) or
+                    pattern.search(node.serial_number or '') or
+                    pattern.search(node.network.mgmt_ip or '') or
+                    pattern.search(node.network.data_ip or '') or
+                    pattern.search(node.box_serial or '')):
+                    results.append((node, bundle))
+        except re.error:
+            pass
+        
+        return results
 
 
 # ============================================================================
-# Generic Table Data Structure
+# Cluster Initialization (similar to Luna's cluster discovery)
+# ============================================================================
+
+class ClusterDiscovery:
+    """Discover and initialize cluster from bundle directories"""
+    
+    @staticmethod
+    def find_bundle_directories(max_depth: int = 5) -> List[Path]:
+        """Find all bundle directories by looking for METADATA/BUNDLE_ARGS"""
+        bundle_dirs = []
+        current_dir = Path('.')
+        
+        # Check current directory
+        if (current_dir / 'METADATA' / 'BUNDLE_ARGS').exists():
+            bundle_dirs.append(current_dir)
+        
+        # Recursively search subdirectories
+        def search_directory(directory: Path, current_level: int = 0):
+            if current_level > max_depth:
+                return
+            
+            try:
+                for item in directory.iterdir():
+                    if item.is_dir():
+                        if (item / 'METADATA' / 'BUNDLE_ARGS').exists():
+                            bundle_dirs.append(item)
+                        else:
+                            search_directory(item, current_level + 1)
+            except (PermissionError, OSError):
+                pass
+        
+        search_directory(current_dir)
+        return bundle_dirs
+    
+    @staticmethod
+    def filter_latest_bundles_per_node(bundles: List[Bundle]) -> List[Bundle]:
+        """Keep only the latest bundle per node (by hostname)"""
+        node_bundles = defaultdict(list)
+        
+        for bundle in bundles:
+            node = bundle.node
+            if not node:
+                continue
+            
+            hostname = node.hostname or node.name
+            if not hostname:
+                continue
+            
+            timestamp = bundle.create_datetime or datetime.min
+            node_bundles[hostname].append((bundle, timestamp))
+        
+        # Keep latest per node
+        latest_bundles = []
+        for hostname, bundle_list in node_bundles.items():
+            if bundle_list:
+                latest_bundle = max(bundle_list, key=lambda x: x[1])
+                latest_bundles.append(latest_bundle[0])
+        
+        return latest_bundles
+    
+    @staticmethod
+    def calculate_display_paths(bundles: List[Bundle]) -> Dict[Bundle, str]:
+        """Calculate minimum unique path components for display"""
+        if not bundles:
+            return {}
+        
+        current_dir = Path('.').resolve()
+        relative_paths = {}
+        
+        for bundle in bundles:
+            try:
+                rel_path = bundle.path.resolve().relative_to(current_dir)
+                relative_paths[bundle] = rel_path.parts
+            except ValueError:
+                relative_paths[bundle] = bundle.path.resolve().parts
+        
+        if not relative_paths:
+            return {}
+        
+        # Find minimum components needed for uniqueness
+        max_components = max(len(parts) for parts in relative_paths.values())
+        
+        for num_components in range(1, max_components + 1):
+            shortened_paths = {}
+            for bundle, parts in relative_paths.items():
+                if len(parts) >= num_components:
+                    shortened = '/'.join(parts[:num_components])
+                else:
+                    shortened = '/'.join(parts)
+                shortened_paths[bundle] = shortened
+            
+            if len(set(shortened_paths.values())) == len(shortened_paths):
+                return shortened_paths
+        
+        # Fallback: full paths
+        return {bundle: '/'.join(parts) for bundle, parts in relative_paths.items()}
+    
+    @classmethod
+    def discover(cls) -> Cluster:
+        """Discover cluster from current directory"""
+        logging.debug("Starting cluster discovery...")
+        
+        # Find bundle directories
+        bundle_paths = cls.find_bundle_directories()
+        logging.debug(f"Found {len(bundle_paths)} bundle directories")
+        
+        if not bundle_paths:
+            raise RuntimeError("No bundle directories found")
+        
+        # Create Bundle objects
+        bundles = [Bundle(path) for path in bundle_paths]
+        
+        # Filter to latest per node
+        bundles = cls.filter_latest_bundles_per_node(bundles)
+        logging.debug(f"After filtering: {len(bundles)} bundles (latest per node)")
+        
+        # Calculate display paths
+        display_paths = cls.calculate_display_paths(bundles)
+        for bundle in bundles:
+            bundle.display_path = display_paths.get(bundle, str(bundle.path))
+        
+        return Cluster(bundles)
+
+
+# ============================================================================
+# RMA Form Rendering (kept from original)
 # ============================================================================
 
 @dataclass
 class TableCell:
-    """A single cell in a table"""
     content: str = ""
     
     def __str__(self) -> str:
@@ -286,12 +776,10 @@ class TableCell:
 
 @dataclass
 class TableRow:
-    """A row in a table with styling"""
     cells: List[TableCell]
-    style: Literal["default", "subtitle", "separator"] = "default"
+    style: str = "default"  # default, subtitle, separator
     
-    def __init__(self, *cells: Union[str, TableCell], style: Literal["default", "subtitle", "separator"] = "default"):
-        """Create a row from cell content or TableCell objects"""
+    def __init__(self, *cells: Union[str, TableCell], style: str = "default"):
         self.cells = []
         for cell in cells:
             if isinstance(cell, TableCell):
@@ -303,24 +791,18 @@ class TableRow:
 
 @dataclass
 class Table:
-    """A generic table structure"""
     rows: List[TableRow] = field(default_factory=list)
     
-    def add_row(self, *cells: Union[str, TableCell], style: Literal["default", "subtitle", "separator"] = "default"):
-        """Add a row to the table"""
+    def add_row(self, *cells: Union[str, TableCell], style: str = "default"):
         self.rows.append(TableRow(*cells, style=style))
     
     def add_separator(self):
-        """Add a separator row (will be rendered as dashes)"""
-        # Separator rows are special - they don't need cell content
         self.rows.append(TableRow(style="separator"))
     
     def calculate_column_widths(self) -> List[int]:
-        """Calculate optimal width for each column based on content"""
         if not self.rows:
             return []
         
-        # Determine number of columns (from first non-separator row)
         num_columns = 0
         for row in self.rows:
             if row.style != "separator":
@@ -330,27 +812,19 @@ class Table:
         if num_columns == 0:
             return []
         
-        # Calculate max width for each column
         widths = [0] * num_columns
         
         for row in self.rows:
             if row.style == "separator":
-                continue  # Skip separators in width calculation
+                continue
             
             for i, cell in enumerate(row.cells):
                 if i < num_columns:
                     content_len = len(cell.content)
-                    
-                    # For subtitle rows, account for the "--- " prefix and suffix
                     if row.style == "subtitle" and i > 0:
-                        # Right column of subtitle: "--- content -----"
-                        # Add space for "--- " prefix (4 chars), content, " " (1 char), and "---" suffix (3 chars minimum)
-                        content_len = content_len + 8  # 4 + 1 + 3 = 8 extra chars
-                    # Left column of subtitle is always filled with dashes, so we skip special handling
-                    
+                        content_len = content_len + 8
                     widths[i] = max(widths[i], content_len)
         
-        # Ensure minimum widths (only for 2-column tables like RMA forms)
         if num_columns == 2:
             widths[0] = max(widths[0], 16)
             widths[1] = max(widths[1], 26)
@@ -358,16 +832,11 @@ class Table:
         return widths
 
 
-# ============================================================================
-# Generic Table Renderer
-# ============================================================================
-
 def render_table(table: Table) -> str:
     """Render a table to formatted string output"""
     if not table.rows:
         return ""
     
-    # Calculate column widths
     widths = table.calculate_column_widths()
     if not widths:
         return ""
@@ -376,22 +845,14 @@ def render_table(table: Table) -> str:
     
     for row in table.rows:
         if row.style == "separator":
-            # Render separator row (all dashes)
             parts = ['-' * width for width in widths]
             lines.append(f"| {' | '.join(parts)} |")
         
         elif row.style == "subtitle":
-            # Render subtitle row with special formatting
-            # For 2-column tables: Left column filled with dashes, right column "--- content -----"
-            # For multi-column tables: First column "--- content -----", rest filled with dashes
-            
             if len(widths) == 2:
-                # Original 2-column subtitle format
                 left = '-' * widths[0]
-                
                 if len(row.cells) > 1:
                     right_content = row.cells[1].content
-                    # Calculate padding for right side
                     available_width = widths[1]
                     content_with_prefix = f"--- {right_content} "
                     padding_needed = available_width - len(content_with_prefix)
@@ -399,18 +860,15 @@ def render_table(table: Table) -> str:
                     if padding_needed >= 3:
                         right = content_with_prefix + ('-' * padding_needed)
                     else:
-                        # Minimum 3 dashes on the right
                         right = content_with_prefix + '---'
                 else:
-                    right = '-' * widths[1] if len(widths) > 1 else ""
+                    right = '-' * widths[1]
                 
                 lines.append(f"| {left} | {right} |")
             else:
-                # Multi-column subtitle format: "--- content -----" in first column, rest dashes
                 parts = []
                 for i, width in enumerate(widths):
                     if i == 0 and len(row.cells) > 0:
-                        # First column: "--- content -----"
                         content = row.cells[0].content
                         content_with_prefix = f"--- {content} "
                         padding_needed = width - len(content_with_prefix)
@@ -418,16 +876,13 @@ def render_table(table: Table) -> str:
                         if padding_needed >= 3:
                             parts.append(content_with_prefix + ('-' * padding_needed))
                         else:
-                            # Minimum 3 dashes on the right
                             parts.append(content_with_prefix + '---')
                     else:
-                        # Other columns: filled with dashes
                         parts.append('-' * width)
                 
                 lines.append(f"| {' | '.join(parts)} |")
         
-        else:  # default style
-            # Render normal row with padding
+        else:
             parts = []
             for i, cell in enumerate(row.cells):
                 if i < len(widths):
@@ -438,218 +893,10 @@ def render_table(table: Table) -> str:
 
 
 # ============================================================================
-# Utility Functions
+# High-level presentation functions
 # ============================================================================
 
-def calculate_minimum_unique_paths(bundle_dirs):
-    """Calculate minimum unique path components for bundle directories."""
-    if not bundle_dirs:
-        return {}
-    
-    current_dir = Path('.').resolve()
-    
-    # Get relative paths from current directory
-    relative_paths = {}
-    for bundle_dir in bundle_dirs:
-        try:
-            rel_path = bundle_dir.resolve().relative_to(current_dir)
-            relative_paths[bundle_dir] = rel_path.parts
-        except ValueError:
-            # If bundle_dir is not relative to current_dir, use absolute path
-            relative_paths[bundle_dir] = bundle_dir.resolve().parts
-    
-    if not relative_paths:
-        return {}
-    
-    # Find minimum number of path components needed for uniqueness
-    max_components = max(len(parts) for parts in relative_paths.values())
-    
-    for num_components in range(1, max_components + 1):
-        # Create shortened paths with current number of components
-        shortened_paths = {}
-        for bundle_dir, parts in relative_paths.items():
-            if len(parts) >= num_components:
-                shortened = '/'.join(parts[:num_components])
-            else:
-                shortened = '/'.join(parts)
-            shortened_paths[bundle_dir] = shortened
-        
-        # Check if all shortened paths are unique
-        if len(set(shortened_paths.values())) == len(shortened_paths):
-            return shortened_paths
-    
-    # Fallback: return full relative paths
-    return {bundle_dir: '/'.join(parts) for bundle_dir, parts in relative_paths.items()}
-
-
-def find_bundle_directories():
-    """Find all bundle directories by looking for METADATA/BUNDLE_ARGS files up to 5 levels deep."""
-    bundle_dirs = []
-    current_dir = Path('.')
-    logging.debug(f"Starting bundle directory search from: {current_dir.resolve()}")
-    
-    # First, check if the current directory itself is a bundle directory
-    bundle_args_file = current_dir / 'METADATA' / 'BUNDLE_ARGS'
-    if bundle_args_file.exists():
-        logging.debug(f"Found bundle directory: {current_dir}")
-        bundle_dirs.append(current_dir)
-    
-    def search_directory(directory, current_level=0, max_levels=5):
-        """Recursively search for bundle directories."""
-        if current_level > max_levels:
-            logging.debug(f"Reached maximum search depth ({max_levels}) at: {directory}")
-            return
-        
-        try:
-            logging.debug(f"Searching directory (level {current_level}): {directory}")
-            for item in directory.iterdir():
-                if item.is_dir():
-                    # Check if this directory is a bundle directory
-                    bundle_args_file = item / 'METADATA' / 'BUNDLE_ARGS'
-                    if bundle_args_file.exists():
-                        logging.debug(f"Found bundle directory: {item}")
-                        bundle_dirs.append(item)
-                    else:
-                        # Recursively search subdirectories
-                        search_directory(item, current_level + 1, max_levels)
-        except (PermissionError, OSError) as e:
-            logging.debug(f"Cannot access directory {directory}: {e}")
-            pass
-    
-    search_directory(current_dir)
-    logging.debug(f"Found {len(bundle_dirs)} bundle directories total")
-    return bundle_dirs
-
-
-def filter_latest_bundles_per_node(bundle_dirs):
-    """Filter bundle directories to keep only the latest bundle per node.
-    
-    Groups bundles by node hostname and keeps only the most recent one.
-    """
-    logging.debug(f"Filtering {len(bundle_dirs)} bundles to keep only latest per node")
-    node_bundles = {}  # hostname -> list of (bundle_dir, timestamp)
-    
-    # First pass: collect all bundles with their timestamps and node info
-    for bundle_dir in bundle_dirs:
-        monitor_file = bundle_dir / 'monitor_result.json'
-        if not monitor_file.exists():
-            logging.debug(f"Skipping bundle (no monitor_result.json): {bundle_dir}")
-            continue
-        
-        # Extract basic node info
-        node_info = extract_node_info_from_monitor(monitor_file)
-        if not node_info:
-            continue
-        
-        # Extract hostname from systemctl output (preferred identifier)
-        hostname = extract_hostname_from_systemctl(bundle_dir)
-        if not hostname:
-            # Fallback to system_product_name if no hostname
-            hostname = node_info.get('name')
-        
-        if not hostname:
-            logging.debug(f"Skipping bundle (no hostname found): {bundle_dir}")
-            continue
-        
-        # Extract data IP from bundle directory (for logging purposes)
-        data_ip = extract_data_ip_from_bundle(bundle_dir)
-        
-        logging.debug(f"Processing bundle for node {hostname} (data IP: {data_ip}): {bundle_dir}")
-        
-        # Extract create_time from BUNDLE_ARGS file
-        timestamp = extract_create_time_from_bundle_args(bundle_dir, return_datetime=True)
-        if not timestamp:
-            # If no create_time found, use directory modification time as fallback
-            try:
-                timestamp = datetime.fromtimestamp(bundle_dir.stat().st_mtime)
-                logging.debug(f"Using directory mtime as timestamp for {bundle_dir}: {timestamp}")
-            except OSError:
-                timestamp = datetime.min
-                logging.debug(f"Could not get timestamp for {bundle_dir}, using minimum datetime")
-        else:
-            logging.debug(f"Using create_time as timestamp for {bundle_dir}: {timestamp}")
-        
-        # Group by hostname (which uniquely identifies a physical node)
-        if hostname not in node_bundles:
-            node_bundles[hostname] = []
-        node_bundles[hostname].append((bundle_dir, timestamp))
-    
-    # Second pass: keep only the latest bundle per node
-    latest_bundles = []
-    for hostname, bundles in node_bundles.items():
-        if bundles:
-            # Sort by timestamp and take the latest
-            latest_bundle = max(bundles, key=lambda x: x[1])
-            logging.debug(f"For node {hostname}, selected latest bundle: {latest_bundle[0]} (timestamp: {latest_bundle[1]})")
-            if len(bundles) > 1:
-                logging.debug(f"  Skipped {len(bundles)-1} older bundles for this node")
-            latest_bundles.append(latest_bundle[0])
-    
-    logging.debug(f"After filtering: {len(latest_bundles)} bundles (latest per node)")
-    return latest_bundles
-
-
-def extract_box_serial_from_fru(fru_file_path):
-    """Extract Box serial number from ipmitool FRU print file."""
-    try:
-        with open(fru_file_path, 'r') as f:
-            content = f.read()
-        
-        # Look for Chassis Serial line
-        match = re.search(r'Chassis Serial\s+:\s+(\S+)', content)
-        if match:
-            return match.group(1)
-    except (FileNotFoundError, IOError):
-        pass
-    return None
-
-
-def extract_board_serial_from_fru(fru_file_path):
-    """Extract Board serial number from ipmitool FRU print file."""
-    try:
-        with open(fru_file_path, 'r') as f:
-            content = f.read()
-        
-        # Look for Board Serial line
-        match = re.search(r'Board Serial\s+:\s+(\S+)', content)
-        if match:
-            return match.group(1)
-    except (FileNotFoundError, IOError):
-        pass
-    return None
-
-
-def extract_manufacturer_id_from_mc_info(mc_info_file_path):
-    """Extract Manufacturer ID from ipmitool mc info file."""
-    try:
-        with open(mc_info_file_path, 'r') as f:
-            content = f.read()
-        
-        # Look for Manufacturer ID line (format: "Manufacturer ID           : 9237")
-        match = re.search(r'Manufacturer ID\s+:\s+(\d+)', content)
-        if match:
-            return match.group(1)
-    except (FileNotFoundError, IOError):
-        pass
-    return None
-
-
-def extract_product_id_from_mc_info(mc_info_file_path):
-    """Extract Product ID from ipmitool mc info file."""
-    try:
-        with open(mc_info_file_path, 'r') as f:
-            content = f.read()
-        
-        # Look for Product ID line (format: "Product ID                : 238 (0x00ee)")
-        match = re.search(r'Product ID\s+:\s+(\d+)', content)
-        if match:
-            return match.group(1)
-    except (FileNotFoundError, IOError):
-        pass
-    return None
-
-
-def get_ip_last_octet(ip_address):
+def get_ip_last_octet(ip_address: Optional[str]) -> int:
     """Extract the last octet from an IP address for sorting purposes."""
     if not ip_address:
         return 0
@@ -659,1194 +906,153 @@ def get_ip_last_octet(ip_address):
         return 0
 
 
-def extract_ipmi_ip_from_bundle(bundle_dir):
-    """Extract IPMI IP address from ipmitool lan print files."""
-    try:
-        ipmitool_dir = bundle_dir / 'ipmitool'
-        if not ipmitool_dir.exists():
-            logging.debug(f"No ipmitool directory found: {ipmitool_dir}")
-            return None
-        
-        # Look for ipmitool_lan_print_*.txt files (usually channel 1)
-        lan_print_files = list(ipmitool_dir.glob('ipmitool_lan_print_*.txt'))
-        if not lan_print_files:
-            logging.debug(f"No ipmitool_lan_print files found in: {ipmitool_dir}")
-            return None
-        
-        # Try each lan print file (typically just one: ipmitool_lan_print_1.txt)
-        for lan_file in lan_print_files:
-            logging.debug(f"Reading IPMI configuration from: {lan_file}")
-            try:
-                with open(lan_file, 'r') as f:
-                    content = f.read()
-                
-                # Look for IP Address line
-                match = re.search(r'IP Address\s+:\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', content)
-                if match:
-                    ipmi_ip = match.group(1)
-                    # Exclude obviously invalid IPs
-                    if ipmi_ip != '0.0.0.0':
-                        logging.debug(f"Found IPMI IP: {ipmi_ip}")
-                        return ipmi_ip
-                    else:
-                        logging.debug(f"Skipping invalid IPMI IP: {ipmi_ip}")
-            except (IOError, OSError) as e:
-                logging.debug(f"Error reading IPMI lan file {lan_file}: {e}")
-                continue
-        
-        logging.debug("No valid IPMI IP found in any lan print files")
-    except (OSError, AttributeError) as e:
-        logging.debug(f"Error accessing IPMI files in {bundle_dir}: {e}")
+def ip_to_sort_key(ip_address: Optional[str]) -> tuple:
+    """Convert IP address to tuple of integers for numerical sorting.
     
-    return None
-
-
-def determine_node_type(data_ip=None, hostname=None, mgmt_ip=None):
-    """Determine node type based on hostname pattern first, then data IP (172.x.x.x).
-    
-    Args:
-        data_ip: Data network IP address string (e.g., "172.16.1.102")
-        hostname: Hostname string (e.g., "rd1vast02-dnode102")
-        mgmt_ip: Management IP address string (e.g., "10.1.1.100") - for logging only
-    
-    Returns:
-        'dnode' if hostname contains 'dnode' or data IP last octet >= 100, 'cnode' otherwise, or 'unknown' if invalid
+    Returns tuple of (octet1, octet2, octet3, octet4) for proper numerical comparison.
+    Returns (0, 0, 0, 0) for invalid/missing IPs.
     """
-    logging.debug(f"Determining node type: hostname='{hostname}', data_ip='{data_ip}', mgmt_ip='{mgmt_ip}'")
-    
-    # First priority: check hostname pattern for 'dnode' or 'cnode'
-    if hostname:
-        hostname_lower = hostname.lower()
-        if 'dnode' in hostname_lower:
-            logging.debug(f"Node type determined from hostname: dnode (found 'dnode' in '{hostname}')")
-            return 'dnode'
-        elif 'cnode' in hostname_lower:
-            logging.debug(f"Node type determined from hostname: cnode (found 'cnode' in '{hostname}')")
-            return 'cnode'
-        else:
-            logging.debug(f"Hostname '{hostname}' does not contain dnode/cnode pattern, falling back to data IP")
-    
-    # Fallback: use data IP logic (172.x.x.x range)
-    if not data_ip:
-        logging.debug("No data IP available, returning 'unknown'")
-        return 'unknown'
-    
+    if not ip_address:
+        return (0, 0, 0, 0)
     try:
-        # Extract the last octet from the data IP address
-        last_octet = int(data_ip.split('.')[-1])
-        node_type = 'dnode' if last_octet >= 100 else 'cnode'
-        logging.debug(f"Node type determined from data IP: {node_type} (last octet {last_octet} from {data_ip} {'>=100' if last_octet >= 100 else '<100'})")
-        return node_type
-    except (ValueError, IndexError) as e:
-        logging.debug(f"Could not parse data IP '{data_ip}': {e}")
-        return 'unknown'
+        octets = ip_address.split('.')
+        if len(octets) != 4:
+            return (0, 0, 0, 0)
+        return tuple(int(octet) for octet in octets)
+    except (ValueError, AttributeError):
+        return (0, 0, 0, 0)
 
 
-def update_node_type_with_hostname(node_info, hostname):
-    """Update node type in node_info based on hostname if available."""
-    if node_info and hostname:
-        # Re-determine node type with hostname information
-        data_ip = node_info.get('data_ip')
-        mgmt_ip = node_info.get('mgmt_ip')
-        node_type = determine_node_type(data_ip=data_ip, hostname=hostname, mgmt_ip=mgmt_ip)
-        node_info['node_type'] = node_type
-    return node_info
-
-
-def extract_hostname_from_systemctl(bundle_dir):
-    """Extract hostname from systemctl_output/systemctl_status.txt file."""
+def extract_case_from_path() -> Optional[str]:
+    """Extract case number from current working directory path"""
     try:
-        systemctl_file = bundle_dir / 'systemctl_output' / 'systemctl_status.txt'
-        if not systemctl_file.exists():
-            return None
+        current_path = Path.cwd()
+        path_str = str(current_path)
         
-        with open(systemctl_file, 'r') as f:
-            first_line = f.readline().strip()
-        
-        # Extract hostname from first line: "● hostname"
-        if first_line.startswith('●'):
-            hostname = first_line[1:].strip()  # Remove ● symbol and whitespace
-            return hostname
-    except (FileNotFoundError, IOError):
+        # Look for Case-######## pattern
+        match = re.search(r'Case-(\d{8})', path_str, re.IGNORECASE)
+        if match:
+            return match.group(1)
+    except Exception:
         pass
     return None
 
 
-def extract_node_info_from_monitor(monitor_file_path):
-    """Extract node information from monitor_result.json file."""
-    try:
-        with open(monitor_file_path, 'r') as f:
-            data = json.load(f)
-        
-        node_info = data.get('node', {}).get('info', {})
-        nics = data.get('nics', {})
-        
-        # Extract basic node information
-        name = node_info.get('system_product_name', '')
-        position = node_info.get('position', '')
-        serial_number = node_info.get('system_serial_number', '')
-        
-        # Find management IP and data IP from monitor_result.json
-        mgmt_ip = None
-        mac_address = None
-        data_ips = []  # Collect all data IPs to find the lowest one
-        
-        logging.debug(f"Extracting IPs from {len(nics)} network interfaces in monitor_result.json")
-        
-        for nic_name, nic_info in nics.items():
-            nic_data = nic_info.get('info', {})
-            address = nic_data.get('address', '')
-            nic_mac_address = nic_data.get('mac_address', '')
-            
-            logging.debug(f"  Interface {nic_name}: address='{address}', mac='{nic_mac_address}'")
-            
-            # Look for management IP (typically 10.x.x.x range)
-            if address and address.startswith('10.') and not mgmt_ip:
-                mgmt_ip = address
-                mac_address = nic_mac_address
-                logging.debug(f"Found MGMT IP: {address} from interface {nic_name}")
-            
-            # Collect all data IPs (typically 172.16.x.x range)
-            if address and address.startswith('172.16.'):
-                data_ips.append(address)
-                logging.debug(f"Found data IP candidate: {address} from interface {nic_name}")
-        
-        # Select the lowest data IP if multiple exist
-        data_ip = None
-        if data_ips:
-            data_ip = min(data_ips)  # Select the lowest IP address
-            if len(data_ips) > 1:
-                logging.debug(f"Multiple data IPs found {data_ips}, selected lowest: {data_ip}")
-            else:
-                logging.debug(f"Single data IP found: {data_ip}")
-        
-        if not mgmt_ip:
-            logging.debug("No MGMT IP found (no interfaces with 10.x.x.x addresses)")
-        
-        if not data_ip:
-            logging.debug("No data IP found (no interfaces with 172.16.x.x addresses)")
-        
-        # Determine node type based on data IP (preferred) 
-        node_type = determine_node_type(data_ip=data_ip, mgmt_ip=mgmt_ip)
-        
-        return {
-            'name': name,
-            'position': position,
-            'serial_number': serial_number,
-            'mgmt_ip': mgmt_ip,
-            'mac_address': mac_address,
-            'data_ip': data_ip,
-            'node_type': node_type,
-            'ipmi_ip': None  # Will be extracted separately by calling functions
-        }
-    except (FileNotFoundError, IOError, json.JSONDecodeError):
-        return None
-
-
-def extract_create_time_from_bundle_args(bundle_dir, return_datetime=False):
-    """Extract create_time from BUNDLE_ARGS file.
+def format_case_number(case_number: Optional[str] = None) -> str:
+    """Format case number for display with appropriate default
     
-    Args:
-        bundle_dir: Path to bundle directory
-        return_datetime: If True, returns datetime object; if False, returns formatted string
-    
-    Returns:
-        datetime object or formatted string (YYYY-MM-DD HH:MM:SS) or None if not found
+    Returns tuple of (case_label, rma_label)
     """
-    try:
-        bundle_args_file = bundle_dir / 'METADATA' / 'BUNDLE_ARGS'
-        if not bundle_args_file.exists():
-            return None
-        
-        with open(bundle_args_file, 'r') as f:
-            content = f.read()
-        
-        # Look for create_time line first, fallback to start_time if not found
-        create_time_match = re.search(r'create_time:\s+(.+)', content)
-        start_time_match = re.search(r'start_time:\s+(.+)', content)
-        
-        time_str = None
-        if create_time_match:
-            time_str = create_time_match.group(1)
-        elif start_time_match:
-            time_str = start_time_match.group(1)
-            
-        if time_str:
-            # Parse the datetime string: 2025-09-09 18:14:58.277231+00:00
-            try:
-                # Split at the first dot to remove microseconds and everything after
-                base_time_str = time_str.split('.')[0]
-                # Parse into datetime object
-                dt = datetime.strptime(base_time_str, '%Y-%m-%d %H:%M:%S')
-                
-                if return_datetime:
-                    return dt
-                else:
-                    # Return formatted string for display
-                    return base_time_str
-            except ValueError:
-                pass
-    except (FileNotFoundError, IOError):
-        pass
-    return None
-
-
-def extract_data_ip_from_bundle(bundle_dir):
-    """Extract data IP from bundle directory by looking in various sources."""
-    logging.debug(f"Extracting data IP from bundle: {bundle_dir}")
-    
-    try:
-        # First try to extract from ip_addr.txt file
-        ip_addr_file = bundle_dir / 'ip_addr.txt'
-        if ip_addr_file.exists():
-            logging.debug(f"Reading IP configuration from: {ip_addr_file}")
-            with open(ip_addr_file, 'r') as f:
-                content = f.read()
-            
-            # Look for bond0:m or bond0.<vlan>:m interface with 172.16.x.x IP
-            match = re.search(r'bond0(?:\.\d+)?:m.*?inet (172\.16\.\d+\.\d+)/', content, re.DOTALL)
-            if match:
-                data_ip = match.group(1)
-                logging.debug(f"Found data IP from ip_addr.txt: {data_ip}")
-                return data_ip
-            else:
-                logging.debug("No data IP found in bond0:m interfaces")
-        
-        else:
-            logging.debug(f"ip_addr.txt not found: {ip_addr_file}")
-        
-        # Fallback: try to extract from monitor_result.json
-        monitor_file = bundle_dir / 'monitor_result.json'
-        if monitor_file.exists():
-            logging.debug(f"Trying fallback source: {monitor_file}")
-            try:
-                with open(monitor_file, 'r') as f:
-                    data = json.load(f)
-                
-                nics = data.get('nics', {})
-                logging.debug(f"Found {len(nics)} network interfaces in monitor_result.json")
-                
-                # Look for InfiniBand or Ethernet interfaces with 172.16.x.x addresses
-                for nic_name, nic_info in nics.items():
-                    nic_data = nic_info.get('info', {})
-                    address = nic_data.get('address', '')
-                    link_type = nic_data.get('link_type', '')
-                    
-                    logging.debug(f"  Interface {nic_name}: {address} ({link_type})")
-                    
-                    if address and address.startswith('172.16.'):
-                        # Prioritize InfiniBand, but also accept Ethernet
-                        if link_type == 'InfiniBand':
-                            logging.debug(f"Found data IP from monitor_result.json (InfiniBand): {address}")
-                            return address
-                        elif link_type == 'Ethernet' and not address.endswith('.1'):
-                            # Accept Ethernet but avoid .1 addresses (usually gateways)
-                            logging.debug(f"Found data IP from monitor_result.json (Ethernet): {address}")
-                            return address
-                        else:
-                            logging.debug(f"Skipping {address} (gateway or unsuitable interface)")
-            except (json.JSONDecodeError, KeyError) as e:
-                logging.debug(f"Error parsing monitor_result.json: {e}")
-        else:
-            logging.debug(f"Fallback source not found: {monitor_file}")
-    except (FileNotFoundError, IOError) as e:
-        logging.debug(f"Error reading data IP sources: {e}")
-    
-    logging.debug("No data IP found in bundle")
-    return None
-
-
-def extract_cluster_name_from_bundle(bundle_dir):
-    """Extract cluster name from bundle configuration data."""
-    try:
-        # First: try to extract from systemctl status hostname
-        hostname = extract_hostname_from_systemctl(bundle_dir)
-        if hostname:
-            # Extract cluster name from hostname pattern: cluster-dnode123 or cluster-cnode45
-            hostname_match = re.search(r'^([^-]+(?:-[^-]+)*)-[dc]node\d+', hostname)
-            if hostname_match:
-                return hostname_match.group(1)
-        
-        # Fallback: try to extract from vast-configure_network.py-params.ini
-        network_config_file = bundle_dir / 'vast-configure_network.py-params.ini'
-        if network_config_file.exists():
-            with open(network_config_file, 'r') as f:
-                content = f.read()
-            
-            # Look for hostname line and extract cluster name from it
-            hostname_match = re.search(r'hostname=([^-\n]+(?:-[^-\n]+)*)-[dc]node\d+', content)
-            if hostname_match:
-                return hostname_match.group(1)
-        
-        # Final fallback: try platform_env_id file
-        env_id_file = bundle_dir / 'platform_env_id'
-        if env_id_file.exists():
-            with open(env_id_file, 'r') as f:
-                content = f.read().strip()
-            # This might contain cluster-related ID information
-            if content and not content.isdigit():
-                return content
-    except (FileNotFoundError, IOError, AttributeError, IndexError):
-        pass
-    return "Unknown"
-
-
-def extract_drive_location_from_logs(drive_serial, box_serial, bundle_dir):
-    """Extract drive location from management logs using the dbox pattern.
-    
-    Searches for pattern: dbox-<box S/N>-<location:word>-<location:slot>-SSD-1 or -NVRAM-1
-    """
-    try:
-        # Search paths for management logs in different bundle structures
-        log_paths = []
-        
-        # Current bundle directory management-logs
-        log_paths.append(bundle_dir / 'management-logs')
-        
-        # Navigate up to find other bundle directories with management logs
-        case_dir = bundle_dir.parent.parent  # Go up to case level
-        if case_dir.exists():
-            # Look for all management-logs directories in the case directory tree
-            for log_dir in case_dir.glob('**/management-logs'):
-                log_paths.append(log_dir)
-        
-        # Also check parent directory management logs
-        if bundle_dir.parent.exists():
-            for log_dir in bundle_dir.parent.glob('**/management-logs'):
-                log_paths.append(log_dir)
-        
-        # Remove duplicates
-        log_paths = list(set(log_paths))
-        
-        for log_dir in log_paths:
-            if not log_dir.exists():
-                continue
-                
-            # Check workers.log and worker.log files
-            for log_file_name in ['workers.log', 'worker.log']:
-                log_file = log_dir / log_file_name
-                if not log_file.exists():
-                    continue
-                
-                try:
-                    with open(log_file, 'r') as f:
-                        for line in f:
-                            # Look for lines containing both box serial and drive serial
-                            if box_serial in line and drive_serial in line:
-                                # Search for the dbox pattern: dbox-<box>-<location>-<slot>-SSD-1 or -NVRAM-1
-                                ssd_match = re.search(rf'dbox-{re.escape(box_serial)}-([A-Z]+)-(\d+)-SSD-1', line)
-                                nvram_match = re.search(rf'dbox-{re.escape(box_serial)}-([A-Z]+)-(\d+)-NVRAM-1', line)
-                                
-                                match = ssd_match or nvram_match
-                                if match:
-                                    location_word = match.group(1)
-                                    location_slot = match.group(2)
-                                    return f"{location_word}-{location_slot}"
-                except (IOError, UnicodeDecodeError):
-                    # Skip files that can't be read
-                    continue
-        
-    except (OSError, AttributeError):
-        pass
-    return None
-
-
-def determine_drive_type(model, path=''):
-    """Determine drive type based on model and path information.
-    
-    Returns:
-        'nvram' for NVRAM/SCM drives, 'ssd' for SSD drives
-    """
-    logging.debug(f"Determining drive type: model='{model}', path='{path}'")
-    
-    if not model:
-        logging.debug("No model information available, defaulting to SSD")
-        return 'ssd'  # Default fallback
-    
-    model_lower = model.lower()
-    path_lower = path.lower()
-    
-    nvram_indicators = ['optane', 'dcpmm', 'ssdpe21k', 'scm', 'nvdimm', 'pmem', 'pascari']
-    path_indicators = ['nvdimm', 'pmem']
-    
-    # NVRAM/SCM indicators
-    for indicator in nvram_indicators:
-        if indicator in model_lower:
-            logging.debug(f"Drive type determined as NVRAM: found '{indicator}' in model '{model}'")
-            return 'nvram'
-    
-    # Additional path-based detection
-    for indicator in path_indicators:
-        if indicator in path_lower:
-            logging.debug(f"Drive type determined as NVRAM: found '{indicator}' in path '{path}'")
-            return 'nvram'
-    
-    # Default to SSD
-    logging.debug(f"Drive type determined as SSD: no NVRAM indicators found in model '{model}' or path '{path}'")
-    return 'ssd'
-
-
-def find_drive_in_bundle(drive_serial, bundle_dir):
-    """Find drive (SSD/NVRAM) information in a specific bundle directory.
-    
-    Returns:
-        dict: Drive information if found, None otherwise
-    """
-    logging.debug(f"Searching for drive '{drive_serial}' in bundle: {bundle_dir}")
-    
-    try:
-        # First check nvme_cli_list.json as primary source (has location data)
-        nvme_cli_file = bundle_dir / 'nvme_cli_list.json'
-        if nvme_cli_file.exists():
-            logging.debug(f"Reading primary source: {nvme_cli_file}")
-            with open(nvme_cli_file, 'r') as f:
-                nvme_data = json.load(f)
-            
-            # Check both drives and nvrams sections
-            drives_list = nvme_data.get('drives', [])
-            nvrams_list = nvme_data.get('nvrams', [])
-            all_drives = drives_list + nvrams_list
-            logging.debug(f"Found {len(drives_list)} drives and {len(nvrams_list)} nvrams in nvme_cli_list.json")
-            
-            for i, drive in enumerate(all_drives):
-                device_serial = drive.get('serial')
-                logging.debug(f"  Device {i}: serial='{device_serial}', model='{drive.get('model')}'")
-                if device_serial == drive_serial:
-                    model = drive.get('model')
-                    path = drive.get('path')
-                    drive_type = determine_drive_type(model, path)
-                    logging.debug(f"Found drive '{drive_serial}' in nvme_cli_list.json: {model} at {path} (type: {drive_type})")
-                    return {
-                        'serial': drive.get('serial'),
-                        'model': model,
-                        'path': path,
-                        'size': drive.get('size'),
-                        'pci_switch_position': drive.get('pci_switch_position'),
-                        'pci_switch_slot': drive.get('pci_switch_slot'),
-                        'firmware_rev': drive.get('firmware_rev'),
-                        'temperature': drive.get('temperature'),
-                        'device_minor': drive.get('device_minor'),
-                        'drive_type': drive_type
-                    }
-        else:
-            logging.debug(f"Primary source not found: {nvme_cli_file}")
-        
-        # Fallback: check nvme_list.json (basic info only, no location)
-        nvme_list_file = bundle_dir / 'nvme_list.json'
-        if nvme_list_file.exists():
-            logging.debug(f"Reading fallback source: {nvme_list_file}")
-            with open(nvme_list_file, 'r') as f:
-                nvme_data = json.load(f)
-            
-            devices = nvme_data.get('Devices', [])
-            logging.debug(f"Found {len(devices)} devices in nvme_list.json")
-            
-            for i, device in enumerate(devices):
-                device_serial = device.get('SerialNumber')
-                logging.debug(f"  Device {i}: serial='{device_serial}', model='{device.get('ModelNumber')}'")
-                if device_serial == drive_serial:
-                    model = device.get('ModelNumber')
-                    path = device.get('DevicePath')
-                    drive_type = determine_drive_type(model, path)
-                    logging.debug(f"Found drive '{drive_serial}' in nvme_list.json: {model} at {path} (type: {drive_type})")
-                    return {
-                        'serial': device.get('SerialNumber'),
-                        'model': model,
-                        'path': path,
-                        'size': device.get('PhysicalSize'),
-                        'firmware_rev': device.get('Firmware'),
-                        'index': device.get('Index'),
-                        'drive_type': drive_type
-                    }
-        else:
-            logging.debug(f"Fallback source not found: {nvme_list_file}")
-            
-    except (FileNotFoundError, IOError, json.JSONDecodeError) as e:
-        logging.debug(f"Error reading drive data from {bundle_dir}: {e}")
-    
-    logging.debug(f"Drive '{drive_serial}' not found in bundle: {bundle_dir}")
-    return None
-
-
-def list_drives_in_bundle(bundle_dir):
-    """List all drives (SSD/NVRAM) in a specific bundle directory.
-    
-    Returns:
-        list: List of drive information dictionaries
-    """
-    logging.debug(f"Listing all drives in bundle: {bundle_dir}")
-    drives = []
-    
-    try:
-        # Check nvme_cli_list.json as primary source (has location data)
-        nvme_cli_file = bundle_dir / 'nvme_cli_list.json'
-        if nvme_cli_file.exists():
-            logging.debug(f"Reading primary source: {nvme_cli_file}")
-            with open(nvme_cli_file, 'r') as f:
-                nvme_data = json.load(f)
-            
-            # Check both drives and nvrams sections
-            drives_list = nvme_data.get('drives', [])
-            nvrams_list = nvme_data.get('nvrams', [])
-            all_drives = drives_list + nvrams_list
-            logging.debug(f"Found {len(drives_list)} drives and {len(nvrams_list)} nvrams in nvme_cli_list.json")
-            
-            for drive in all_drives:
-                model = drive.get('model')
-                path = drive.get('path')
-                drive_type = determine_drive_type(model, path)
-                drives.append({
-                    'serial': drive.get('serial'),
-                    'model': model,
-                    'path': path,
-                    'size': drive.get('size'),
-                    'pci_switch_position': drive.get('pci_switch_position'),
-                    'pci_switch_slot': drive.get('pci_switch_slot'),
-                    'firmware_rev': drive.get('firmware_rev'),
-                    'temperature': drive.get('temperature'),
-                    'device_minor': drive.get('device_minor'),
-                    'index': drive.get('device_minor'),  # Use device_minor as index
-                    'drive_type': drive_type
-                })
-        else:
-            logging.debug(f"Primary source not found: {nvme_cli_file}")
-            
-            # Fallback: check nvme_list.json (basic info only, no location)
-            nvme_list_file = bundle_dir / 'nvme_list.json'
-            if nvme_list_file.exists():
-                logging.debug(f"Reading fallback source: {nvme_list_file}")
-                with open(nvme_list_file, 'r') as f:
-                    nvme_data = json.load(f)
-                
-                devices = nvme_data.get('Devices', [])
-                logging.debug(f"Found {len(devices)} devices in nvme_list.json")
-                
-                for device in devices:
-                    model = device.get('ModelNumber')
-                    path = device.get('DevicePath')
-                    drive_type = determine_drive_type(model, path)
-                    drives.append({
-                        'serial': device.get('SerialNumber'),
-                        'model': model,
-                        'path': path,
-                        'size': device.get('PhysicalSize'),
-                        'firmware_rev': device.get('Firmware'),
-                        'index': device.get('Index'),
-                        'drive_type': drive_type
-                    })
-            else:
-                logging.debug(f"Fallback source not found: {nvme_list_file}")
-    
-    except Exception as e:
-        logging.debug(f"Error reading drive data from {bundle_dir}: {e}")
-    
-    logging.debug(f"Found {len(drives)} drives in bundle: {bundle_dir}")
-    return drives
-
-
-def render_dnode_section(primary_node, sibling_nodes=None, box_serial=None):
-    """Render DNode section matching RMA form format (without header/case/tracking).
-    
-    This renders:
-    - DBox S/N
-    - Primary dnode details (with Index and ModelNumber)
-    - Sibling dnode details
-    
-    Args:
-        primary_node: Primary node dictionary
-        sibling_nodes: Optional list of sibling node dictionaries
-        box_serial: Optional box serial number
-    
-    Returns:
-        str: Formatted table string
-    """
-    table = Table()
-    
-    # DBox S/N
-    if box_serial:
-        table.add_row("DBox S/N", box_serial)
-    
-    # Primary node section
-    table.add_row("", "dnode", style="subtitle")
-    
-    # Calculate index based on node position
-    position = primary_node.get('position', '')
-    index = "1" if position == "bottom" else "2"
-    table.add_row("Index", index)
-    table.add_row("ModelNumber", "")  # Model number not available
-    table.add_row("name", primary_node.get('name', 'Unknown'))
-    table.add_row("position", position)
-    table.add_row("IP", primary_node.get('data_ip', primary_node.get('ip', '')))
-    table.add_row("MGMT IP", primary_node.get('mgmt_ip', ''))
-    table.add_row("IPMI IP", primary_node.get('ipmi_ip', ''))
-    table.add_row("SerialNumber", primary_node.get('serial_number', ''))
-    table.add_row("MAC Address", primary_node.get('mac_address', ''))
-    
-    # Sibling nodes
-    if sibling_nodes:
-        for sibling in sibling_nodes:
-            table.add_row("", "sibling dnode", style="subtitle")
-            table.add_row("name", sibling.get('name', 'Unknown'))
-            table.add_row("position", sibling.get('position', ''))
-            table.add_row("IP", sibling.get('data_ip', sibling.get('ip', '')))
-            table.add_row("MGMT IP", sibling.get('mgmt_ip', ''))
-            table.add_row("IPMI IP", sibling.get('ipmi_ip', ''))
-            table.add_row("SerialNumber", sibling.get('serial_number', ''))
-            table.add_row("MAC Address", sibling.get('mac_address', ''))
-    
-    return render_table(table)
-
-
-def render_drive_list_table(drives, drive_type_label="Drives"):
-    """Render a table of drives.
-    
-    Args:
-        drives: List of drive dictionaries (must include 'node_name' field)
-        drive_type_label: Label for the drives section (default: "Drives")
-    
-    Returns:
-        str: Formatted table string
-    """
-    if not drives:
-        return ""
-    
-    outputs = []
-    
-    # Add drives section with custom label header
-    outputs.append(f"{drive_type_label}:")
-    
-    drive_table = Table()
-    
-    # Add drive header
-    drive_table.add_row("Type", "Serial", "Location", "Node", "Index", "DevicePath", "Model", style="default")
-    drive_table.add_separator()
-    
-    # Sort drives by slot number (from pci_switch_slot), then by node name
-    def sort_key(drive):
-        slot = drive.get('pci_switch_slot', 999)  # Use high number for missing slots
-        node_name = drive.get('node_name', 'Unknown')
-        return (slot, node_name)
-    
-    sorted_drives = sorted(drives, key=sort_key)
-    
-    # Add each drive
-    for drive in sorted_drives:
-        node_name = drive.get('node_name', 'Unknown')
-        index = str(drive.get('index', 'N/A'))
-        
-        # Calculate location from pci_switch_position and pci_switch_slot
-        pci_position = drive.get('pci_switch_position')
-        pci_slot = drive.get('pci_switch_slot')
-        if pci_position and pci_slot:
-            location = f"{pci_position}-{pci_slot}"
-        else:
-            location = 'Unknown'
-        
-        drive_type = drive.get('drive_type', 'Unknown')
-        path = drive.get('path', 'Unknown')
-        model = drive.get('model', 'Unknown')
-        serial = drive.get('serial', 'Unknown')
-        
-        drive_table.add_row(drive_type, serial, location, node_name, index, path, model)
-    
-    outputs.append(render_table(drive_table))
-    
-    return "\n".join(outputs)
-
-
-def find_drive_in_bundles(drive_serial, bundle_dirs):
-    """Find the specified drive (SSD/NVRAM) in bundle directories.
-    
-    Returns:
-        tuple: (drive_info, node_info, bundle_dir) if found, (None, None, None) otherwise
-    """
-    logging.debug(f"Searching for drive '{drive_serial}' across {len(bundle_dirs)} bundles")
-    
-    # Calculate minimum unique paths for all bundle directories
-    unique_paths = calculate_minimum_unique_paths(bundle_dirs)
-    
-    for i, bundle_dir in enumerate(bundle_dirs, 1):
-        logging.debug(f"Checking bundle {i}/{len(bundle_dirs)}: {bundle_dir}")
-        
-        # First check if this bundle contains the drive
-        drive_info = find_drive_in_bundle(drive_serial, bundle_dir)
-        if not drive_info:
-            logging.debug(f"Drive not found in bundle {i}")
-            continue
-            
-        logging.debug(f"Drive found in bundle {i}! Extracting node information...")
-            
-        # Get node information for this bundle
-        monitor_file = bundle_dir / 'monitor_result.json'
-        if not monitor_file.exists():
-            continue
-            
-        node_info = extract_node_info_from_monitor(monitor_file)
-        if not node_info:
-            continue
-        
-        # Extract hostname from systemctl output (preferred over system_product_name)
-        hostname = extract_hostname_from_systemctl(bundle_dir)
-        if hostname:
-            node_info['name'] = hostname
-            # Update node type with hostname information
-            update_node_type_with_hostname(node_info, hostname)
-        
-        # Check if this is a DNode (required for drive replacement) - after hostname-based node type correction
-        if node_info.get('node_type') != 'dnode':
-            continue
-        
-        # Extract data IP from bundle directory
-        data_ip = extract_data_ip_from_bundle(bundle_dir)
-        node_info['data_ip'] = data_ip
-        
-        # Extract IPMI IP from bundle directory
-        ipmi_ip = extract_ipmi_ip_from_bundle(bundle_dir)
-        node_info['ipmi_ip'] = ipmi_ip
-        
-        # Extract IPMI IP from bundle directory
-        ipmi_ip = extract_ipmi_ip_from_bundle(bundle_dir)
-        node_info['ipmi_ip'] = ipmi_ip
-        
-        # Add bundle path (display path for users)
-        node_info['bundle_path'] = unique_paths.get(bundle_dir, str(bundle_dir))
-        # Add full bundle directory path (for internal processing)
-        node_info['bundle_dir_full'] = str(bundle_dir)
-        
-        # Extract create_time from BUNDLE_ARGS
-        create_time = extract_create_time_from_bundle_args(bundle_dir)
-        node_info['create_time'] = create_time
-        
-        # Extract Box serial number from FRU file
-        bundle_box_serial = None
-        bundle_board_serial = None
-        fru_file = bundle_dir / 'ipmitool' / 'ipmitool_fru_list.txt'
-        if fru_file.exists():
-            bundle_box_serial = extract_box_serial_from_fru(fru_file)
-            bundle_board_serial = extract_board_serial_from_fru(fru_file)
-            node_info['box_serial'] = bundle_box_serial
-            # Override system_serial_number with board serial if available
-            if bundle_board_serial:
-                node_info['serial_number'] = bundle_board_serial
-        
-        # Extract cluster name
-        cluster_name = extract_cluster_name_from_bundle(bundle_dir)
-        node_info['cluster_name'] = cluster_name
-        
-        return drive_info, node_info, bundle_dir
-    
-    return None, None, None
-
-
-# ============================================================================
-# Data Model Builders (Build hardware models from extracted data)
-# ============================================================================
-
-def build_drive_rma_form_from_legacy_data(drive_info, node_info, sibling_nodes_data, case_number, bundle_dir=None):
-    """Build a DriveRMAForm from legacy data structures"""
-    # Build NetworkInfo for associated node
-    network = NetworkInfo(
-        mgmt_ip=node_info.get('mgmt_ip'),
-        ipmi_ip=node_info.get('ipmi_ip'),
-        mac_address=node_info.get('mac_address'),
-        data_ip=node_info.get('data_ip')
-    )
-    
-    # Build associated Node
-    associated_node = Node(
-        name=node_info.get('name', ''),
-        serial_number=node_info.get('serial_number', ''),
-        position=node_info.get('position', ''),
-        network=network,
-        node_type=node_info.get('node_type', 'dnode'),
-        is_smbus_master=False  # TODO: Determine from data
-    )
-    
-    # Build sibling Nodes
-    sibling_nodes = []
-    for sibling_data in sibling_nodes_data:
-        sibling_network = NetworkInfo(
-            mgmt_ip=sibling_data.get('mgmt_ip'),
-            ipmi_ip=sibling_data.get('ipmi_ip'),
-            mac_address=sibling_data.get('mac_address'),
-            data_ip=sibling_data.get('data_ip')
-        )
-        sibling_node = Node(
-            name=sibling_data.get('name', ''),
-            serial_number=sibling_data.get('serial_number', ''),
-            position=sibling_data.get('position', ''),
-            network=sibling_network,
-            node_type=sibling_data.get('node_type', 'dnode'),
-            is_smbus_master=False
-        )
-        sibling_nodes.append(sibling_node)
-    
-    # Build Drive
-    # Calculate location from pci_switch_position and pci_switch_slot
-    pci_position = drive_info.get('pci_switch_position')
-    pci_slot = drive_info.get('pci_switch_slot')
-    if pci_position and pci_slot:
-        location = f"{pci_position}-{pci_slot}"
-    else:
-        location = drive_info.get('location', 'Unknown')
-    
-    drive = Drive(
-        serial_number=drive_info.get('serial'),
-        model_number=drive_info.get('model', ''),
-        device_path=drive_info.get('path', ''),
-        location_in_box=location,
-        drive_type=drive_info.get('drive_type', 'ssd'),
-        size=drive_info.get('size')
-    )
-    
-    # Build DBox (with all nodes)
-    all_nodes = [associated_node] + sibling_nodes
-    
-    # Extract manufacturer_id and product_id from mc_info file if bundle_dir is provided
-    manufacturer_id = None
-    product_id = None
-    if bundle_dir:
-        mc_info_file = bundle_dir / 'ipmitool' / 'ipmitool_mc_info.txt'
-        if mc_info_file.exists():
-            manufacturer_id = extract_manufacturer_id_from_mc_info(mc_info_file)
-            product_id = extract_product_id_from_mc_info(mc_info_file)
-    
-    dbox = DBox(
-        serial_number=node_info.get('box_serial', ''),
-        nodes=all_nodes,
-        drives=[drive],  # Only this drive for now
-        manufacturer_id=manufacturer_id,
-        product_id=product_id
-    )
-    
-    # Format case number to 8 characters
     if case_number:
+        # Explicitly provided case number
         formatted_case = str(case_number).zfill(8)
-    else:
-        formatted_case = "000...."
+        return f"Case-{formatted_case}"
     
-    # Build RMAContext
-    context = RMAContext(
-        case_number=formatted_case,
-        cluster=node_info.get('cluster_name', 'Unknown')
-    )
+    # Try to extract from path
+    path_case = extract_case_from_path()
+    if path_case:
+        formatted_case = str(path_case).zfill(8)
+        return f"Case-{formatted_case}?"
     
-    # Build and return DriveRMAForm
-    return DriveRMAForm(
-        context=context,
-        drive=drive,
-        dbox=dbox
-    )
+    # Default
+    return "Case-000....."
 
 
-def build_node_rma_form_from_legacy_data(target_node, sibling_nodes_data, box_serial, case_number=None):
-    """Build a NodeRMAForm from legacy data structures"""
-    # Build NetworkInfo for target node
-    network = NetworkInfo(
-        mgmt_ip=target_node.get('mgmt_ip'),
-        ipmi_ip=target_node.get('ipmi_ip'),
-        mac_address=target_node.get('mac_address'),
-        data_ip=target_node.get('data_ip')
-    )
+def list_nodes(node_bundle_list: List[tuple[Node, Bundle]], title: str = "Available Nodes"):
+    """List specific nodes in tabular format"""
+    if not node_bundle_list:
+        print("No nodes found", file=sys.stderr)
+        return
     
-    # Build target Node
-    node = Node(
-        name=target_node.get('name', ''),
-        serial_number=target_node.get('serial_number', ''),
-        position=target_node.get('position', ''),
-        network=network,
-        node_type=target_node.get('node_type', 'unknown'),
-        is_smbus_master=False  # TODO: Determine from data
-    )
+    # Group by box
+    box_nodes = defaultdict(list)
+    for node, bundle in node_bundle_list:
+        if node and node.box_serial:
+            box_nodes[node.box_serial].append((node, bundle))
     
-    # Build sibling Nodes
-    sibling_nodes = []
-    for sibling_data in sibling_nodes_data:
-        sibling_network = NetworkInfo(
-            mgmt_ip=sibling_data.get('mgmt_ip'),
-            ipmi_ip=sibling_data.get('ipmi_ip'),
-            mac_address=sibling_data.get('mac_address'),
-            data_ip=sibling_data.get('data_ip')
-        )
-        sibling_node = Node(
-            name=sibling_data.get('name', ''),
-            serial_number=sibling_data.get('serial_number', ''),
-            position=sibling_data.get('position', ''),
-            network=sibling_network,
-            node_type=sibling_data.get('node_type', 'unknown'),
-            is_smbus_master=False
-        )
-        sibling_nodes.append(sibling_node)
+    # Sort boxes by first node's MGMT IP (numerically)
+    def get_first_mgmt_ip_key(item):
+        box_serial, node_list = item
+        if not node_list:
+            return (0, 0, 0, 0)
+        # Sort nodes within box by MGMT IP to find the first one
+        sorted_nodes = sorted(node_list, key=lambda x: ip_to_sort_key(x[0].network.mgmt_ip))
+        return ip_to_sort_key(sorted_nodes[0][0].network.mgmt_ip)
     
-    # Build Box (determine if DBox or CBox based on node type)
-    all_nodes = [node] + sibling_nodes
-    if node.node_type == 'dnode':
-        box = DBox(
-            serial_number=box_serial or '',
-            nodes=all_nodes
-        )
-    else:
-        box = CBox(
-            serial_number=box_serial or '',
-            nodes=all_nodes
-        )
+    sorted_boxes = sorted(box_nodes.items(), key=get_first_mgmt_ip_key)
     
-    # Format case number to 8 characters
-    if case_number:
-        formatted_case = str(case_number).zfill(8)
-    else:
-        formatted_case = "000...."
-    
-    # Build RMAContext
-    context = RMAContext(
-        case_number=formatted_case,
-        cluster=target_node.get('cluster_name', 'Unknown') if 'cluster_name' in target_node else 'Unknown'
-    )
-    
-    # Build and return NodeRMAForm
-    return NodeRMAForm(
-        context=context,
-        node=node,
-        box=box
-    )
-
-
-def find_node_in_bundles(node_name, bundle_dirs):
-    """Find the specified node in bundle directories using enhanced matching logic.
-    
-    Returns:
-        tuple: (match_type, target_node, sibling_nodes, box_serial, matched_nodes)
-        - match_type: 'single', 'multiple', 'box_match', or 'none'
-        - target_node: Single matched node (only for 'single' match_type)
-        - sibling_nodes: Siblings of target_node (only for 'single' match_type)
-        - box_serial: Box serial of target_node (only for 'single' match_type)
-        - matched_nodes: List of matched nodes (for 'multiple' and 'box_match' types)
-    """
-    all_nodes = []
-    box_nodes = {}  # Group nodes by Box serial number
-    
-    # Calculate minimum unique paths for all bundle directories
-    unique_paths = calculate_minimum_unique_paths(bundle_dirs)
-    
-    # First pass: collect all node information and group by Box serial
-    for bundle_dir in bundle_dirs:
-        monitor_file = bundle_dir / 'monitor_result.json'
-        if not monitor_file.exists():
-            continue
-            
-        node_info = extract_node_info_from_monitor(monitor_file)
-        if not node_info:
-            continue
-        
-        # Extract hostname from systemctl output (preferred over system_product_name)
-        hostname = extract_hostname_from_systemctl(bundle_dir)
-        if hostname:
-            node_info['name'] = hostname
-            # Update node type with hostname information
-            update_node_type_with_hostname(node_info, hostname)
-        
-        # Extract data IP from bundle directory
-        data_ip = extract_data_ip_from_bundle(bundle_dir)
-        node_info['data_ip'] = data_ip
-        
-        # Extract IPMI IP from bundle directory
-        ipmi_ip = extract_ipmi_ip_from_bundle(bundle_dir)
-        node_info['ipmi_ip'] = ipmi_ip
-        
-        # Add bundle path
-        node_info['bundle_path'] = unique_paths.get(bundle_dir, str(bundle_dir))
-        # Add full bundle directory path (for internal processing)
-        node_info['bundle_dir_full'] = str(bundle_dir)
-        
-        # Extract create_time from BUNDLE_ARGS
-        create_time = extract_create_time_from_bundle_args(bundle_dir)
-        node_info['create_time'] = create_time
-        
-        # Extract Box serial number from FRU file
-        bundle_box_serial = None
-        bundle_board_serial = None
-        fru_file = bundle_dir / 'ipmitool' / 'ipmitool_fru_list.txt'
-        if fru_file.exists():
-            bundle_box_serial = extract_box_serial_from_fru(fru_file)
-            bundle_board_serial = extract_board_serial_from_fru(fru_file)
-        
-        # Extract Manufacturer ID and Product ID from mc_info file
-        manufacturer_id = None
-        product_id = None
-        mc_info_file = bundle_dir / 'ipmitool' / 'ipmitool_mc_info.txt'
-        if mc_info_file.exists():
-            manufacturer_id = extract_manufacturer_id_from_mc_info(mc_info_file)
-            product_id = extract_product_id_from_mc_info(mc_info_file)
-        
-        if data_ip and bundle_box_serial:
-            node_info['box_serial'] = bundle_box_serial
-            # Override system_serial_number with board serial if available
-            if bundle_board_serial:
-                node_info['serial_number'] = bundle_board_serial
-            # Add manufacturer and product IDs
-            node_info['manufacturer_id'] = manufacturer_id
-            node_info['product_id'] = product_id
-            all_nodes.append(node_info)
-            
-            # Group nodes by Box serial number
-            if bundle_box_serial not in box_nodes:
-                box_nodes[bundle_box_serial] = []
-            box_nodes[bundle_box_serial].append(node_info)
-    
-    # Step 1: Try exact matches first
-    exact_matches = []
-    for node in all_nodes:
-        if (node.get('name') == node_name or 
-            node.get('serial_number') == node_name or 
-            node.get('mgmt_ip') == node_name or 
-            node.get('data_ip') == node_name):
-            exact_matches.append(node)
-    
-    if len(exact_matches) == 1:
-        target_node = exact_matches[0]
-        target_box_serial = target_node['box_serial']
-        
-        # Find siblings (deduplicated by node name and data IP)
-        sibling_nodes = []
-        seen_node_identifiers = set()
-        target_name = target_node.get('name')
-        target_data_ip = target_node.get('data_ip')
-        box_nodes_list = box_nodes[target_box_serial]
-        box_nodes_list.sort(key=lambda x: get_ip_last_octet(x.get('data_ip', '')))
-        
-        for node in box_nodes_list:
-            node_name = node.get('name')
-            node_data_ip = node.get('data_ip')
-            node_identifier = f"{node_name}|{node_data_ip}"
-            target_identifier = f"{target_name}|{target_data_ip}"
-            
-            if (node_name and node_data_ip and 
-                node_identifier != target_identifier and 
-                node_identifier not in seen_node_identifiers):
-                sibling_nodes.append(node)
-                seen_node_identifiers.add(node_identifier)
-        
-        return 'single', target_node, sibling_nodes, target_box_serial, []
-    elif len(exact_matches) > 1:
-        return 'multiple', None, [], None, exact_matches
-    
-    # Step 2: Try regex matches on node fields
-    import re
-    try:
-        pattern = re.compile(node_name, re.IGNORECASE)
-        regex_matches = []
-        
-        for node in all_nodes:
-            # Check if pattern matches any of the node fields
-            if (pattern.search(str(node.get('name', ''))) or
-                pattern.search(str(node.get('serial_number', ''))) or
-                pattern.search(str(node.get('mgmt_ip', ''))) or
-                pattern.search(str(node.get('data_ip', '')))):
-                regex_matches.append(node)
-        
-        if len(regex_matches) == 1:
-            target_node = regex_matches[0]
-            target_box_serial = target_node['box_serial']
-            
-            # Find siblings (deduplicated by node name and data IP)
-            sibling_nodes = []
-            seen_node_identifiers = set()
-            target_name = target_node.get('name')
-            target_data_ip = target_node.get('data_ip')
-            box_nodes_list = box_nodes[target_box_serial]
-            box_nodes_list.sort(key=lambda x: get_ip_last_octet(x.get('data_ip', '')))
-            
-            for node in box_nodes_list:
-                node_name = node.get('name')
-                node_data_ip = node.get('data_ip')
-                node_identifier = f"{node_name}|{node_data_ip}"
-                target_identifier = f"{target_name}|{target_data_ip}"
-                
-                if (node_name and node_data_ip and 
-                    node_identifier != target_identifier and 
-                    node_identifier not in seen_node_identifiers):
-                    sibling_nodes.append(node)
-                    seen_node_identifiers.add(node_identifier)
-            
-            return 'single', target_node, sibling_nodes, target_box_serial, []
-        elif len(regex_matches) > 1:
-            return 'multiple', None, [], None, regex_matches
-    except re.error:
-        # Invalid regex pattern, continue to box matching
-        pass
-    
-    # Step 3: Try regex matches on box serial numbers
-    try:
-        pattern = re.compile(node_name, re.IGNORECASE)
-        box_matched_nodes = []
-        
-        for box_serial, nodes_list in box_nodes.items():
-            if pattern.search(str(box_serial)):
-                box_matched_nodes.extend(nodes_list)
-        
-        if box_matched_nodes:
-            return 'box_match', None, [], None, box_matched_nodes
-    except re.error:
-        pass
-    
-    return 'none', None, [], None, []
-
-
-# ============================================================================
-# RMA Form to Table Converters
-# ============================================================================
-
-def drive_rma_form_to_table(form: DriveRMAForm) -> Table:
-    """Convert a DriveRMAForm to a generic Table structure"""
+    # Build table
     table = Table()
-    
-    # Header row
-    table.add_row(form.title, form.fru_part)
-    
-    # Separator
+    table.add_row("Name", "Type", "Position", "Data IP", "MGMT IP", "IPMI IP",
+                  "Node S/N", "Box S/N", "Mfr ID", "Prod ID", "MAC Address",
+                  "Create Time", "Bundle Path")
     table.add_separator()
     
-    # Case number
-    case_display = f"Case-{form.context.case_number}"
-    table.add_row(case_display, "RMA-0000.... / FE-000.....")
+    first_box = True
+    for box_serial, node_list in sorted_boxes:
+        # Sort nodes within box (bottom first, then by last octet of data IP)
+        node_list.sort(key=lambda x: (
+            x[0].position != 'bottom',
+            get_ip_last_octet(x[0].network.data_ip)
+        ))
+        
+        if not first_box:
+            table.add_separator()
+        first_box = False
+        
+        for node, bundle in node_list:
+            table.add_row(
+                node.name,
+                node.node_type.upper(),
+                node.position,
+                node.network.data_ip or 'Unknown',
+                node.network.mgmt_ip or 'Unknown',
+                node.network.ipmi_ip or 'Unknown',
+                node.serial_number,
+                node.box_serial or 'Unknown',
+                node.manufacturer_id or '',
+                node.product_id or '',
+                node.network.mac_address or 'Unknown',
+                bundle.create_time or 'Unknown',
+                bundle.display_path
+            )
+    
+    print(title + ":")
+    print("=" * 240)
+    print(render_table(table))
+
+
+def list_all_nodes(cluster: Cluster):
+    """List all available nodes in tabular format"""
+    node_bundle_list = [(bundle.node, bundle) for bundle in cluster.bundles if bundle.node]
+    list_nodes(node_bundle_list, "Available Nodes")
+
+
+def show_node_rma_form(node: Node, sibling_nodes: List[Node], cluster: Cluster, case_number: Optional[str] = None):
+    """Show RMA form for a node"""
+    table = Table()
+    
+    # Header
+    node_type_display = node.node_type.upper()
+    table.add_row(f"{node_type_display} Replacement", f"FRU-___-{node_type_display}-___")
+    table.add_separator()
+    
+    # Case number (always shown with smart default)
+    case_label = format_case_number(case_number)
+    table.add_row(case_label, "RMA-0000.... / FE-000.....")
     
     # Standard fields
-    table.add_row("Cluster", form.context.cluster)
-    table.add_row("Tracking", form.context.tracking)
-    table.add_row("Delivery ETA", form.context.delivery_eta)
-    table.add_row("Room / Rack / RU", form.context.room_rack_ru)
+    table.add_row("Cluster", cluster.cluster_name)
+    table.add_row("Tracking", "FedEx #  <TBD>")
+    table.add_row("Delivery ETA", "")
+    table.add_row("Room / Rack / RU", "")
+    table.add_row("Box S/N", node.box_serial or '')
     
-    # Drive information
-    table.add_row("DBox", form.dbox.serial_number)
-    table.add_row("Location in Box", form.drive.location_in_box)
-    
-    # Calculate index based on node position
-    if form.associated_node:
-        index = "1" if form.associated_node.position == "bottom" else "2"
-    else:
-        index = "?"
+    # Node information
+    table.add_row("", node.node_type, style="subtitle")
+    index = "1" if node.position == "bottom" else "2"
     table.add_row("Index", index)
-    
-    table.add_row("DevicePath", form.drive.device_path)
-    table.add_row("ModelNumber", form.drive.model_number)
-    table.add_row("SerialNumber", form.drive.serial_number)
-    
-    # Associated node
-    if form.associated_node:
-        table.add_row("", "associated dnode", style="subtitle")
-        add_node_to_table(table, form.associated_node)
-    
-    # Sibling nodes
-    for sibling in form.sibling_nodes:
-        sibling_header = f"sibling {sibling.node_type}"
-        table.add_row("", sibling_header, style="subtitle")
-        add_node_to_table(table, sibling)
-    
-    return table
-
-
-def add_node_to_table(table: Table, node: Node):
-    """Add node information rows to a table"""
+    table.add_row("ModelNumber", "")
     table.add_row("name", node.name)
     table.add_row("position", node.position)
     table.add_row("IP", node.network.data_ip or "")
@@ -1854,607 +1060,308 @@ def add_node_to_table(table: Table, node: Node):
     table.add_row("IPMI IP", node.network.ipmi_ip or "")
     table.add_row("SerialNumber", node.serial_number)
     table.add_row("MAC Address", node.network.mac_address or "")
-
-
-def render_drive_rma_form(form: DriveRMAForm) -> str:
-    """Render a drive RMA form using generic table structure"""
-    table = drive_rma_form_to_table(form)
-    return render_table(table)
-
-
-def node_rma_form_to_table(form: NodeRMAForm) -> Table:
-    """Convert a NodeRMAForm to a generic Table structure"""
-    table = Table()
-    
-    # Header row
-    table.add_row(form.title, form.fru_part)
-    table.add_separator()
-    
-    # Case number if provided (from context)
-    if hasattr(form.context, 'case_number') and form.context.case_number:
-        case_display = f"Case-{form.context.case_number}"
-        table.add_row(case_display, "RMA-0000.... / FE-000.....")
-    
-    # Standard fields
-    table.add_row("Tracking", form.context.tracking)
-    table.add_row("Delivery ETA", form.context.delivery_eta)
-    table.add_row("Room / Rack / RU", form.context.room_rack_ru)
-    table.add_row("Box S/N", form.box.serial_number)
-    
-    # Node information section
-    node_type_display = form.node.node_type.lower()
-    table.add_row("", f"{node_type_display}", style="subtitle")
-    
-    # Calculate index based on node position
-    index = "1" if form.node.position == "bottom" else "2"
-    table.add_row("Index", index)
-    table.add_row("ModelNumber", "")  # Model number not available
-    table.add_row("name", form.node.name)
-    table.add_row("position", form.node.position)
-    table.add_row("IP", form.node.network.data_ip or "")
-    table.add_row("MGMT IP", form.node.network.mgmt_ip or "")
-    table.add_row("IPMI IP", form.node.network.ipmi_ip or "")
-    table.add_row("SerialNumber", form.node.serial_number)
-    table.add_row("MAC Address", form.node.network.mac_address or "")
     
     # Sibling nodes
-    for i, sibling in enumerate(form.sibling_nodes, 1):
-        sibling_header = f"sibling {sibling.node_type}"
-        if len(form.sibling_nodes) > 1:
-            sibling_header += f" {i}"
-        table.add_row("", sibling_header, style="subtitle")
-        add_node_to_table(table, sibling)
+    for i, sibling in enumerate(sibling_nodes, 1):
+        header = f"sibling {sibling.node_type}"
+        if len(sibling_nodes) > 1:
+            header += f" {i}"
+        table.add_row("", header, style="subtitle")
+        table.add_row("name", sibling.name)
+        table.add_row("position", sibling.position)
+        table.add_row("IP", sibling.network.data_ip or "")
+        table.add_row("MGMT IP", sibling.network.mgmt_ip or "")
+        table.add_row("IPMI IP", sibling.network.ipmi_ip or "")
+        table.add_row("SerialNumber", sibling.serial_number)
+        table.add_row("MAC Address", sibling.network.mac_address or "")
     
-    return table
-
-
-def render_node_rma_form(form: NodeRMAForm) -> str:
-    """Render a node RMA form using generic table structure"""
-    table = node_rma_form_to_table(form)
-    return render_table(table)
-
-
-def list_available_nodes(bundle_dirs):
-    """List all available nodes with their position within Box in tabular format."""
-    box_nodes = {}  # Group nodes by Box serial number
-    bundle_to_node = {}  # Map bundle_dir to node_info for path lookup
-    
-    # Calculate minimum unique paths for all bundle directories
-    unique_paths = calculate_minimum_unique_paths(bundle_dirs)
-    
-    # Collect all node information and group by Box serial
-    for bundle_dir in bundle_dirs:
-        monitor_file = bundle_dir / 'monitor_result.json'
-        if not monitor_file.exists():
-            continue
-            
-        node_info = extract_node_info_from_monitor(monitor_file)
-        if not node_info:
-            continue
-        
-        # Extract hostname from systemctl output (preferred over system_product_name)
-        hostname = extract_hostname_from_systemctl(bundle_dir)
-        if hostname:
-            node_info['name'] = hostname
-            # Update node type with hostname information
-            update_node_type_with_hostname(node_info, hostname)
-        
-        # Extract data IP from bundle directory
-        data_ip = extract_data_ip_from_bundle(bundle_dir)
-        node_info['data_ip'] = data_ip
-        
-        # Extract IPMI IP from bundle directory
-        ipmi_ip = extract_ipmi_ip_from_bundle(bundle_dir)
-        node_info['ipmi_ip'] = ipmi_ip
-        
-        # Extract create_time from BUNDLE_ARGS
-        create_time = extract_create_time_from_bundle_args(bundle_dir)
-        node_info['create_time'] = create_time
-        
-        # Add bundle path
-        node_info['bundle_path'] = unique_paths.get(bundle_dir, str(bundle_dir))
-        
-        # Extract Box serial number from FRU file
-        bundle_box_serial = None
-        bundle_board_serial = None
-        fru_file = bundle_dir / 'ipmitool' / 'ipmitool_fru_list.txt'
-        if fru_file.exists():
-            bundle_box_serial = extract_box_serial_from_fru(fru_file)
-            bundle_board_serial = extract_board_serial_from_fru(fru_file)
-        
-        # Extract Manufacturer ID and Product ID from mc_info file
-        manufacturer_id = None
-        product_id = None
-        mc_info_file = bundle_dir / 'ipmitool' / 'ipmitool_mc_info.txt'
-        if mc_info_file.exists():
-            manufacturer_id = extract_manufacturer_id_from_mc_info(mc_info_file)
-            product_id = extract_product_id_from_mc_info(mc_info_file)
-        
-        if data_ip and bundle_box_serial:
-            node_info['box_serial'] = bundle_box_serial
-            # Override system_serial_number with board serial if available
-            if bundle_board_serial:
-                node_info['serial_number'] = bundle_board_serial
-            # Add manufacturer and product IDs
-            node_info['manufacturer_id'] = manufacturer_id
-            node_info['product_id'] = product_id
-            bundle_to_node[bundle_dir] = node_info
-            
-            # Group nodes by Box serial number
-            if bundle_box_serial not in box_nodes:
-                box_nodes[bundle_box_serial] = []
-            box_nodes[bundle_box_serial].append(node_info)
-    
-    # Display available nodes in tabular format
-    if not box_nodes:
-        print("No nodes found with valid data", file=sys.stderr)
-        return
-    
-    # Sort boxes by MGMT IP of first node in each group
-    def get_first_node_mgmt_ip(box_serial_and_nodes):
-        box_serial, nodes = box_serial_and_nodes
-        if not nodes:
-            return '0.0.0.0'  # Fallback for empty groups
-        # Sort nodes by MGMT IP and take the first one
-        sorted_nodes = sorted(nodes, key=lambda x: x.get('mgmt_ip', '0.0.0.0'))
-        return sorted_nodes[0].get('mgmt_ip', '0.0.0.0')
-    
-    sorted_box_items = sorted(box_nodes.items(), key=get_first_node_mgmt_ip)
-    
-    # Create table using generic Table structure
-    table = Table()
-    
-    # Add header row
-    table.add_row("Name", "Type", "Position", "Data IP", "MGMT IP", "IPMI IP", 
-                  "Node S/N", "Box S/N", "Mfr ID", "Prod ID", "MAC Address", "Create Time", "Bundle Path")
-    table.add_separator()
-    
-    # Display nodes grouped by box
-    first_box = True
-    for box_serial, nodes in sorted_box_items:
-        # Sort nodes within each box by position (bottom first, then by last octet of data IP)
-        nodes.sort(key=lambda x: (x.get('position', '') != 'bottom', get_ip_last_octet(x.get('data_ip', ''))))
-        
-        # Add a visual separator between boxes (except for the first one)
-        if not first_box:
-            table.add_separator()
-        first_box = False
-        
-        # Add rows for each node in this box
-        for node in nodes:
-            # Get values with defaults for None
-            node_name = node.get('name') or 'Unknown'
-            node_type = (node.get('node_type') or 'unknown').upper()
-            position = node.get('position') or 'Unknown'
-            data_ip = node.get('data_ip') or 'Unknown'
-            mgmt_ip = node.get('mgmt_ip') or 'Unknown'
-            ipmi_ip = node.get('ipmi_ip') or 'Unknown'
-            node_serial = node.get('serial_number') or 'Unknown'
-            box_serial_val = node.get('box_serial') or 'Unknown'
-            manufacturer_id = node.get('manufacturer_id') or ''
-            product_id = node.get('product_id') or ''
-            mac_address = node.get('mac_address') or 'Unknown'
-            create_time = node.get('create_time') or 'Unknown'
-            bundle_path = node.get('bundle_path') or 'Unknown'
-            
-            table.add_row(node_name, node_type, position, data_ip, mgmt_ip, ipmi_ip,
-                         node_serial, box_serial_val, manufacturer_id, product_id,
-                         mac_address, create_time, bundle_path)
-    
-    # Render and print the table
-    print("Available Nodes:")
-    print("=" * 240)
     print(render_table(table))
 
 
-def display_matched_nodes(matched_nodes, match_type="multiple"):
-    """Display multiple matched nodes in a table format."""
-    if not matched_nodes:
-        return
-    
-    # Group nodes by box for better organization
-    box_nodes = {}
-    for node in matched_nodes:
-        box_serial = node.get('box_serial', 'Unknown')
-        if box_serial not in box_nodes:
-            box_nodes[box_serial] = []
-        box_nodes[box_serial].append(node)
-    
-    if match_type == "multiple":
-        print("Multiple nodes match your query. Please be more specific:")
-    elif match_type == "box_match":
-        print("No direct node matches found. Showing nodes from matching boxes:")
-    
-    print("=" * 240)
-    
-    # Create table using generic Table structure
+def show_drive_rma_form(device: Device, node: Node, sibling_nodes: List[Node], cluster: Cluster, case_number: Optional[str] = None):
+    """Show RMA form for a drive"""
     table = Table()
     
-    # Add header row
-    table.add_row("Name", "Type", "Position", "Data IP", "MGMT IP", "IPMI IP", 
-                  "Node S/N", "Box S/N", "Mfr ID", "Prod ID", "MAC Address", "Create Time", "Bundle Path")
+    # Header
+    title = "SSD Replacement" if device.drive_type == "ssd" else "NVRAM Replacement"
+    table.add_row(title, "FRU_...")
     table.add_separator()
     
-    # Sort boxes by MGMT IP of first node in each group
-    def get_first_node_mgmt_ip(box_serial_and_nodes):
-        box_serial, nodes = box_serial_and_nodes
-        if not nodes:
-            return '0.0.0.0'
-        sorted_nodes = sorted(nodes, key=lambda x: x.get('mgmt_ip', '0.0.0.0'))
-        return sorted_nodes[0].get('mgmt_ip', '0.0.0.0')
+    # Case number (always shown with smart default)
+    case_label = format_case_number(case_number)
+    table.add_row(case_label, "RMA-0000.... / FE-000.....")
     
-    sorted_box_items = sorted(box_nodes.items(), key=get_first_node_mgmt_ip)
+    # Standard fields
+    table.add_row("Cluster", cluster.cluster_name)
+    table.add_row("Tracking", "FedEx #  <TBD>")
+    table.add_row("Delivery ETA", "")
+    table.add_row("Room / Rack / RU", "")
     
-    # Display nodes grouped by box
-    first_box = True
-    for box_serial, nodes in sorted_box_items:
-        # Sort nodes within each box by position (bottom first, then by last octet of data IP)
-        nodes.sort(key=lambda x: (x.get('position', '') != 'bottom', get_ip_last_octet(x.get('data_ip', ''))))
-        
-        # Add a visual separator between boxes (except for the first one)
-        if not first_box:
-            table.add_separator()
-        first_box = False
-        
-        # Add rows for each node in this box
-        for node in nodes:
-            # Get values with defaults for None
-            node_name = node.get('name') or 'Unknown'
-            node_type = (node.get('node_type') or 'unknown').upper()
-            position = node.get('position') or 'Unknown'
-            data_ip = node.get('data_ip') or 'Unknown'
-            mgmt_ip = node.get('mgmt_ip') or 'Unknown'
-            ipmi_ip = node.get('ipmi_ip') or 'Unknown'
-            node_serial = node.get('serial_number') or 'Unknown'
-            box_serial_val = node.get('box_serial') or 'Unknown'
-            manufacturer_id = node.get('manufacturer_id') or ''
-            product_id = node.get('product_id') or ''
-            mac_address = node.get('mac_address') or 'Unknown'
-            create_time = node.get('create_time') or 'Unknown'
-            bundle_path = node.get('bundle_path') or 'Unknown'
-            
-            table.add_row(node_name, node_type, position, data_ip, mgmt_ip, ipmi_ip,
-                         node_serial, box_serial_val, manufacturer_id, product_id,
-                         mac_address, create_time, bundle_path)
+    # Drive information
+    table.add_row("DBox", node.box_serial or '')
+    table.add_row("Location in Box", device.location_in_box)
+    index = "1" if node.position == "bottom" else "2"
+    table.add_row("Index", index)
+    table.add_row("DevicePath", device.path)
+    table.add_row("ModelNumber", device.model)
+    table.add_row("SerialNumber", device.serial)
     
-    # Render and print the table
+    # Associated node
+    table.add_row("", "associated dnode", style="subtitle")
+    table.add_row("name", node.name)
+    table.add_row("position", node.position)
+    table.add_row("IP", node.network.data_ip or "")
+    table.add_row("MGMT IP", node.network.mgmt_ip or "")
+    table.add_row("IPMI IP", node.network.ipmi_ip or "")
+    table.add_row("SerialNumber", node.serial_number)
+    table.add_row("MAC Address", node.network.mac_address or "")
+    
+    # Sibling nodes
+    for sibling in sibling_nodes:
+        table.add_row("", f"sibling {sibling.node_type}", style="subtitle")
+        table.add_row("name", sibling.name)
+        table.add_row("position", sibling.position)
+        table.add_row("IP", sibling.network.data_ip or "")
+        table.add_row("MGMT IP", sibling.network.mgmt_ip or "")
+        table.add_row("IPMI IP", sibling.network.ipmi_ip or "")
+        table.add_row("SerialNumber", sibling.serial_number)
+        table.add_row("MAC Address", sibling.network.mac_address or "")
+    
     print(render_table(table))
 
 
-def find_sibling_nodes_for_drive(target_node_info, bundle_dirs):
-    """Find sibling nodes for a drive's host node."""
-    if not target_node_info or not target_node_info.get('box_serial'):
-        return []
+def show_device_list(node: Node, sibling_nodes: List[Node], drive_type_filter: Optional[str] = None, nodes_for_drives: Optional[List[Node]] = None):
+    """Show list of devices for a node
     
-    target_box_serial = target_node_info['box_serial']
-    target_name = target_node_info.get('name')
-    target_data_ip = target_node_info.get('data_ip')
-    sibling_nodes = []
-    seen_node_identifiers = set()
+    Args:
+        node: Primary node to display
+        sibling_nodes: Sibling nodes to display in info section
+        drive_type_filter: Filter drives by type (ssd/nvram)
+        nodes_for_drives: Nodes to include drives from (default: node + siblings)
+    """
+    # Determine which nodes to get drives from
+    if nodes_for_drives is None:
+        nodes_for_drives = [node] + sibling_nodes
     
-    # Calculate minimum unique paths for all bundle directories
-    unique_paths = calculate_minimum_unique_paths(bundle_dirs)
+    # Get devices from specified nodes only
+    all_devices = []
+    for n in nodes_for_drives:
+        for device in n.devices:
+            if drive_type_filter and device.drive_type != drive_type_filter:
+                continue
+            all_devices.append((device, n))
     
-    for bundle_dir in bundle_dirs:
-        monitor_file = bundle_dir / 'monitor_result.json'
-        if not monitor_file.exists():
-            continue
-            
-        node_info = extract_node_info_from_monitor(monitor_file)
-        if not node_info:
-            continue
-        
-        # Extract hostname from systemctl output
-        hostname = extract_hostname_from_systemctl(bundle_dir)
-        if hostname:
-            node_info['name'] = hostname
-            # Update node type with hostname information
-            update_node_type_with_hostname(node_info, hostname)
-        
-        # Extract data IP from bundle directory
-        data_ip = extract_data_ip_from_bundle(bundle_dir)
-        node_info['data_ip'] = data_ip
-        
-        # Extract IPMI IP from bundle directory
-        ipmi_ip = extract_ipmi_ip_from_bundle(bundle_dir)
-        node_info['ipmi_ip'] = ipmi_ip
-        
-        # Add bundle path
-        node_info['bundle_path'] = unique_paths.get(bundle_dir, str(bundle_dir))
-        
-        # Extract create_time from BUNDLE_ARGS
-        create_time = extract_create_time_from_bundle_args(bundle_dir)
-        node_info['create_time'] = create_time
-        
-        # Extract Box serial number from FRU file
-        fru_file = bundle_dir / 'ipmitool' / 'ipmitool_fru_list.txt'
-        if fru_file.exists():
-            bundle_box_serial = extract_box_serial_from_fru(fru_file)
-            bundle_board_serial = extract_board_serial_from_fru(fru_file)
-            node_info['box_serial'] = bundle_box_serial
-            # Override system_serial_number with board serial if available
-            if bundle_board_serial:
-                node_info['serial_number'] = bundle_board_serial
-            
-            # Get node identifiers for deduplication
-            node_name = node_info.get('name')
-            node_data_ip = node_info.get('data_ip')
-            node_identifier = f"{node_name}|{node_data_ip}"
-            target_identifier = f"{target_name}|{target_data_ip}"
-            
-            # Check if this node is in the same box but is not the target node
-            # and we haven't already seen this physical node
-            if (bundle_box_serial == target_box_serial and 
-                node_name and node_data_ip and
-                node_identifier != target_identifier and
-                node_identifier not in seen_node_identifiers and
-                node_info.get('node_type') == 'dnode'):
-                
-                sibling_nodes.append(node_info)
-                seen_node_identifiers.add(node_identifier)
+    if not all_devices:
+        print(f"No devices found", file=sys.stderr)
+        return
     
-    # Sort siblings by last octet of data IP
-    sibling_nodes.sort(key=lambda x: get_ip_last_octet(x.get('data_ip', '')))
-    return sibling_nodes
+    # Render node section
+    table = Table()
+    table.add_row("DBox S/N", node.box_serial or '')
+    table.add_row("", "dnode", style="subtitle")
+    index = "1" if node.position == "bottom" else "2"
+    table.add_row("Index", index)
+    table.add_row("ModelNumber", "")
+    table.add_row("name", node.name)
+    table.add_row("position", node.position)
+    table.add_row("IP", node.network.data_ip or '')
+    table.add_row("MGMT IP", node.network.mgmt_ip or '')
+    table.add_row("IPMI IP", node.network.ipmi_ip or '')
+    table.add_row("SerialNumber", node.serial_number)
+    table.add_row("MAC Address", node.network.mac_address or '')
+    
+    for sibling in sibling_nodes:
+        table.add_row("", "sibling dnode", style="subtitle")
+        table.add_row("name", sibling.name)
+        table.add_row("position", sibling.position)
+        table.add_row("IP", sibling.network.data_ip or '')
+        table.add_row("MGMT IP", sibling.network.mgmt_ip or '')
+        table.add_row("IPMI IP", sibling.network.ipmi_ip or '')
+        table.add_row("SerialNumber", sibling.serial_number)
+        table.add_row("MAC Address", sibling.network.mac_address or '')
+    
+    print(render_table(table))
+    print()
+    
+    # Render devices table
+    drive_label = "SSDs" if drive_type_filter == "ssd" else "NVRAMs" if drive_type_filter == "nvram" else "Drives"
+    print(f"{drive_label}:")
+    
+    device_table = Table()
+    device_table.add_row("Type", "Serial", "Location", "Node", "Index", "DevicePath", "Model")
+    device_table.add_separator()
+    
+    # Sort by location
+    all_devices.sort(key=lambda x: (x[0].pci_switch_slot or 999, x[1].name))
+    
+    for device, dev_node in all_devices:
+        device_table.add_row(
+            device.drive_type,
+            device.serial,
+            device.location_in_box,
+            dev_node.name,
+            str(device.data.get('index', 'N/A') if device.data else 'N/A'),
+            device.path,
+            device.model
+        )
+    
+    print(render_table(device_table))
 
+
+# ============================================================================
+# Main CLI
+# ============================================================================
 
 def main():
     try:
         main_impl()
-    except BrokenPipeError:
-        # Handle broken pipe gracefully (occurs when output is piped to head, less, etc.)
-        import sys
-        sys.stderr.close()
-        sys.stdout.close()
+    except (BrokenPipeError, KeyboardInterrupt):
         sys.exit(0)
-    except KeyboardInterrupt:
-        # Handle Ctrl+C gracefully
-        sys.exit(1)
 
 
 def main_impl():
-    # Set up argument parsing
     parser = argparse.ArgumentParser(
-        description='Extract node or drive (SSD/NVRAM) information from bundle directories',
+        description='Luna-style RMA Preparation Tool',
         epilog='''
 Examples:
-  %(prog)s                                            # List all available nodes
-  %(prog)s dnode-3-100                                # Show specific node (exact match)
-  %(prog)s 'dnode.*100'                               # Regex match nodes
-  %(prog)s dnode161 --ssd                             # List all drives in dnode161
-  %(prog)s dnode110 --nvram                           # List all drives in dnode110
-  %(prog)s --ssd PHAC2070006C30PGGN                   # Show SSD replacement info
-  %(prog)s --nvram PHAC2070006C30PGGN                 # Show NVRAM replacement info
-  %(prog)s --drive PHAC2070006C30PGGN                 # Show drive replacement info (SSD or NVRAM)
-  %(prog)s --case 00090597 --drive PHAC207000DN30PGGN # Show drive replacement with case number
-  %(prog)s --verbose --drive SERIAL123                # Show detailed debugging information
+  %(prog)s                                            # List all nodes
+  %(prog)s dnode-3-100                                # Show node RMA form
+  %(prog)s --drive PHAC2070006C30PGGN                 # Show drive RMA form
+  %(prog)s dnode161 --ssd                             # List SSDs in node
+  %(prog)s --case 00090597 --drive SERIAL123          # RMA form with case
         ''',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('node_name', nargs='?', help='Node name to search for (regex supported)')
     
-    # Create mutually exclusive group for drive serial arguments (all mean the same thing)
-    # nargs='?' makes the serial number optional - if flag is present but no value, it lists drives
+    parser.add_argument('node_name', nargs='?', help='Node identifier (name/serial/IP/regex)')
+    
     drive_group = parser.add_mutually_exclusive_group()
-    drive_group.add_argument('--ssd', nargs='?', const='LIST', metavar='DRIVE_SERIAL', 
-                           help='Drive serial number to search for, or list SSDs if no serial provided (DNodes only)')
-    drive_group.add_argument('--drive', nargs='?', const='LIST', metavar='DRIVE_SERIAL',
-                           help='Drive serial number to search for, or list drives if no serial provided (DNodes only)')
-    drive_group.add_argument('--nvram', nargs='?', const='LIST', metavar='DRIVE_SERIAL',
-                           help='Drive serial number to search for, or list NVRAMs if no serial provided (DNodes only)')
-    drive_group.add_argument('--scm', nargs='?', const='LIST', metavar='DRIVE_SERIAL',
-                           help='Drive serial number to search for, or list SCMs if no serial provided (DNodes only)')
+    drive_group.add_argument('--ssd', nargs='?', const='LIST', metavar='SERIAL')
+    drive_group.add_argument('--drive', nargs='?', const='LIST', metavar='SERIAL')
+    drive_group.add_argument('--nvram', nargs='?', const='LIST', metavar='SERIAL')
+    drive_group.add_argument('--scm', nargs='?', const='LIST', metavar='SERIAL')
     
-    # Add verbose logging option
-    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging for debugging')
-    
-    # Add case number option
-    parser.add_argument('--case', metavar='CASE_NUMBER', help='Case number to include in the output')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--case', metavar='CASE_NUMBER', help='Case number for RMA form')
     
     args = parser.parse_args()
     
-    # Configure logging based on verbose flag
+    # Configure logging
     if args.verbose:
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format='[VERBOSE] %(message)s',
-            stream=sys.stderr
-        )
-        logging.debug("Verbose logging enabled")
+        logging.basicConfig(level=logging.DEBUG, format='[VERBOSE] %(message)s', stream=sys.stderr)
     else:
         logging.basicConfig(level=logging.WARNING)
     
-    # Find all bundle directories first
-    logging.debug("Starting bundle directory discovery...")
-    all_bundle_dirs = find_bundle_directories()
-    if not all_bundle_dirs:
-        logging.debug("No bundle directories found")
-        print("Error: No bundle directories found", file=sys.stderr)
+    # Discover cluster
+    logging.debug("Discovering cluster...")
+    try:
+        cluster = ClusterDiscovery.discover()
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     
-    # Filter to keep only the latest bundle per node
-    logging.debug("Filtering to latest bundles per node...")
-    bundle_dirs = filter_latest_bundles_per_node(all_bundle_dirs)
-    if not bundle_dirs:
-        logging.debug("No valid bundles after filtering")
-        print("Error: No valid bundle directories found after filtering", file=sys.stderr)
-        sys.exit(1)
+    logging.debug(f"Cluster initialized with {len(cluster.bundles)} bundles")
     
-    # Handle drive mode (SSD/NVRAM/SCM)
+    # Handle drive mode
     drive_serial = args.ssd or args.drive or args.nvram or args.scm
     if drive_serial:
-        # Check if this is a list request (flag without serial number)
         if drive_serial == 'LIST':
-            # Need a node name to list drives
+            # List drives for a node or box
             if not args.node_name:
                 print("Error: Please provide a node name to list drives", file=sys.stderr)
-                print("Example: rma_prep.py dnode161 --ssd", file=sys.stderr)
                 sys.exit(1)
             
-            # Find the node first
-            match_type, target_node, sibling_nodes, box_serial, matched_nodes = find_node_in_bundles(args.node_name, bundle_dirs)
-            
-            # Determine which nodes to list drives for
-            nodes_to_list = []
-            
-            if match_type == 'single':
-                # Single node match - allow if it's a dnode
-                if target_node.get('node_type') != 'dnode':
-                    print(f"Error: Node '{args.node_name}' is not a DNode. Drive listing only works with DNodes.", file=sys.stderr)
-                    sys.exit(1)
-                nodes_to_list = [target_node]
-            elif match_type in ('multiple', 'box_match'):
-                # Multiple nodes - check if all are dnodes from a single box
-                all_dnodes = all(node.get('node_type') == 'dnode' for node in matched_nodes)
-                box_serials = set(node.get('box_serial') for node in matched_nodes if node.get('box_serial'))
-                single_box = len(box_serials) == 1
-                
-                if not all_dnodes:
-                    print("Error: Drive listing is only supported for DNodes", file=sys.stderr)
-                    display_matched_nodes(matched_nodes, match_type)
-                    sys.exit(1)
-                elif not single_box:
-                    print("Error: Drive listing requires all nodes to be from the same DBox", file=sys.stderr)
-                    display_matched_nodes(matched_nodes, match_type)
-                    sys.exit(1)
-                
-                nodes_to_list = matched_nodes
-            else:
+            matches = cluster.find_node(args.node_name)
+            if not matches:
                 print(f"Error: Node '{args.node_name}' not found", file=sys.stderr)
                 sys.exit(1)
             
-            # Collect all drives from all matched nodes
-            all_drives = []
-            for node in nodes_to_list:
-                bundle_dir_str = node.get('bundle_dir_full')
-                if not bundle_dir_str:
-                    continue
-                
-                bundle_dir = Path(bundle_dir_str)
-                node_drives = list_drives_in_bundle(bundle_dir)
-                
-                if not node_drives:
-                    continue
-                
-                # Tag each drive with its node name
-                node_name = node.get('name', 'Unknown')
-                for drive in node_drives:
-                    drive['node_name'] = node_name
-                
-                all_drives.extend(node_drives)
-            
-            if not all_drives:
-                print(f"No drives found in any matching nodes", file=sys.stderr)
+            # Check if all matches are dnodes from the same box
+            dnodes = [(n, b) for n, b in matches if n.node_type == 'dnode']
+            if not dnodes:
+                print(f"Error: No DNodes found. Drive listing only works with DNodes.", file=sys.stderr)
                 sys.exit(1)
             
-            # Filter drives based on the flag used
-            if args.ssd:
-                filtered_drives = [d for d in all_drives if d.get('drive_type') == 'ssd']
-                drive_type_label = "SSDs"
-            elif args.nvram or args.scm:
-                filtered_drives = [d for d in all_drives if d.get('drive_type') == 'nvram']
-                drive_type_label = "NVRAMs"
+            # If multiple nodes match, check if they're all from the same box
+            if len(dnodes) > 1:
+                # Check if all from same box
+                box_serials = set(n.box_serial for n, b in dnodes)
+                if len(box_serials) == 1:
+                    # All from same box - show all nodes and all their drives
+                    node, bundle = dnodes[0]
+                    siblings = [n for n, b in dnodes[1:]]
+                    # Sort siblings by last octet of data IP
+                    siblings.sort(key=lambda n: get_ip_last_octet(n.network.data_ip))
+                    nodes_for_drives = [node] + siblings
+                else:
+                    # Different boxes - need to be more specific
+                    print(f"Multiple nodes from different boxes matched '{args.node_name}'. Please be more specific:", file=sys.stderr)
+                    print(file=sys.stderr)
+                    list_nodes(matches, "Matched Nodes")
+                    sys.exit(1)
             else:
-                filtered_drives = all_drives
-                drive_type_label = "Drives"
+                # Single node match - show node and siblings, but only matched node's drives
+                node, bundle = dnodes[0]
+                # Get all siblings from the same box
+                all_box_nodes = [n for n, b in cluster.nodes_by_box(node.box_serial) 
+                                if n.node_type == 'dnode']
+                siblings = [n for n in all_box_nodes if n != node]
+                # Sort siblings by last octet of data IP
+                siblings.sort(key=lambda n: get_ip_last_octet(n.network.data_ip))
+                # Only get drives from the matched node
+                nodes_for_drives = [node]
             
-            if not filtered_drives:
-                print(f"No {drive_type_label.lower()} found in matching nodes", file=sys.stderr)
-                sys.exit(1)
+            # Filter by drive type
+            filter_type = 'ssd' if args.ssd else 'nvram' if (args.nvram or args.scm) else None
+            show_device_list(node, siblings, filter_type, nodes_for_drives)
             
-            # Prepare primary node and siblings for display
-            if match_type == 'single':
-                primary_node = target_node
-                display_siblings = sibling_nodes
-                display_box_serial = box_serial
-            else:
-                # For multiple nodes, use first as primary, rest as siblings
-                primary_node = nodes_to_list[0]
-                display_siblings = nodes_to_list[1:] if len(nodes_to_list) > 1 else None
-                # Get box serial from primary node
-                display_box_serial = primary_node.get('box_serial')
-            
-            # Render node information using RMA-style dnode section
-            node_info_output = render_dnode_section(primary_node, display_siblings, display_box_serial)
-            if node_info_output:
-                print(node_info_output)
-                print()  # Blank line before drives
-            
-            # Render drive list
-            drive_output = render_drive_list_table(filtered_drives, drive_type_label)
-            if drive_output:
-                print(drive_output)
-            
-            return
-        
-        # Otherwise, this is a specific drive serial search
-        drive_info, node_info, bundle_dir = find_drive_in_bundles(drive_serial, bundle_dirs)
-        
-        if not drive_info:
-            print(f"Error: Could not find drive with serial number '{drive_serial}'", file=sys.stderr)
-            sys.exit(1)
-            
-        if not node_info:
-            print(f"Error: Could not find node information for drive '{drive_serial}'", file=sys.stderr)
-            sys.exit(1)
-            
-        if node_info.get('node_type') != 'dnode':
-            print(f"Error: Drive '{drive_serial}' is not in a DNode. Drive replacement only works with DNodes.", file=sys.stderr)
-            sys.exit(1)
-        
-        # Find sibling nodes
-        sibling_nodes = find_sibling_nodes_for_drive(node_info, bundle_dirs)
-        
-        # Build RMA form using new data model
-        rma_form = build_drive_rma_form_from_legacy_data(
-            drive_info, node_info, sibling_nodes, args.case, bundle_dir
-        )
-        
-        # Render and print drive replacement output
-        output = render_drive_rma_form(rma_form)
-        if output:
-            print(output)
         else:
-            print("Error: Could not format drive output", file=sys.stderr)
-            sys.exit(1)
+            # Show drive RMA form
+            result = cluster.find_device(drive_serial)
+            if not result:
+                print(f"Error: Drive '{drive_serial}' not found", file=sys.stderr)
+                sys.exit(1)
+            
+            device, node, bundle = result
+            if node.node_type != 'dnode':
+                print(f"Error: Drive is not in a DNode", file=sys.stderr)
+                sys.exit(1)
+            
+            # Get siblings
+            siblings = [n for n, b in cluster.nodes_by_box(node.box_serial) 
+                       if n != node and n.node_type == 'dnode']
+            # Sort siblings by last octet of data IP
+            siblings.sort(key=lambda n: get_ip_last_octet(n.network.data_ip))
+            
+            show_drive_rma_form(device, node, siblings, cluster, args.case)
+        
         return
     
-    # Handle node mode (original functionality)
+    # Handle node mode
     if not args.node_name:
-        # No arguments provided, list all available nodes
-        list_available_nodes(bundle_dirs)
+        # List all nodes
+        list_all_nodes(cluster)
         return
     
-    # Find node information using enhanced matching
-    match_type, target_node, sibling_nodes, box_serial, matched_nodes = find_node_in_bundles(args.node_name, bundle_dirs)
+    # Find specific node
+    matches = cluster.find_node(args.node_name)
     
-    # Not a drive list request - handle normal node RMA flow
-    if match_type == 'single':
-        # Single match found, build RMA form and render
-        rma_form = build_node_rma_form_from_legacy_data(
-            target_node, sibling_nodes, box_serial, args.case
-        )
-        
-        # Render and print node replacement output
-        output = render_node_rma_form(rma_form)
-        if output:
-            print(output)
-        else:
-            print("Error: Could not format output", file=sys.stderr)
-            sys.exit(1)
-    elif match_type == 'multiple':
-        # Multiple matches found, display list
-        display_matched_nodes(matched_nodes, "multiple")
-        sys.exit(0)
-    elif match_type == 'box_match':
-        # Box serial matches found, display list
-        display_matched_nodes(matched_nodes, "box_match")
-        sys.exit(0)
-    else:
-        # No matches found
-        print(f"Error: Could not find any matches for '{args.node_name}'", file=sys.stderr)
-        print("Try using regex patterns or check available nodes with no arguments", file=sys.stderr)
+    if not matches:
+        print(f"Error: No matches found for '{args.node_name}'", file=sys.stderr)
         sys.exit(1)
+    
+    if len(matches) > 1:
+        print(f"Multiple nodes matched '{args.node_name}'. Please be more specific:", file=sys.stderr)
+        print(file=sys.stderr)
+        list_nodes(matches, "Matched Nodes")
+        sys.exit(1)
+    
+    # Single match - show RMA form
+    node, bundle = matches[0]
+    siblings = [n for n, b in cluster.nodes_by_box(node.box_serial) if n != node]
+    # Sort siblings by last octet of data IP
+    siblings.sort(key=lambda n: get_ip_last_octet(n.network.data_ip))
+    show_node_rma_form(node, siblings, cluster, args.case)
 
 
 if __name__ == "__main__":
