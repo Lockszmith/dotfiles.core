@@ -50,9 +50,394 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import List, Optional, Literal, Union
 
 
+# ============================================================================
+# Data Model Classes (see MODEL.md for detailed documentation)
+# ============================================================================
 
+@dataclass
+class NetworkInfo:
+    """Network configuration for a node"""
+    mgmt_ip: Optional[str] = None
+    ipmi_ip: Optional[str] = None
+    mac_address: Optional[str] = None
+    data_ip: Optional[str] = None
+
+
+@dataclass
+class Node:
+    """A compute node (CNode) or data node (DNode)"""
+    name: str
+    serial_number: str
+    position: str  # "top", "bottom"
+    network: NetworkInfo
+    node_type: Literal["dnode", "cnode"]
+    is_smbus_master: bool = False
+
+
+@dataclass
+class Drive:
+    """Storage drive (SSD or NVRAM)"""
+    serial_number: str
+    model_number: str
+    device_path: str
+    location_in_box: str  # e.g., "A-1", "B-2"
+    drive_type: Literal["ssd", "nvram"]
+    size: Optional[str] = None
+
+
+@dataclass
+class PSU:
+    """Power Supply Unit"""
+    serial_number: str
+    location_in_box: str
+    model_number: Optional[str] = None
+
+
+@dataclass
+class Fan:
+    """Cooling fan"""
+    serial_number: str
+    location_in_box: Optional[str] = None
+    location_in_node: Optional[str] = None
+    associated_node: Optional[str] = None
+    model_number: Optional[str] = None
+
+
+@dataclass
+class DTray:
+    """Data Tray - contains DNodes within a DBox"""
+    position: str  # "top", "bottom"
+    nodes: List[Node] = field(default_factory=list)
+
+
+@dataclass
+class DBox:
+    """Data Box - contains drives and DNodes"""
+    serial_number: str
+    nodes: List[Node] = field(default_factory=list)
+    dtrays: List[DTray] = field(default_factory=list)
+    drives: List[Drive] = field(default_factory=list)
+    fans: List[Fan] = field(default_factory=list)
+    psus: List[PSU] = field(default_factory=list)
+    
+    @property
+    def has_dtrays(self) -> bool:
+        """Check if this DBox uses DTray configuration"""
+        return len(self.dtrays) > 0
+    
+    @property
+    def smbus_master_node(self) -> Optional[Node]:
+        """Find the SMBus master node in this box"""
+        for node in self.nodes:
+            if node.is_smbus_master:
+                return node
+        return None
+
+
+@dataclass
+class CBox:
+    """Compute Box - contains CNodes"""
+    serial_number: str
+    nodes: List[Node] = field(default_factory=list)
+    boot_drives: List[Drive] = field(default_factory=list)
+    fans: List[Fan] = field(default_factory=list)
+    psus: List[PSU] = field(default_factory=list)
+    
+    @property
+    def smbus_master_node(self) -> Optional[Node]:
+        """Find the SMBus master node in this box"""
+        for node in self.nodes:
+            if node.is_smbus_master:
+                return node
+        return None
+
+
+@dataclass
+class RMAContext:
+    """Site location and case tracking information"""
+    case_number: str  # 8-char format: "00090597" or "000...."
+    cluster: str
+    tracking: str = "FedEx #  <TBD>"
+    delivery_eta: str = ""
+    room_rack_ru: str = ""
+
+
+@dataclass
+class DriveRMAForm:
+    """RMA form for SSD/NVRAM drive replacement"""
+    context: RMAContext
+    drive: Drive
+    dbox: DBox
+    
+    @property
+    def title(self) -> str:
+        return "SSD Replacement" if self.drive.drive_type == "ssd" else "NVRAM Replacement"
+    
+    @property
+    def fru_part(self) -> str:
+        return "FRU_..."
+    
+    @property
+    def associated_node(self) -> Optional[Node]:
+        """Primary DNode associated with this drive (by index/position)"""
+        # For now, return first node if available
+        # TODO: Match by drive index calculation
+        return self.dbox.nodes[0] if self.dbox.nodes else None
+    
+    @property
+    def sibling_nodes(self) -> List[Node]:
+        """Other DNodes in the same DBox"""
+        if not self.associated_node:
+            return self.dbox.nodes
+        return [n for n in self.dbox.nodes if n != self.associated_node]
+
+
+@dataclass
+class NodeRMAForm:
+    """RMA form for node replacement"""
+    context: RMAContext
+    node: Node
+    box: Union[DBox, CBox]
+    dtray: Optional[DTray] = None
+    
+    @property
+    def title(self) -> str:
+        return f"{self.node.node_type.upper()} Replacement"
+    
+    @property
+    def fru_part(self) -> str:
+        return f"FRU-___-{self.node.node_type.upper()}-___"
+    
+    @property
+    def sibling_nodes(self) -> List[Node]:
+        """Other nodes in the same box/dtray"""
+        if self.dtray:
+            return [n for n in self.dtray.nodes if n != self.node]
+        return [n for n in self.box.nodes if n != self.node]
+
+
+@dataclass
+class PSURMAForm:
+    """RMA form for PSU replacement"""
+    context: RMAContext
+    psu: PSU
+    box: Union[DBox, CBox]
+    
+    @property
+    def title(self) -> str:
+        return "PSU Replacement"
+    
+    @property
+    def fru_part(self) -> str:
+        return "FRU_..."
+    
+    @property
+    def smbus_master(self) -> Optional[Node]:
+        return self.box.smbus_master_node
+    
+    @property
+    def all_nodes(self) -> List[Node]:
+        return self.box.nodes
+
+
+@dataclass
+class FanRMAForm:
+    """RMA form for fan replacement"""
+    context: RMAContext
+    fan: Fan
+    box: Union[DBox, CBox]
+    associated_node: Optional[Node] = None
+    
+    @property
+    def title(self) -> str:
+        return "Fan Replacement"
+    
+    @property
+    def fru_part(self) -> str:
+        return "FRU_..."
+    
+    @property
+    def smbus_master(self) -> Optional[Node]:
+        return self.box.smbus_master_node
+    
+    @property
+    def all_nodes(self) -> List[Node]:
+        return self.box.nodes
+
+
+# ============================================================================
+# Generic Table Data Structure
+# ============================================================================
+
+@dataclass
+class TableCell:
+    """A single cell in a table"""
+    content: str = ""
+    
+    def __str__(self) -> str:
+        return self.content
+
+
+@dataclass
+class TableRow:
+    """A row in a table with styling"""
+    cells: List[TableCell]
+    style: Literal["default", "subtitle", "separator"] = "default"
+    
+    def __init__(self, *cells: Union[str, TableCell], style: Literal["default", "subtitle", "separator"] = "default"):
+        """Create a row from cell content or TableCell objects"""
+        self.cells = []
+        for cell in cells:
+            if isinstance(cell, TableCell):
+                self.cells.append(cell)
+            else:
+                self.cells.append(TableCell(str(cell)))
+        self.style = style
+
+
+@dataclass
+class Table:
+    """A generic table structure"""
+    rows: List[TableRow] = field(default_factory=list)
+    
+    def add_row(self, *cells: Union[str, TableCell], style: Literal["default", "subtitle", "separator"] = "default"):
+        """Add a row to the table"""
+        self.rows.append(TableRow(*cells, style=style))
+    
+    def add_separator(self):
+        """Add a separator row (will be rendered as dashes)"""
+        # Separator rows are special - they don't need cell content
+        self.rows.append(TableRow(style="separator"))
+    
+    def calculate_column_widths(self) -> List[int]:
+        """Calculate optimal width for each column based on content"""
+        if not self.rows:
+            return []
+        
+        # Determine number of columns (from first non-separator row)
+        num_columns = 0
+        for row in self.rows:
+            if row.style != "separator":
+                num_columns = len(row.cells)
+                break
+        
+        if num_columns == 0:
+            return []
+        
+        # Calculate max width for each column
+        widths = [0] * num_columns
+        
+        for row in self.rows:
+            if row.style == "separator":
+                continue  # Skip separators in width calculation
+            
+            for i, cell in enumerate(row.cells):
+                if i < num_columns:
+                    content_len = len(cell.content)
+                    
+                    # For subtitle rows, account for the "--- " prefix and suffix
+                    if row.style == "subtitle" and i > 0:
+                        # Right column of subtitle: "--- content -----"
+                        # Add space for "--- " prefix (4 chars), content, " " (1 char), and "---" suffix (3 chars minimum)
+                        content_len = content_len + 8  # 4 + 1 + 3 = 8 extra chars
+                    # Left column of subtitle is always filled with dashes, so we skip special handling
+                    
+                    widths[i] = max(widths[i], content_len)
+        
+        # Ensure minimum widths (only for 2-column tables like RMA forms)
+        if num_columns == 2:
+            widths[0] = max(widths[0], 16)
+            widths[1] = max(widths[1], 26)
+        
+        return widths
+
+
+# ============================================================================
+# Generic Table Renderer
+# ============================================================================
+
+def render_table(table: Table) -> str:
+    """Render a table to formatted string output"""
+    if not table.rows:
+        return ""
+    
+    # Calculate column widths
+    widths = table.calculate_column_widths()
+    if not widths:
+        return ""
+    
+    lines = []
+    
+    for row in table.rows:
+        if row.style == "separator":
+            # Render separator row (all dashes)
+            parts = ['-' * width for width in widths]
+            lines.append(f"| {' | '.join(parts)} |")
+        
+        elif row.style == "subtitle":
+            # Render subtitle row with special formatting
+            # For 2-column tables: Left column filled with dashes, right column "--- content -----"
+            # For multi-column tables: First column "--- content -----", rest filled with dashes
+            
+            if len(widths) == 2:
+                # Original 2-column subtitle format
+                left = '-' * widths[0]
+                
+                if len(row.cells) > 1:
+                    right_content = row.cells[1].content
+                    # Calculate padding for right side
+                    available_width = widths[1]
+                    content_with_prefix = f"--- {right_content} "
+                    padding_needed = available_width - len(content_with_prefix)
+                    
+                    if padding_needed >= 3:
+                        right = content_with_prefix + ('-' * padding_needed)
+                    else:
+                        # Minimum 3 dashes on the right
+                        right = content_with_prefix + '---'
+                else:
+                    right = '-' * widths[1] if len(widths) > 1 else ""
+                
+                lines.append(f"| {left} | {right} |")
+            else:
+                # Multi-column subtitle format: "--- content -----" in first column, rest dashes
+                parts = []
+                for i, width in enumerate(widths):
+                    if i == 0 and len(row.cells) > 0:
+                        # First column: "--- content -----"
+                        content = row.cells[0].content
+                        content_with_prefix = f"--- {content} "
+                        padding_needed = width - len(content_with_prefix)
+                        
+                        if padding_needed >= 3:
+                            parts.append(content_with_prefix + ('-' * padding_needed))
+                        else:
+                            # Minimum 3 dashes on the right
+                            parts.append(content_with_prefix + '---')
+                    else:
+                        # Other columns: filled with dashes
+                        parts.append('-' * width)
+                
+                lines.append(f"| {' | '.join(parts)} |")
+        
+        else:  # default style
+            # Render normal row with padding
+            parts = []
+            for i, cell in enumerate(row.cells):
+                if i < len(widths):
+                    parts.append(f"{cell.content:<{widths[i]}}")
+            lines.append(f"| {' | '.join(parts)} |")
+    
+    return "\n".join(lines)
+
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
 
 def calculate_minimum_unique_paths(bundle_dirs):
     """Calculate minimum unique path components for bundle directories."""
@@ -751,6 +1136,145 @@ def find_drive_in_bundle(drive_serial, bundle_dir):
     return None
 
 
+def list_drives_in_bundle(bundle_dir):
+    """List all drives (SSD/NVRAM) in a specific bundle directory.
+    
+    Returns:
+        list: List of drive information dictionaries
+    """
+    logging.debug(f"Listing all drives in bundle: {bundle_dir}")
+    drives = []
+    
+    try:
+        # Check nvme_list.json as primary source
+        nvme_list_file = bundle_dir / 'nvme_list.json'
+        if nvme_list_file.exists():
+            logging.debug(f"Reading primary source: {nvme_list_file}")
+            with open(nvme_list_file, 'r') as f:
+                nvme_data = json.load(f)
+            
+            devices = nvme_data.get('Devices', [])
+            logging.debug(f"Found {len(devices)} devices in nvme_list.json")
+            
+            for device in devices:
+                model = device.get('ModelNumber')
+                path = device.get('DevicePath')
+                drive_type = determine_drive_type(model, path)
+                drives.append({
+                    'serial': device.get('SerialNumber'),
+                    'model': model,
+                    'path': path,
+                    'size': device.get('PhysicalSize'),
+                    'firmware_rev': device.get('Firmware'),
+                    'index': device.get('Index'),
+                    'drive_type': drive_type
+                })
+        else:
+            logging.debug(f"Primary source not found: {nvme_list_file}")
+    
+    except Exception as e:
+        logging.debug(f"Error reading drive data from {bundle_dir}: {e}")
+    
+    logging.debug(f"Found {len(drives)} drives in bundle: {bundle_dir}")
+    return drives
+
+
+def render_dnode_section(primary_node, sibling_nodes=None, box_serial=None):
+    """Render DNode section matching RMA form format (without header/case/tracking).
+    
+    This renders:
+    - DBox S/N
+    - Primary dnode details (with Index and ModelNumber)
+    - Sibling dnode details
+    
+    Args:
+        primary_node: Primary node dictionary
+        sibling_nodes: Optional list of sibling node dictionaries
+        box_serial: Optional box serial number
+    
+    Returns:
+        str: Formatted table string
+    """
+    table = Table()
+    
+    # DBox S/N
+    if box_serial:
+        table.add_row("DBox S/N", box_serial)
+    
+    # Primary node section
+    table.add_row("", "dnode", style="subtitle")
+    
+    # Calculate index based on node position
+    position = primary_node.get('position', '')
+    index = "1" if position == "bottom" else "2"
+    table.add_row("Index", index)
+    table.add_row("ModelNumber", "")  # Model number not available
+    table.add_row("name", primary_node.get('name', 'Unknown'))
+    table.add_row("position", position)
+    table.add_row("IP", primary_node.get('data_ip', primary_node.get('ip', '')))
+    table.add_row("MGMT IP", primary_node.get('mgmt_ip', ''))
+    table.add_row("IPMI IP", primary_node.get('ipmi_ip', ''))
+    table.add_row("SerialNumber", primary_node.get('serial_number', ''))
+    table.add_row("MAC Address", primary_node.get('mac_address', ''))
+    
+    # Sibling nodes
+    if sibling_nodes:
+        for sibling in sibling_nodes:
+            table.add_row("", "sibling dnode", style="subtitle")
+            table.add_row("name", sibling.get('name', 'Unknown'))
+            table.add_row("position", sibling.get('position', ''))
+            table.add_row("IP", sibling.get('data_ip', sibling.get('ip', '')))
+            table.add_row("MGMT IP", sibling.get('mgmt_ip', ''))
+            table.add_row("IPMI IP", sibling.get('ipmi_ip', ''))
+            table.add_row("SerialNumber", sibling.get('serial_number', ''))
+            table.add_row("MAC Address", sibling.get('mac_address', ''))
+    
+    return render_table(table)
+
+
+def render_drive_list_table(drives, drive_type_label="Drives"):
+    """Render a table of drives.
+    
+    Args:
+        drives: List of drive dictionaries (must include 'node_name' field)
+        drive_type_label: Label for the drives section (default: "Drives")
+    
+    Returns:
+        str: Formatted table string
+    """
+    if not drives:
+        return ""
+    
+    outputs = []
+    
+    # Add drives section with custom label header
+    outputs.append(f"{drive_type_label}:")
+    
+    drive_table = Table()
+    
+    # Add drive header
+    drive_table.add_row("Node", "Index", "Type", "DevicePath", "Model", "Serial", style="default")
+    drive_table.add_separator()
+    
+    # Sort drives by node name, then by index
+    sorted_drives = sorted(drives, key=lambda d: (d.get('node_name', 'Unknown'), d.get('index', 999)))
+    
+    # Add each drive
+    for drive in sorted_drives:
+        node_name = drive.get('node_name', 'Unknown')
+        index = str(drive.get('index', 'N/A'))
+        drive_type = drive.get('drive_type', 'Unknown')
+        path = drive.get('path', 'Unknown')
+        model = drive.get('model', 'Unknown')
+        serial = drive.get('serial', 'Unknown')
+        
+        drive_table.add_row(node_name, index, drive_type, path, model, serial)
+    
+    outputs.append(render_table(drive_table))
+    
+    return "\n".join(outputs)
+
+
 def find_drive_in_bundles(drive_serial, bundle_dirs):
     """Find the specified drive (SSD/NVRAM) in bundle directories.
     
@@ -835,6 +1359,159 @@ def find_drive_in_bundles(drive_serial, bundle_dirs):
     return None, None, None
 
 
+# ============================================================================
+# Data Model Builders (Build hardware models from extracted data)
+# ============================================================================
+
+def build_drive_rma_form_from_legacy_data(drive_info, node_info, sibling_nodes_data, case_number):
+    """Build a DriveRMAForm from legacy data structures"""
+    # Build NetworkInfo for associated node
+    network = NetworkInfo(
+        mgmt_ip=node_info.get('mgmt_ip'),
+        ipmi_ip=node_info.get('ipmi_ip'),
+        mac_address=node_info.get('mac_address'),
+        data_ip=node_info.get('data_ip')
+    )
+    
+    # Build associated Node
+    associated_node = Node(
+        name=node_info.get('name', ''),
+        serial_number=node_info.get('serial_number', ''),
+        position=node_info.get('position', ''),
+        network=network,
+        node_type=node_info.get('node_type', 'dnode'),
+        is_smbus_master=False  # TODO: Determine from data
+    )
+    
+    # Build sibling Nodes
+    sibling_nodes = []
+    for sibling_data in sibling_nodes_data:
+        sibling_network = NetworkInfo(
+            mgmt_ip=sibling_data.get('mgmt_ip'),
+            ipmi_ip=sibling_data.get('ipmi_ip'),
+            mac_address=sibling_data.get('mac_address'),
+            data_ip=sibling_data.get('data_ip')
+        )
+        sibling_node = Node(
+            name=sibling_data.get('name', ''),
+            serial_number=sibling_data.get('serial_number', ''),
+            position=sibling_data.get('position', ''),
+            network=sibling_network,
+            node_type=sibling_data.get('node_type', 'dnode'),
+            is_smbus_master=False
+        )
+        sibling_nodes.append(sibling_node)
+    
+    # Build Drive
+    drive = Drive(
+        serial_number=drive_info.get('serial'),
+        model_number=drive_info.get('model', ''),
+        device_path=drive_info.get('path', ''),
+        location_in_box=drive_info.get('location', 'Unknown'),
+        drive_type=drive_info.get('drive_type', 'ssd'),
+        size=drive_info.get('size')
+    )
+    
+    # Build DBox (with all nodes)
+    all_nodes = [associated_node] + sibling_nodes
+    dbox = DBox(
+        serial_number=node_info.get('box_serial', ''),
+        nodes=all_nodes,
+        drives=[drive]  # Only this drive for now
+    )
+    
+    # Format case number to 8 characters
+    if case_number:
+        formatted_case = str(case_number).zfill(8)
+    else:
+        formatted_case = "000...."
+    
+    # Build RMAContext
+    context = RMAContext(
+        case_number=formatted_case,
+        cluster=node_info.get('cluster_name', 'Unknown')
+    )
+    
+    # Build and return DriveRMAForm
+    return DriveRMAForm(
+        context=context,
+        drive=drive,
+        dbox=dbox
+    )
+
+
+def build_node_rma_form_from_legacy_data(target_node, sibling_nodes_data, box_serial, case_number=None):
+    """Build a NodeRMAForm from legacy data structures"""
+    # Build NetworkInfo for target node
+    network = NetworkInfo(
+        mgmt_ip=target_node.get('mgmt_ip'),
+        ipmi_ip=target_node.get('ipmi_ip'),
+        mac_address=target_node.get('mac_address'),
+        data_ip=target_node.get('data_ip')
+    )
+    
+    # Build target Node
+    node = Node(
+        name=target_node.get('name', ''),
+        serial_number=target_node.get('serial_number', ''),
+        position=target_node.get('position', ''),
+        network=network,
+        node_type=target_node.get('node_type', 'unknown'),
+        is_smbus_master=False  # TODO: Determine from data
+    )
+    
+    # Build sibling Nodes
+    sibling_nodes = []
+    for sibling_data in sibling_nodes_data:
+        sibling_network = NetworkInfo(
+            mgmt_ip=sibling_data.get('mgmt_ip'),
+            ipmi_ip=sibling_data.get('ipmi_ip'),
+            mac_address=sibling_data.get('mac_address'),
+            data_ip=sibling_data.get('data_ip')
+        )
+        sibling_node = Node(
+            name=sibling_data.get('name', ''),
+            serial_number=sibling_data.get('serial_number', ''),
+            position=sibling_data.get('position', ''),
+            network=sibling_network,
+            node_type=sibling_data.get('node_type', 'unknown'),
+            is_smbus_master=False
+        )
+        sibling_nodes.append(sibling_node)
+    
+    # Build Box (determine if DBox or CBox based on node type)
+    all_nodes = [node] + sibling_nodes
+    if node.node_type == 'dnode':
+        box = DBox(
+            serial_number=box_serial or '',
+            nodes=all_nodes
+        )
+    else:
+        box = CBox(
+            serial_number=box_serial or '',
+            nodes=all_nodes
+        )
+    
+    # Format case number to 8 characters
+    if case_number:
+        formatted_case = str(case_number).zfill(8)
+    else:
+        formatted_case = "000...."
+    
+    # Build RMAContext
+    context = RMAContext(
+        case_number=formatted_case,
+        cluster=target_node.get('cluster_name', 'Unknown') if 'cluster_name' in target_node else 'Unknown'
+    )
+    
+    # Build and return NodeRMAForm
+    return NodeRMAForm(
+        context=context,
+        node=node,
+        box=box
+    )
+
+
 def find_node_in_bundles(node_name, bundle_dirs):
     """Find the specified node in bundle directories using enhanced matching logic.
     
@@ -879,6 +1556,8 @@ def find_node_in_bundles(node_name, bundle_dirs):
         
         # Add bundle path
         node_info['bundle_path'] = unique_paths.get(bundle_dir, str(bundle_dir))
+        # Add full bundle directory path (for internal processing)
+        node_info['bundle_dir_full'] = str(bundle_dir)
         
         # Extract create_time from BUNDLE_ARGS
         create_time = extract_create_time_from_bundle_args(bundle_dir)
@@ -1003,188 +1682,126 @@ def find_node_in_bundles(node_name, bundle_dirs):
     return 'none', None, [], None, []
 
 
-def format_output(target_node, sibling_nodes, box_serial):
-    """Format the output according to the specified format."""
-    if not target_node:
-        return None
+# ============================================================================
+# RMA Form to Table Converters
+# ============================================================================
+
+def drive_rma_form_to_table(form: DriveRMAForm) -> Table:
+    """Convert a DriveRMAForm to a generic Table structure"""
+    table = Table()
     
-    # Determine index based on position
-    index = "1" if target_node.get('position') == 'bottom' else "2"
+    # Header row
+    table.add_row(form.title, form.fru_part)
     
-    # Get model number (empty for now as it's not clearly defined in the data)
-    model_number = ""
+    # Separator
+    table.add_separator()
     
-    # Get node type for display
-    node_type = target_node.get('node_type', 'unknown').upper()
+    # Case number
+    case_display = f"Case-{form.context.case_number}"
+    table.add_row(case_display, "RMA-0000.... / FE-000.....")
     
-    # Define column widths
-    left_col_width = 18
-    right_col_width = 28
+    # Standard fields
+    table.add_row("Cluster", form.context.cluster)
+    table.add_row("Tracking", form.context.tracking)
+    table.add_row("Delivery ETA", form.context.delivery_eta)
+    table.add_row("Room / Rack / RU", form.context.room_rack_ru)
     
-    # Helper function to create formatted lines
-    def create_line(left_text, right_text=""):
-        return f"| {left_text:<{left_col_width}} | {right_text:<{right_col_width}} |"
+    # Drive information
+    table.add_row("DBox", form.dbox.serial_number)
+    table.add_row("Location in Box", form.drive.location_in_box)
     
-    def create_separator():
-        return f"| {'-' * left_col_width} | {'-' * right_col_width} |"
+    # Calculate index based on node position
+    if form.associated_node:
+        index = "1" if form.associated_node.position == "bottom" else "2"
+    else:
+        index = "?"
+    table.add_row("Index", index)
     
-    # Build output lines
-    lines = [
-        create_line("Node Replacement", f"FRU-___-{node_type}-___"),
-        create_separator(),
-        create_line("Tracking", "FedEx #"),
-        create_line("Delivery ETA", ""),
-        create_line("Room", ""),
-        create_line("Rack", ""),
-        create_line("Rack Unit", ""),
-        create_line("Box S/N", box_serial or ""),
-        create_line("----------------", f"--- {node_type.lower()} -------"),
-        create_line("Index", str(index)),
-        create_line("ModelNumber", model_number),
-        create_line("name", target_node.get('name', '')),
-        create_line("position", target_node.get('position', '')),
-        create_line("IP", target_node.get('data_ip', '')),
-        create_line("MGMT IP", target_node.get('mgmt_ip', '')),
-        create_line("IPMI IP", target_node.get('ipmi_ip', '')),
-        create_line("SerialNumber", target_node.get('serial_number', '')),
-        create_line("MAC Address", target_node.get('mac_address', '')),
-    ]
+    table.add_row("DevicePath", form.drive.device_path)
+    table.add_row("ModelNumber", form.drive.model_number)
+    table.add_row("SerialNumber", form.drive.serial_number)
     
-    # Add all sibling nodes
-    if sibling_nodes:
-        for i, sibling_node in enumerate(sibling_nodes, 1):
-            sibling_type = sibling_node.get('node_type', 'unknown').lower()
-            sibling_header = f"--- sibling {sibling_type} {i} -----" if len(sibling_nodes) > 1 else f"--- sibling {sibling_type} -------"
-            lines.extend([
-                create_line("----------------", sibling_header),
-                create_line("name", sibling_node.get('name', '')),
-                create_line("position", sibling_node.get('position', '')),
-                create_line("IP", sibling_node.get('data_ip', '')),
-                create_line("MGMT IP", sibling_node.get('mgmt_ip', '')),
-                create_line("IPMI IP", sibling_node.get('ipmi_ip', '')),
-                create_line("SerialNumber", sibling_node.get('serial_number', '')),
-                create_line("MAC Address", sibling_node.get('mac_address', '')),
-            ])
+    # Associated node
+    if form.associated_node:
+        table.add_row("", "associated dnode", style="subtitle")
+        add_node_to_table(table, form.associated_node)
     
-    return "\n".join(lines)
+    # Sibling nodes
+    for sibling in form.sibling_nodes:
+        sibling_header = f"sibling {sibling.node_type}"
+        table.add_row("", sibling_header, style="subtitle")
+        add_node_to_table(table, sibling)
+    
+    return table
 
 
-def format_drive_output(drive_info, node_info, sibling_nodes, case_number=None):
-    """Format the drive (SSD/NVRAM) replacement output according to the specified format."""
-    if not drive_info or not node_info:
-        return None
-    
-    # Determine drive type and title
-    drive_type = drive_info.get('drive_type', 'ssd')
-    if drive_type == 'nvram':
-        title = "NVRAM Replacement"
-        fru_part = "FRU_..."  # Generic placeholder
-    else:
-        title = "SSD Replacement"  
-        fru_part = "FRU_..."  # Generic placeholder
-    
-    # Determine location in box from management logs
-    box_serial = node_info.get('box_serial', '')
-    drive_serial = drive_info.get('serial', '')
-    bundle_dir_full = node_info.get('bundle_dir_full', '')
-    
-    # Try to extract location from management logs using the dbox pattern
-    location = "Unknown"
-    if box_serial and drive_serial and bundle_dir_full:
-        try:
-            bundle_dir = Path(bundle_dir_full)
-            extracted_location = extract_drive_location_from_logs(drive_serial, box_serial, bundle_dir)
-            if extracted_location:
-                location = extracted_location
-            else:
-                # Fallback to PCI switch information if available
-                pci_position = drive_info.get('pci_switch_position', '').upper()
-                pci_slot = drive_info.get('pci_switch_slot', 0)
-                if pci_position and pci_slot:
-                    location = f"{pci_position}-{pci_slot}"
-        except (AttributeError, OSError):
-            # Fallback to PCI switch information if path operations fail
-            pci_position = drive_info.get('pci_switch_position', '').upper()
-            pci_slot = drive_info.get('pci_switch_slot', 0)
-            if pci_position and pci_slot:
-                location = f"{pci_position}-{pci_slot}"
-    
-    # Determine index based on node position
-    index = "1" if node_info.get('position') == 'bottom' else "2"
-    
-    # Get device path, removing /vast prefix if present
-    device_path = drive_info.get('path', '')
-    if device_path.startswith('/vast'):
-        device_path = device_path.replace('/vast', '', 1)
-    
-    # Define column widths (NVRAMs need wider columns)
-    if drive_type == 'nvram':
-        left_col_width = 16
-        right_col_width = 29  # 7 more characters for NVRAM
-    else:
-        left_col_width = 16
-        right_col_width = 26
-    
-    # Helper function to create formatted lines
-    def create_line(left_text, right_text=""):
-        # Handle None values by converting them to empty strings
-        left_text = left_text if left_text is not None else ""
-        right_text = right_text if right_text is not None else ""
-        return f"| {left_text:<{left_col_width}} | {right_text:<{right_col_width}} |"
-    
-    def create_separator():
-        return f"| {'-' * left_col_width} | {'-' * right_col_width} |"
-    
-    # prepare case-number
-    if case_number:
-        # Format case number to 8 characters with leading zeros
-        formatted_case = f"Case-{str(case_number).zfill(8)}"
-    else:
-        # Default case number
-        formatted_case = "Case-000...."
+def add_node_to_table(table: Table, node: Node):
+    """Add node information rows to a table"""
+    table.add_row("name", node.name)
+    table.add_row("position", node.position)
+    table.add_row("IP", node.network.data_ip or "")
+    table.add_row("MGMT IP", node.network.mgmt_ip or "")
+    table.add_row("IPMI IP", node.network.ipmi_ip or "")
+    table.add_row("SerialNumber", node.serial_number)
+    table.add_row("MAC Address", node.network.mac_address or "")
 
-    # Build output lines
-    lines = [
-        create_line(title, fru_part),
-        create_separator(),
-        create_line(formatted_case, "RMA-0000.... / FE-000....." ),
-        create_line("Cluster", node_info.get('cluster_name', 'Unknown')),
-        create_line("Tracking", "FedEx #  <TBD>"),
-        create_line("Delivery ETA", ""),
-        create_line("Room / Rack / RU", ""),
-        create_line("DBox", node_info.get('box_serial', '')),
-        create_line("Location in Box", location),
-        create_line("Index", str(index)),
-        create_line("DevicePath", device_path),
-        create_line("ModelNumber", drive_info.get('model', '')),
-        create_line("SerialNumber", drive_info.get('serial', '')),
-        create_line("----------------", "--- associated dnode -----"),
-        create_line("name", node_info.get('name', '')),
-        create_line("position", node_info.get('position', '')),
-        create_line("IP", node_info.get('data_ip', '')),
-        create_line("MGMT IP", node_info.get('mgmt_ip', '')),
-        create_line("IPMI IP", node_info.get('ipmi_ip', '')),
-        create_line("SerialNumber", node_info.get('serial_number', '')),
-        create_line("MAC Address", node_info.get('mac_address', '')),
-    ]    
+
+def render_drive_rma_form(form: DriveRMAForm) -> str:
+    """Render a drive RMA form using generic table structure"""
+    table = drive_rma_form_to_table(form)
+    return render_table(table)
+
+
+def node_rma_form_to_table(form: NodeRMAForm) -> Table:
+    """Convert a NodeRMAForm to a generic Table structure"""
+    table = Table()
     
-    # Add sibling nodes
-    if sibling_nodes:
-        for i, sibling_node in enumerate(sibling_nodes, 1):
-            sibling_type = sibling_node.get('node_type', 'unknown').lower()
-            sibling_header = f"-- sibling {sibling_type} {i} --" if len(sibling_nodes) > 1 else f"-- sibling {sibling_type} -----"
-            lines.extend([
-                create_line("----------------", sibling_header),
-                create_line("name", sibling_node.get('name', '')),
-                create_line("position", sibling_node.get('position', '')),
-                create_line("IP", sibling_node.get('data_ip', '')),
-                create_line("MGMT IP", sibling_node.get('mgmt_ip', '')),
-                create_line("IPMI IP", sibling_node.get('ipmi_ip', '')),
-                create_line("SerialNumber", sibling_node.get('serial_number', '')),
-                create_line("MAC Address", sibling_node.get('mac_address', '')),
-            ])
+    # Header row
+    table.add_row(form.title, form.fru_part)
+    table.add_separator()
     
-    return "\n".join(lines)
+    # Case number if provided (from context)
+    if hasattr(form.context, 'case_number') and form.context.case_number:
+        case_display = f"Case-{form.context.case_number}"
+        table.add_row(case_display, "RMA-0000.... / FE-000.....")
+    
+    # Standard fields
+    table.add_row("Tracking", form.context.tracking)
+    table.add_row("Delivery ETA", form.context.delivery_eta)
+    table.add_row("Room / Rack / RU", form.context.room_rack_ru)
+    table.add_row("Box S/N", form.box.serial_number)
+    
+    # Node information section
+    node_type_display = form.node.node_type.lower()
+    table.add_row("", f"{node_type_display}", style="subtitle")
+    
+    # Calculate index based on node position
+    index = "1" if form.node.position == "bottom" else "2"
+    table.add_row("Index", index)
+    table.add_row("ModelNumber", "")  # Model number not available
+    table.add_row("name", form.node.name)
+    table.add_row("position", form.node.position)
+    table.add_row("IP", form.node.network.data_ip or "")
+    table.add_row("MGMT IP", form.node.network.mgmt_ip or "")
+    table.add_row("IPMI IP", form.node.network.ipmi_ip or "")
+    table.add_row("SerialNumber", form.node.serial_number)
+    table.add_row("MAC Address", form.node.network.mac_address or "")
+    
+    # Sibling nodes
+    for i, sibling in enumerate(form.sibling_nodes, 1):
+        sibling_header = f"sibling {sibling.node_type}"
+        if len(form.sibling_nodes) > 1:
+            sibling_header += f" {i}"
+        table.add_row("", sibling_header, style="subtitle")
+        add_node_to_table(table, sibling)
+    
+    return table
+
+
+def render_node_rma_form(form: NodeRMAForm) -> str:
+    """Render a node RMA form using generic table structure"""
+    table = node_rma_form_to_table(form)
+    return render_table(table)
 
 
 def list_available_nodes(bundle_dirs):
@@ -1263,83 +1880,47 @@ def list_available_nodes(bundle_dirs):
     
     sorted_box_items = sorted(box_nodes.items(), key=get_first_node_mgmt_ip)
     
-    print("Available Nodes:")
-    print("=" * 240)
+    # Create table using generic Table structure
+    table = Table()
     
-    # Define column widths
-    col_widths = {
-        'name': 18,
-        'node_type': 6,
-        'position': 12,
-        'data_ip': 15,
-        'mgmt_ip': 15,
-        'ipmi_ip': 15,
-        'node_serial': 28,
-        'box_serial': 18,
-        'mac_address': 18,
-        'create_time': 19,
-        'bundle_path': 25
-    }
-    
-    # Create header
-    header = f"| {'Name':<{col_widths['name']}} | {'Type':<{col_widths['node_type']}} | {'Position':<{col_widths['position']}} | {'Data IP':<{col_widths['data_ip']}} | {'MGMT IP':<{col_widths['mgmt_ip']}} | {'IPMI IP':<{col_widths['ipmi_ip']}} | {'Node S/N':<{col_widths['node_serial']}} | {'Box S/N':<{col_widths['box_serial']}} | {'MAC Address':<{col_widths['mac_address']}} | {'Create Time':<{col_widths['create_time']}} | {'Bundle Path':<{col_widths['bundle_path']}} |"
-    separator = f"| {'-' * col_widths['name']} | {'-' * col_widths['node_type']} | {'-' * col_widths['position']} | {'-' * col_widths['data_ip']} | {'-' * col_widths['mgmt_ip']} | {'-' * col_widths['ipmi_ip']} | {'-' * col_widths['node_serial']} | {'-' * col_widths['box_serial']} | {'-' * col_widths['mac_address']} | {'-' * col_widths['create_time']} | {'-' * col_widths['bundle_path']} |"
-    
-    print(header)
-    print(separator)
+    # Add header row
+    table.add_row("Name", "Type", "Position", "Data IP", "MGMT IP", "IPMI IP", 
+                  "Node S/N", "Box S/N", "MAC Address", "Create Time", "Bundle Path")
+    table.add_separator()
     
     # Display nodes grouped by box
+    first_box = True
     for box_serial, nodes in sorted_box_items:
         # Sort nodes within each box by position (bottom first, then by last octet of data IP)
         nodes.sort(key=lambda x: (x.get('position', '') != 'bottom', get_ip_last_octet(x.get('data_ip', ''))))
         
         # Add a visual separator between boxes (except for the first one)
-        if box_serial != sorted_box_items[0][0]:  # Not the first box
-            print(f"| {'-' * col_widths['name']} | {'-' * col_widths['node_type']} | {'-' * col_widths['position']} | {'-' * col_widths['data_ip']} | {'-' * col_widths['mgmt_ip']} | {'-' * col_widths['ipmi_ip']} | {'-' * col_widths['node_serial']} | {'-' * col_widths['box_serial']} | {'-' * col_widths['mac_address']} | {'-' * col_widths['create_time']} | {'-' * col_widths['bundle_path']} |")
+        if not first_box:
+            table.add_separator()
+        first_box = False
         
-        # Create rows for each node in this box
+        # Add rows for each node in this box
         for node in nodes:
-            node_name = node.get('name', 'Unknown')
-            node_type = node.get('node_type', 'unknown')
-            position = node.get('position', 'Unknown')
-            data_ip = node.get('data_ip', 'Unknown')
-            mgmt_ip = node.get('mgmt_ip', 'Unknown')
-            ipmi_ip = node.get('ipmi_ip', 'Unknown')
-            node_serial = node.get('serial_number', 'Unknown')
-            box_serial_val = node.get('box_serial', 'Unknown')
-            mac_address = node.get('mac_address', 'Unknown')
-            create_time = node.get('create_time', 'Unknown')
-            bundle_path = node.get('bundle_path', 'Unknown')
+            # Get values with defaults for None
+            node_name = node.get('name') or 'Unknown'
+            node_type = (node.get('node_type') or 'unknown').upper()
+            position = node.get('position') or 'Unknown'
+            data_ip = node.get('data_ip') or 'Unknown'
+            mgmt_ip = node.get('mgmt_ip') or 'Unknown'
+            ipmi_ip = node.get('ipmi_ip') or 'Unknown'
+            node_serial = node.get('serial_number') or 'Unknown'
+            box_serial_val = node.get('box_serial') or 'Unknown'
+            mac_address = node.get('mac_address') or 'Unknown'
+            create_time = node.get('create_time') or 'Unknown'
+            bundle_path = node.get('bundle_path') or 'Unknown'
             
-            # Handle None values that might have been stored
-            if node_name is None:
-                node_name = 'Unknown'
-            if node_type is None:
-                node_type = 'unknown'
-            if position is None:
-                position = 'Unknown'
-            if data_ip is None:
-                data_ip = 'Unknown'
-            if mgmt_ip is None:
-                mgmt_ip = 'Unknown'
-            if ipmi_ip is None:
-                ipmi_ip = 'Unknown'
-            if node_serial is None:
-                node_serial = 'Unknown'
-            if box_serial_val is None:
-                box_serial_val = 'Unknown'
-            if mac_address is None:
-                mac_address = 'Unknown'
-            if create_time is None:
-                create_time = 'Unknown'
-            if bundle_path is None:
-                bundle_path = 'Unknown'
-            
-            # Convert node_type to uppercase after None check
-            node_type = node_type.upper()
-            
-            row = f"| {node_name:<{col_widths['name']}} | {node_type:<{col_widths['node_type']}} | {position:<{col_widths['position']}} | {data_ip:<{col_widths['data_ip']}} | {mgmt_ip:<{col_widths['mgmt_ip']}} | {ipmi_ip:<{col_widths['ipmi_ip']}} | {node_serial:<{col_widths['node_serial']}} | {box_serial_val:<{col_widths['box_serial']}} | {mac_address:<{col_widths['mac_address']}} | {create_time:<{col_widths['create_time']}} | {bundle_path:<{col_widths['bundle_path']}} |"
-            print(row)
+            table.add_row(node_name, node_type, position, data_ip, mgmt_ip, ipmi_ip,
+                         node_serial, box_serial_val, mac_address, create_time, bundle_path)
+    
+    # Render and print the table
+    print("Available Nodes:")
+    print("=" * 240)
+    print(render_table(table))
 
 
 def display_matched_nodes(matched_nodes, match_type="multiple"):
@@ -1362,27 +1943,13 @@ def display_matched_nodes(matched_nodes, match_type="multiple"):
     
     print("=" * 240)
     
-    # Define column widths (same as list_available_nodes)
-    col_widths = {
-        'name': 18,
-        'node_type': 6,
-        'position': 12,
-        'data_ip': 15,
-        'mgmt_ip': 15,
-        'ipmi_ip': 15,
-        'node_serial': 28,
-        'box_serial': 18,
-        'mac_address': 18,
-        'create_time': 19,
-        'bundle_path': 25
-    }
+    # Create table using generic Table structure
+    table = Table()
     
-    # Create header
-    header = f"| {'Name':<{col_widths['name']}} | {'Type':<{col_widths['node_type']}} | {'Position':<{col_widths['position']}} | {'Data IP':<{col_widths['data_ip']}} | {'MGMT IP':<{col_widths['mgmt_ip']}} | {'IPMI IP':<{col_widths['ipmi_ip']}} | {'Node S/N':<{col_widths['node_serial']}} | {'Box S/N':<{col_widths['box_serial']}} | {'MAC Address':<{col_widths['mac_address']}} | {'Create Time':<{col_widths['create_time']}} | {'Bundle Path':<{col_widths['bundle_path']}} |"
-    separator = f"| {'-' * col_widths['name']} | {'-' * col_widths['node_type']} | {'-' * col_widths['position']} | {'-' * col_widths['data_ip']} | {'-' * col_widths['mgmt_ip']} | {'-' * col_widths['ipmi_ip']} | {'-' * col_widths['node_serial']} | {'-' * col_widths['box_serial']} | {'-' * col_widths['mac_address']} | {'-' * col_widths['create_time']} | {'-' * col_widths['bundle_path']} |"
-    
-    print(header)
-    print(separator)
+    # Add header row
+    table.add_row("Name", "Type", "Position", "Data IP", "MGMT IP", "IPMI IP", 
+                  "Node S/N", "Box S/N", "MAC Address", "Create Time", "Bundle Path")
+    table.add_separator()
     
     # Sort boxes by MGMT IP of first node in each group
     def get_first_node_mgmt_ip(box_serial_and_nodes):
@@ -1395,57 +1962,36 @@ def display_matched_nodes(matched_nodes, match_type="multiple"):
     sorted_box_items = sorted(box_nodes.items(), key=get_first_node_mgmt_ip)
     
     # Display nodes grouped by box
-    for i, (box_serial, nodes) in enumerate(sorted_box_items):
+    first_box = True
+    for box_serial, nodes in sorted_box_items:
         # Sort nodes within each box by position (bottom first, then by last octet of data IP)
         nodes.sort(key=lambda x: (x.get('position', '') != 'bottom', get_ip_last_octet(x.get('data_ip', ''))))
         
         # Add a visual separator between boxes (except for the first one)
-        if i > 0:
-            print(f"| {'-' * col_widths['name']} | {'-' * col_widths['node_type']} | {'-' * col_widths['position']} | {'-' * col_widths['data_ip']} | {'-' * col_widths['mgmt_ip']} | {'-' * col_widths['ipmi_ip']} | {'-' * col_widths['node_serial']} | {'-' * col_widths['box_serial']} | {'-' * col_widths['mac_address']} | {'-' * col_widths['create_time']} | {'-' * col_widths['bundle_path']} |")
+        if not first_box:
+            table.add_separator()
+        first_box = False
         
-        # Create rows for each node in this box
+        # Add rows for each node in this box
         for node in nodes:
-            node_name = node.get('name', 'Unknown')
-            node_type = node.get('node_type', 'unknown')
-            position = node.get('position', 'Unknown')
-            data_ip = node.get('data_ip', 'Unknown')
-            mgmt_ip = node.get('mgmt_ip', 'Unknown')
-            ipmi_ip = node.get('ipmi_ip', 'Unknown')
-            node_serial = node.get('serial_number', 'Unknown')
-            box_serial_val = node.get('box_serial', 'Unknown')
-            mac_address = node.get('mac_address', 'Unknown')
-            create_time = node.get('create_time', 'Unknown')
-            bundle_path = node.get('bundle_path', 'Unknown')
+            # Get values with defaults for None
+            node_name = node.get('name') or 'Unknown'
+            node_type = (node.get('node_type') or 'unknown').upper()
+            position = node.get('position') or 'Unknown'
+            data_ip = node.get('data_ip') or 'Unknown'
+            mgmt_ip = node.get('mgmt_ip') or 'Unknown'
+            ipmi_ip = node.get('ipmi_ip') or 'Unknown'
+            node_serial = node.get('serial_number') or 'Unknown'
+            box_serial_val = node.get('box_serial') or 'Unknown'
+            mac_address = node.get('mac_address') or 'Unknown'
+            create_time = node.get('create_time') or 'Unknown'
+            bundle_path = node.get('bundle_path') or 'Unknown'
             
-            # Handle None values that might have been stored
-            if node_name is None:
-                node_name = 'Unknown'
-            if node_type is None:
-                node_type = 'unknown'
-            if position is None:
-                position = 'Unknown'
-            if data_ip is None:
-                data_ip = 'Unknown'
-            if mgmt_ip is None:
-                mgmt_ip = 'Unknown'
-            if ipmi_ip is None:
-                ipmi_ip = 'Unknown'
-            if node_serial is None:
-                node_serial = 'Unknown'
-            if box_serial_val is None:
-                box_serial_val = 'Unknown'
-            if mac_address is None:
-                mac_address = 'Unknown'
-            if create_time is None:
-                create_time = 'Unknown'
-            if bundle_path is None:
-                bundle_path = 'Unknown'
-            
-            # Convert node_type to uppercase after None check
-            node_type = node_type.upper()
-            
-            row = f"| {node_name:<{col_widths['name']}} | {node_type:<{col_widths['node_type']}} | {position:<{col_widths['position']}} | {data_ip:<{col_widths['data_ip']}} | {mgmt_ip:<{col_widths['mgmt_ip']}} | {ipmi_ip:<{col_widths['ipmi_ip']}} | {node_serial:<{col_widths['node_serial']}} | {box_serial_val:<{col_widths['box_serial']}} | {mac_address:<{col_widths['mac_address']}} | {create_time:<{col_widths['create_time']}} | {bundle_path:<{col_widths['bundle_path']}} |"
-            print(row)
+            table.add_row(node_name, node_type, position, data_ip, mgmt_ip, ipmi_ip,
+                         node_serial, box_serial_val, mac_address, create_time, bundle_path)
+    
+    # Render and print the table
+    print(render_table(table))
 
 
 def find_sibling_nodes_for_drive(target_node_info, bundle_dirs):
@@ -1548,6 +2094,8 @@ Examples:
   %(prog)s                                            # List all available nodes
   %(prog)s dnode-3-100                                # Show specific node (exact match)
   %(prog)s 'dnode.*100'                               # Regex match nodes
+  %(prog)s dnode161 --ssd                             # List all drives in dnode161
+  %(prog)s dnode110 --nvram                           # List all drives in dnode110
   %(prog)s --ssd PHAC2070006C30PGGN                   # Show SSD replacement info
   %(prog)s --nvram PHAC2070006C30PGGN                 # Show NVRAM replacement info
   %(prog)s --drive PHAC2070006C30PGGN                 # Show drive replacement info (SSD or NVRAM)
@@ -1559,11 +2107,16 @@ Examples:
     parser.add_argument('node_name', nargs='?', help='Node name to search for (regex supported)')
     
     # Create mutually exclusive group for drive serial arguments (all mean the same thing)
+    # nargs='?' makes the serial number optional - if flag is present but no value, it lists drives
     drive_group = parser.add_mutually_exclusive_group()
-    drive_group.add_argument('--ssd', metavar='DRIVE_SERIAL', help='Drive serial number to search for (DNodes only)')
-    drive_group.add_argument('--drive', metavar='DRIVE_SERIAL', help='Drive serial number to search for (DNodes only)')
-    drive_group.add_argument('--nvram', metavar='DRIVE_SERIAL', help='Drive serial number to search for (DNodes only)')
-    drive_group.add_argument('--scm', metavar='DRIVE_SERIAL', help='Drive serial number to search for (DNodes only)')
+    drive_group.add_argument('--ssd', nargs='?', const='LIST', metavar='DRIVE_SERIAL', 
+                           help='Drive serial number to search for, or list SSDs if no serial provided (DNodes only)')
+    drive_group.add_argument('--drive', nargs='?', const='LIST', metavar='DRIVE_SERIAL',
+                           help='Drive serial number to search for, or list drives if no serial provided (DNodes only)')
+    drive_group.add_argument('--nvram', nargs='?', const='LIST', metavar='DRIVE_SERIAL',
+                           help='Drive serial number to search for, or list NVRAMs if no serial provided (DNodes only)')
+    drive_group.add_argument('--scm', nargs='?', const='LIST', metavar='DRIVE_SERIAL',
+                           help='Drive serial number to search for, or list SCMs if no serial provided (DNodes only)')
     
     # Add verbose logging option
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging for debugging')
@@ -1603,6 +2156,111 @@ Examples:
     # Handle drive mode (SSD/NVRAM/SCM)
     drive_serial = args.ssd or args.drive or args.nvram or args.scm
     if drive_serial:
+        # Check if this is a list request (flag without serial number)
+        if drive_serial == 'LIST':
+            # Need a node name to list drives
+            if not args.node_name:
+                print("Error: Please provide a node name to list drives", file=sys.stderr)
+                print("Example: rma_prep.py dnode161 --ssd", file=sys.stderr)
+                sys.exit(1)
+            
+            # Find the node first
+            match_type, target_node, sibling_nodes, box_serial, matched_nodes = find_node_in_bundles(args.node_name, bundle_dirs)
+            
+            # Determine which nodes to list drives for
+            nodes_to_list = []
+            
+            if match_type == 'single':
+                # Single node match - allow if it's a dnode
+                if target_node.get('node_type') != 'dnode':
+                    print(f"Error: Node '{args.node_name}' is not a DNode. Drive listing only works with DNodes.", file=sys.stderr)
+                    sys.exit(1)
+                nodes_to_list = [target_node]
+            elif match_type in ('multiple', 'box_match'):
+                # Multiple nodes - check if all are dnodes from a single box
+                all_dnodes = all(node.get('node_type') == 'dnode' for node in matched_nodes)
+                box_serials = set(node.get('box_serial') for node in matched_nodes if node.get('box_serial'))
+                single_box = len(box_serials) == 1
+                
+                if not all_dnodes:
+                    print("Error: Drive listing is only supported for DNodes", file=sys.stderr)
+                    display_matched_nodes(matched_nodes, match_type)
+                    sys.exit(1)
+                elif not single_box:
+                    print("Error: Drive listing requires all nodes to be from the same DBox", file=sys.stderr)
+                    display_matched_nodes(matched_nodes, match_type)
+                    sys.exit(1)
+                
+                nodes_to_list = matched_nodes
+            else:
+                print(f"Error: Node '{args.node_name}' not found", file=sys.stderr)
+                sys.exit(1)
+            
+            # Collect all drives from all matched nodes
+            all_drives = []
+            for node in nodes_to_list:
+                bundle_dir_str = node.get('bundle_dir_full')
+                if not bundle_dir_str:
+                    continue
+                
+                bundle_dir = Path(bundle_dir_str)
+                node_drives = list_drives_in_bundle(bundle_dir)
+                
+                if not node_drives:
+                    continue
+                
+                # Tag each drive with its node name
+                node_name = node.get('name', 'Unknown')
+                for drive in node_drives:
+                    drive['node_name'] = node_name
+                
+                all_drives.extend(node_drives)
+            
+            if not all_drives:
+                print(f"No drives found in any matching nodes", file=sys.stderr)
+                sys.exit(1)
+            
+            # Filter drives based on the flag used
+            if args.ssd:
+                filtered_drives = [d for d in all_drives if d.get('drive_type') == 'ssd']
+                drive_type_label = "SSDs"
+            elif args.nvram or args.scm:
+                filtered_drives = [d for d in all_drives if d.get('drive_type') == 'nvram']
+                drive_type_label = "NVRAMs"
+            else:
+                filtered_drives = all_drives
+                drive_type_label = "Drives"
+            
+            if not filtered_drives:
+                print(f"No {drive_type_label.lower()} found in matching nodes", file=sys.stderr)
+                sys.exit(1)
+            
+            # Prepare primary node and siblings for display
+            if match_type == 'single':
+                primary_node = target_node
+                display_siblings = sibling_nodes
+                display_box_serial = box_serial
+            else:
+                # For multiple nodes, use first as primary, rest as siblings
+                primary_node = nodes_to_list[0]
+                display_siblings = nodes_to_list[1:] if len(nodes_to_list) > 1 else None
+                # Get box serial from primary node
+                display_box_serial = primary_node.get('box_serial')
+            
+            # Render node information using RMA-style dnode section
+            node_info_output = render_dnode_section(primary_node, display_siblings, display_box_serial)
+            if node_info_output:
+                print(node_info_output)
+                print()  # Blank line before drives
+            
+            # Render drive list
+            drive_output = render_drive_list_table(filtered_drives, drive_type_label)
+            if drive_output:
+                print(drive_output)
+            
+            return
+        
+        # Otherwise, this is a specific drive serial search
         drive_info, node_info, bundle_dir = find_drive_in_bundles(drive_serial, bundle_dirs)
         
         if not drive_info:
@@ -1620,8 +2278,13 @@ Examples:
         # Find sibling nodes
         sibling_nodes = find_sibling_nodes_for_drive(node_info, bundle_dirs)
         
-        # Format and print drive replacement output
-        output = format_drive_output(drive_info, node_info, sibling_nodes)
+        # Build RMA form using new data model
+        rma_form = build_drive_rma_form_from_legacy_data(
+            drive_info, node_info, sibling_nodes, args.case
+        )
+        
+        # Render and print drive replacement output
+        output = render_drive_rma_form(rma_form)
         if output:
             print(output)
         else:
@@ -1638,9 +2301,15 @@ Examples:
     # Find node information using enhanced matching
     match_type, target_node, sibling_nodes, box_serial, matched_nodes = find_node_in_bundles(args.node_name, bundle_dirs)
     
+    # Not a drive list request - handle normal node RMA flow
     if match_type == 'single':
-        # Single match found, format and print output
-        output = format_output(target_node, sibling_nodes, box_serial)
+        # Single match found, build RMA form and render
+        rma_form = build_node_rma_form_from_legacy_data(
+            target_node, sibling_nodes, box_serial, args.case
+        )
+        
+        # Render and print node replacement output
+        output = render_node_rma_form(rma_form)
         if output:
             print(output)
         else:
