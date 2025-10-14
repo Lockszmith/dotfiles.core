@@ -1499,7 +1499,6 @@ def list_nodes(node_bundle_list: List[tuple[Node, Bundle]], title: str = "Availa
             )
     
     print(title + ":")
-    print("=" * 240)
     print(render_table(table))
 
 
