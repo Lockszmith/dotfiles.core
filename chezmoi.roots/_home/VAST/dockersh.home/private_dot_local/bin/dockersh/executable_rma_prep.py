@@ -54,12 +54,21 @@ import json
 import re
 import argparse
 import logging
+import gzip
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Union
 from functools import cached_property
+
+# Try to import vapi for PDB support (Luna protobuf files)
+try:
+    from vapi.commander import STR_TO_TYPE_ID, Commander  # type: ignore
+    HAS_VAPI = True
+except ImportError:
+    HAS_VAPI = False
+    logging.debug("vapi module not available - PDB support disabled, using fallback sources")
 
 
 # ============================================================================
@@ -84,6 +93,167 @@ def cached_method(func):
 
 
 # ============================================================================
+# PDB (Protobuf Database) Support - Luna-style
+# ============================================================================
+
+class PDB:
+    """Read and parse PDB (protobuf) files from bundle directories
+    
+    This provides Luna-style access to protobuf data when available.
+    Falls back gracefully when vapi module is not available.
+    """
+    
+    def __init__(self, path: Optional[Path] = None):
+        self._path = path
+        self._cache = {}
+    
+    def __repr__(self):
+        return f'PDB({self._path or "None"})'
+    
+    def __bool__(self):
+        return bool(self._path and self._path.exists())
+    
+    @staticmethod
+    def find_pdb_folder(bundle_path: Path) -> Optional[Path]:
+        """Find the PDB directory in a bundle (usually pdb/<timestamp>/)"""
+        pdb_dir = bundle_path / 'pdb'
+        if not pdb_dir.exists():
+            return None
+        
+        # Find timestamp folders (format: YYYYMMDD_HHMMSS)
+        pdb_folders = [f for f in pdb_dir.iterdir() 
+                      if f.is_dir() and re.match(r'\d{8}_\d{6}', f.name)]
+        
+        if not pdb_folders:
+            return None
+        
+        # Return the latest one
+        return max(pdb_folders, key=lambda f: f.name)
+    
+    def _read_raw_data(self, type_name: str) -> Optional[bytes]:
+        """Read raw protobuf data from a PDB file"""
+        if not self._path or not self._path.exists():
+            return None
+        
+        # Look for files matching the type name (e.g., DriveType.gz, DriveType)
+        file_paths = list(self._path.glob(f'{type_name}*'))
+        if not file_paths:
+            return None
+        
+        file_path = file_paths[0]
+        
+        # Handle gzipped or regular files
+        file_open = gzip.open if file_path.suffix == '.gz' else open
+        
+        try:
+            with file_open(file_path, 'rb') as f:
+                return f.read()
+        except (FileNotFoundError, IOError, OSError):
+            return None
+    
+    def get(self, type_name: str) -> Optional[List]:
+        """Get parsed protobuf objects of a specific type
+        
+        Returns a list of protobuf objects if vapi is available, None otherwise.
+        """
+        if not HAS_VAPI:
+            return None
+        
+        if type_name in self._cache:
+            return self._cache[type_name]
+        
+        raw_data = self._read_raw_data(type_name)
+        if not raw_data:
+            return None
+        
+        try:
+            file_type_id = STR_TO_TYPE_ID.get(type_name)
+            if file_type_id is None:
+                return None
+            
+            objects = list(Commander.parse_objects(file_type_id, raw_data))
+            self._cache[type_name] = objects
+            return objects
+        except Exception as e:
+            logging.debug(f"Failed to parse PDB {type_name}: {e}")
+            return None
+    
+    @cached_property
+    def drive(self) -> Optional[List]:
+        """Get all Drive objects from PDB"""
+        return self.get('DriveType')
+    
+    @cached_property
+    def nvram(self) -> Optional[List]:
+        """Get all NVRAM objects from PDB"""
+        return self.get('NVRAMType')
+    
+    @cached_property
+    def dnode(self) -> Optional[List]:
+        """Get all DNode objects from PDB"""
+        return self.get('DNodeType')
+    
+    @cached_property
+    def dbox(self) -> Optional[List]:
+        """Get all DBox objects from PDB"""
+        return self.get('DBoxType')
+    
+    def find_device_by_serial(self, serial: str):
+        """Find a device (drive or nvram) by serial number"""
+        for device_list in [self.drive, self.nvram]:
+            if device_list:
+                for device in device_list:
+                    if hasattr(device, 'device_proto') and device.device_proto.serial == serial:
+                        return device
+        return None
+
+
+class PlatformConfig:
+    """Parse config/platform.config file (Luna's source for node type/IP)"""
+    
+    NODE_INFO_REGEX = re.compile(
+        r'(?:.|\n)*ip: \"(?P<node_ip>.*)\"(?:.|\n)*port: (?P<node_port>\d+)'
+        r'(?:.|\n)*node_type: \"(?P<node_type>.*)\"(?:.|\n)*'
+    )
+    NODE_ARCH_REGEX = re.compile(r'node_architecture: "(.*?)"')
+    DNODE_INDEX_REGEX = re.compile(r'dnode_index: "(.*?)"')
+    
+    def __init__(self, config_file: Path):
+        self.config_file = config_file
+        self.node_ip = None
+        self.node_port = None
+        self.node_type = None
+        self.node_architecture = None
+        self.dnode_index = None
+        
+        if not config_file.exists():
+            return
+        
+        try:
+            content = config_file.read_text(encoding='utf-8')
+            
+            # Parse node info
+            match = self.NODE_INFO_REGEX.match(content)
+            if match:
+                self.node_ip = match.group('node_ip')
+                self.node_port = match.group('node_port')
+                self.node_type = match.group('node_type')
+            
+            # Parse architecture
+            arch_match = self.NODE_ARCH_REGEX.search(content)
+            if arch_match:
+                self.node_architecture = arch_match.group(1)
+            
+            # Parse dnode index
+            index_match = self.DNODE_INDEX_REGEX.search(content)
+            if index_match:
+                self.dnode_index = index_match.group(1)
+        
+        except (IOError, OSError) as e:
+            logging.debug(f"Failed to read platform.config: {e}")
+
+
+# ============================================================================
 # Core Data Model (Luna-inspired hierarchy)
 # ============================================================================
 
@@ -99,9 +269,10 @@ class NetworkInfo:
 class Device:
     """Base device class (SSD or NVRAM)"""
     
-    def __init__(self, serial: str, bundle: 'Bundle'):
+    def __init__(self, serial: str, bundle: 'Bundle', pdb_obj=None):
         self.serial = serial
         self._bundle = bundle
+        self._pdb_obj = pdb_obj
         self._raw_data = None
     
     def __repr__(self):
@@ -114,9 +285,49 @@ class Device:
         return hash(self.serial)
     
     @cached_property
+    def pdb_device(self):
+        """Get PDB protobuf object for this device (Luna's primary source)"""
+        if self._pdb_obj:
+            return self._pdb_obj
+        
+        if self._bundle.pdb:
+            return self._bundle.pdb.find_device_by_serial(self.serial)
+        
+        return None
+    
+    @cached_property
     def data(self) -> Optional[Dict[str, Any]]:
-        """Load device data from bundle (lazy)"""
-        # Try primary source: nvme_cli_list.json
+        """Load device data from bundle (lazy)
+        
+        Priority:
+        1. PDB (protobuf) - Luna's authoritative source
+        2. nvme_cli_list.json - current exposure status
+        3. nvme_list.json - fallback
+        """
+        result = {}
+        
+        # First: Try PDB (Luna's primary source)
+        if self.pdb_device:
+            try:
+                device_proto = self.pdb_device.device_proto
+                result['serial'] = device_proto.serial
+                result['model'] = device_proto.model if hasattr(device_proto, 'model') else None
+                result['pci_switch_position'] = device_proto.pci_switch_position if hasattr(device_proto, 'pci_switch_position') else None
+                result['pci_switch_slot'] = device_proto.pci_switch_slot if hasattr(device_proto, 'pci_switch_slot') else None
+                result['state'] = str(device_proto.state) if hasattr(device_proto, 'state') else None
+                result['attached'] = device_proto.attached if hasattr(device_proto, 'attached') else None
+                
+                # Try to get path from nvme_cli_list (exposed devices)
+                path = self._get_device_path_from_nvme_cli()
+                if path:
+                    result['path'] = path
+                
+                logging.debug(f"Device {self.serial}: loaded from PDB")
+                return result
+            except Exception as e:
+                logging.debug(f"Device {self.serial}: PDB read failed ({e}), falling back")
+        
+        # Second: Try nvme_cli_list.json
         nvme_cli_file = self._bundle.path / 'nvme_cli_list.json'
         if nvme_cli_file.exists():
             try:
@@ -126,11 +337,12 @@ class Device:
                 all_drives = nvme_data.get('drives', []) + nvme_data.get('nvrams', [])
                 for drive in all_drives:
                     if drive.get('serial') == self.serial:
+                        logging.debug(f"Device {self.serial}: loaded from nvme_cli_list.json")
                         return drive
             except (json.JSONDecodeError, IOError):
                 pass
         
-        # Fallback: nvme_list.json
+        # Third: Fallback to nvme_list.json
         nvme_list_file = self._bundle.path / 'nvme_list.json'
         if nvme_list_file.exists():
             try:
@@ -140,6 +352,7 @@ class Device:
                 devices = nvme_data.get('Devices', [])
                 for device in devices:
                     if device.get('SerialNumber') == self.serial:
+                        logging.debug(f"Device {self.serial}: loaded from nvme_list.json")
                         return {
                             'serial': device.get('SerialNumber'),
                             'model': device.get('ModelNumber'),
@@ -150,6 +363,25 @@ class Device:
                         }
             except (json.JSONDecodeError, IOError):
                 pass
+        
+        return result if result else None
+    
+    def _get_device_path_from_nvme_cli(self) -> Optional[str]:
+        """Get device path from nvme_cli_list.json"""
+        nvme_cli_file = self._bundle.path / 'nvme_cli_list.json'
+        if not nvme_cli_file.exists():
+            return None
+        
+        try:
+            with open(nvme_cli_file, 'r') as f:
+                nvme_data = json.load(f)
+            
+            all_drives = nvme_data.get('drives', []) + nvme_data.get('nvrams', [])
+            for drive in all_drives:
+                if drive.get('serial') == self.serial:
+                    return drive.get('path')
+        except (json.JSONDecodeError, IOError):
+            pass
         
         return None
     
@@ -210,8 +442,54 @@ class Node:
         return f'<{self.__class__.__name__}-{self.name}>'
     
     @cached_property
+    def platform_config(self) -> Optional[PlatformConfig]:
+        """Load config/platform.config (Luna's source for node type/IP)"""
+        config_file = self._bundle.path / 'config' / 'platform.config'
+        if config_file.exists():
+            return PlatformConfig(config_file)
+        return None
+    
+    @cached_property
+    def guid(self) -> Optional[str]:
+        """Read self.guid file (Luna's node identifier)"""
+        guid_file = self._bundle.path / 'self.guid'
+        if guid_file.exists():
+            try:
+                return guid_file.read_text().strip()
+            except (IOError, OSError):
+                pass
+        return None
+    
+    @cached_property
+    def system_guid(self) -> Optional[str]:
+        """Read system.guid file (Luna's system identifier)"""
+        guid_file = self._bundle.path / 'system.guid'
+        if guid_file.exists():
+            try:
+                return guid_file.read_text().strip()
+            except (IOError, OSError):
+                pass
+        return None
+    
+    @cached_property
+    def pdb_node(self):
+        """Get PDB protobuf object for this node"""
+        if not self._bundle.pdb or not self.guid:
+            return None
+        
+        # Try to find the node in PDB by GUID
+        for node_list in [self._bundle.pdb.dnode]:
+            if node_list:
+                for node_obj in node_list:
+                    if hasattr(node_obj, 'base_proto'):
+                        node_guid = str(node_obj.base_proto.guid)
+                        if node_guid == self.guid:
+                            return node_obj
+        return None
+    
+    @cached_property
     def _monitor_data(self) -> Optional[Dict[str, Any]]:
-        """Load monitor_result.json (lazy)"""
+        """Load monitor_result.json (fallback source)"""
         monitor_file = self._bundle.path / 'monitor_result.json'
         if not monitor_file.exists():
             return None
@@ -276,30 +554,46 @@ class Node:
     
     @cached_property
     def network(self) -> NetworkInfo:
-        """Network configuration (lazy)"""
-        if not self._monitor_data:
-            return NetworkInfo()
+        """Network configuration (lazy)
         
-        nics = self._monitor_data.get('nics', {})
+        Priority:
+        1. config/platform.config for data IP (Luna's source)
+        2. monitor_result.json for MGMT IP and MAC
+        3. ipmitool for IPMI IP
+        """
         mgmt_ip = None
         mac_address = None
-        data_ips = []
+        data_ip = None
         
-        for nic_name, nic_info in nics.items():
-            nic_data = nic_info.get('info', {})
-            address = nic_data.get('address', '')
-            nic_mac = nic_data.get('mac_address', '')
-            
-            # Management IP (10.x.x.x)
-            if address and address.startswith('10.') and not mgmt_ip:
-                mgmt_ip = address
-                mac_address = nic_mac
-            
-            # Data IP (172.16.x.x)
-            if address and address.startswith('172.16.'):
-                data_ips.append(address)
+        # First: Try to get data IP from platform.config (Luna's source)
+        if self.platform_config and self.platform_config.node_ip:
+            data_ip = self.platform_config.node_ip
+            logging.debug(f"Node {self.name}: data IP from platform.config")
         
-        data_ip = min(data_ips) if data_ips else None
+        # Second: Fall back to monitor_result.json
+        if self._monitor_data:
+            nics = self._monitor_data.get('nics', {})
+            data_ips = []
+            
+            for nic_name, nic_info in nics.items():
+                nic_data = nic_info.get('info', {})
+                address = nic_data.get('address', '')
+                nic_mac = nic_data.get('mac_address', '')
+                
+                # Management IP (10.x.x.x)
+                if address and address.startswith('10.') and not mgmt_ip:
+                    mgmt_ip = address
+                    mac_address = nic_mac
+                
+                # Data IP (172.16.x.x) - only if not already set from platform.config
+                if address and address.startswith('172.16.'):
+                    data_ips.append(address)
+            
+            # Use monitor data for data_ip only if platform.config didn't provide it
+            if not data_ip and data_ips:
+                data_ip = min(data_ips)
+                logging.debug(f"Node {self.name}: data IP from monitor_result.json")
+        
         ipmi_ip = self._extract_ipmi_ip()
         
         return NetworkInfo(
@@ -311,20 +605,40 @@ class Node:
     
     @cached_property
     def node_type(self) -> str:
-        """Determine node type (dnode/cnode) from hostname or data IP"""
-        # First: check hostname
+        """Determine node type (dnode/cnode)
+        
+        Priority:
+        1. config/platform.config (Luna's authoritative source)
+        2. hostname parsing
+        3. data IP last octet
+        """
+        # First: check platform.config (Luna's source)
+        if self.platform_config and self.platform_config.node_type:
+            node_type = self.platform_config.node_type.lower()
+            if 'dnode' in node_type or 'data' in node_type:
+                logging.debug(f"Node {self.name}: type 'dnode' from platform.config")
+                return 'dnode'
+            elif 'cnode' in node_type or 'control' in node_type or 'compute' in node_type:
+                logging.debug(f"Node {self.name}: type 'cnode' from platform.config")
+                return 'cnode'
+        
+        # Second: check hostname
         if self.hostname:
             hostname_lower = self.hostname.lower()
             if 'dnode' in hostname_lower:
+                logging.debug(f"Node {self.name}: type 'dnode' from hostname")
                 return 'dnode'
             elif 'cnode' in hostname_lower:
+                logging.debug(f"Node {self.name}: type 'cnode' from hostname")
                 return 'cnode'
         
-        # Fallback: use data IP last octet
+        # Third: fallback to data IP last octet
         if self.network.data_ip:
             try:
                 last_octet = int(self.network.data_ip.split('.')[-1])
-                return 'dnode' if last_octet >= 100 else 'cnode'
+                node_type = 'dnode' if last_octet >= 100 else 'cnode'
+                logging.debug(f"Node {self.name}: type '{node_type}' from data IP")
+                return node_type
             except (ValueError, IndexError):
                 pass
         
@@ -332,7 +646,15 @@ class Node:
     
     @cached_property
     def box_serial(self) -> Optional[str]:
-        """Box serial number from FRU"""
+        """Box serial number from dmidecode (preferred) or FRU (fallback)"""
+        # First: Try dmidecode.txt (more reliable for CBox serial)
+        dmidecode_file = self._bundle.path / 'dmidecode.txt'
+        if dmidecode_file.exists():
+            serial = self._extract_box_serial_from_dmidecode(dmidecode_file)
+            if serial and serial != 'Uninitialized':
+                return serial
+        
+        # Second: Fall back to FRU
         fru_file = self._bundle.path / 'ipmitool' / 'ipmitool_fru_list.txt'
         if fru_file.exists():
             return self._extract_box_serial_from_fru(fru_file)
@@ -355,11 +677,70 @@ class Node:
         return None
     
     @cached_property
+    def nics(self) -> Optional[str]:
+        """NIC cards from ibdev2netdev.txt
+        
+        Returns a comma-separated list of NIC types (e.g., "CX6, CX7")
+        in PCI slot order.
+        """
+        ibdev_file = self._bundle.path / 'ibdev2netdev.txt'
+        if ibdev_file.exists():
+            return self._extract_nics_from_ibdev(ibdev_file)
+        return None
+    
+    @cached_property
+    def model(self) -> str:
+        """Node model information
+        
+        Returns formatted Manufacturer and Product IDs if no explicit model is available.
+        """
+        # If we have explicit model info, return it (future enhancement)
+        # For now, return Mfr/Prod IDs if available
+        if self.manufacturer_id and self.product_id:
+            return f"Mfr: {self.manufacturer_id}; Prod: {self.product_id}"
+        return ""
+    
+    @cached_property
     def devices(self) -> List[Device]:
-        """List all devices on this node (lazy)"""
+        """List all devices on this node (lazy)
+        
+        Priority:
+        1. PDB (protobuf) - Luna's authoritative device list
+        2. nvme_cli_list.json - fallback
+        """
         devices = []
         
-        # Try nvme_cli_list.json
+        # First: Try PDB (Luna's source)
+        if self._bundle.pdb and self.pdb_node:
+            try:
+                # Get all devices from PDB
+                all_pdb_devices = []
+                for device_list in [self._bundle.pdb.drive, self._bundle.pdb.nvram]:
+                    if device_list:
+                        all_pdb_devices.extend(device_list)
+                
+                # Filter devices that belong to this node
+                if self.guid:
+                    for pdb_device in all_pdb_devices:
+                        if hasattr(pdb_device, 'device_proto') and hasattr(pdb_device, 'base_proto'):
+                            # Check if device belongs to this node
+                            # Devices can be parented to DNode or DBox
+                            is_native = False
+                            
+                            if hasattr(self.pdb_node, 'dnode_index') and hasattr(pdb_device.device_proto, 'native_dnode'):
+                                is_native = pdb_device.device_proto.native_dnode == self.pdb_node.dnode_index
+                            
+                            if is_native:
+                                serial = pdb_device.device_proto.serial
+                                devices.append(Device(serial, self._bundle, pdb_obj=pdb_device))
+                
+                if devices:
+                    logging.debug(f"Node {self.name}: loaded {len(devices)} devices from PDB")
+                    return devices
+            except Exception as e:
+                logging.debug(f"Node {self.name}: PDB device loading failed ({e}), falling back")
+        
+        # Second: Fall back to nvme_cli_list.json
         nvme_cli_file = self._bundle.path / 'nvme_cli_list.json'
         if nvme_cli_file.exists():
             try:
@@ -374,6 +755,9 @@ class Node:
                     serial = drive_data.get('serial')
                     if serial:
                         devices.append(Device(serial, self._bundle))
+                
+                if devices:
+                    logging.debug(f"Node {self.name}: loaded {len(devices)} devices from nvme_cli_list.json")
             except (json.JSONDecodeError, IOError):
                 pass
         
@@ -399,6 +783,36 @@ class Node:
             except IOError:
                 continue
         
+        return None
+    
+    @staticmethod
+    def _extract_box_serial_from_dmidecode(dmidecode_file_path: Path) -> Optional[str]:
+        """Extract Box serial from dmidecode.txt
+        
+        For multi-node boxes (CBox), dmidecode shows multiple Chassis Information sections.
+        The LAST chassis serial is the CBox serial number.
+        """
+        try:
+            with open(dmidecode_file_path, 'r') as f:
+                content = f.read()
+            
+            # Find all "Serial Number:" lines that appear after "Chassis Information"
+            # Pattern: Find "Chassis Information" section and extract its Serial Number
+            chassis_sections = re.split(r'Handle 0x[0-9A-Fa-f]+, DMI type', content)
+            
+            last_chassis_serial = None
+            for section in chassis_sections:
+                if 'Chassis Information' in section:
+                    # Extract Serial Number from this chassis section
+                    match = re.search(r'Serial Number:\s*(.+)', section)
+                    if match:
+                        serial = match.group(1).strip()
+                        if serial:  # Update to last found serial
+                            last_chassis_serial = serial
+            
+            return last_chassis_serial
+        except IOError:
+            pass
         return None
     
     @staticmethod
@@ -452,6 +866,63 @@ class Node:
         except IOError:
             pass
         return None
+    
+    @staticmethod
+    def _extract_nics_from_ibdev(ibdev_file: Path) -> Optional[str]:
+        """Extract NIC types from ibdev2netdev.txt
+        
+        Parses the file to find ConnectX-5/6/7 cards and groups them by PCI slot.
+        Returns a comma-separated list like "CX6, CX7" in PCI slot order.
+        """
+        try:
+            with open(ibdev_file, 'r') as f:
+                lines = f.readlines()
+            
+            # Dictionary to store PCI slot -> NIC type
+            # Key is the first two parts of PCI address (e.g., "0000:63")
+            pci_slots = {}
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Extract PCI address (first field)
+                pci_match = re.match(r'([0-9a-fA-F:\.]+)\s', line)
+                if not pci_match:
+                    continue
+                
+                pci_address = pci_match.group(1)
+                # Get the slot identifier (e.g., "0000:63" from "0000:63:00.0")
+                pci_parts = pci_address.split(':')
+                if len(pci_parts) >= 2:
+                    pci_slot = f"{pci_parts[0]}:{pci_parts[1]}"
+                else:
+                    continue
+                
+                # Skip if we already found a card in this slot
+                if pci_slot in pci_slots:
+                    continue
+                
+                # Extract ConnectX type
+                cx_match = re.search(r'ConnectX-(\d+)', line)
+                if cx_match:
+                    pci_slots[pci_slot] = f'CX{cx_match.group(1)}'
+                else:
+                    pci_slots[pci_slot] = 'No CX found in ibdev2netdev.txt'
+            
+            if not pci_slots:
+                return None
+            
+            # Sort by PCI address and return comma-separated list
+            sorted_slots = sorted(pci_slots.items())
+            nic_types = [nic_type for _, nic_type in sorted_slots]
+            
+            return ', '.join(nic_types)
+            
+        except IOError:
+            pass
+        return None
 
 
 class Bundle:
@@ -463,6 +934,16 @@ class Bundle:
     
     def __repr__(self):
         return f'<Bundle-{self.path.name}>'
+    
+    @cached_property
+    def pdb(self) -> Optional[PDB]:
+        """Get PDB (protobuf database) for this bundle (Luna's data source)"""
+        pdb_folder = PDB.find_pdb_folder(self.path)
+        if pdb_folder:
+            logging.debug(f"Bundle {self.path.name}: found PDB at {pdb_folder.name}")
+            return PDB(pdb_folder)
+        logging.debug(f"Bundle {self.path.name}: no PDB found")
+        return None
     
     @cached_property
     def node(self) -> Optional[Node]:
@@ -1052,7 +1533,9 @@ def show_node_rma_form(node: Node, sibling_nodes: List[Node], cluster: Cluster, 
     table.add_row("", node.node_type, style="subtitle")
     index = "1" if node.position == "bottom" else "2"
     table.add_row("Index", index)
-    table.add_row("ModelNumber", "")
+    table.add_row("Model", node.model)
+    if node.nics:
+        table.add_row("NICs", node.nics)
     table.add_row("name", node.name)
     table.add_row("position", node.position)
     table.add_row("IP", node.network.data_ip or "")
@@ -1103,7 +1586,7 @@ def show_drive_rma_form(device: Device, node: Node, sibling_nodes: List[Node], c
     index = "1" if node.position == "bottom" else "2"
     table.add_row("Index", index)
     table.add_row("DevicePath", device.path)
-    table.add_row("ModelNumber", device.model)
+    table.add_row("Model", device.model)
     table.add_row("SerialNumber", device.serial)
     
     # Associated node
@@ -1161,7 +1644,7 @@ def show_device_list(node: Node, sibling_nodes: List[Node], drive_type_filter: O
     table.add_row("", "dnode", style="subtitle")
     index = "1" if node.position == "bottom" else "2"
     table.add_row("Index", index)
-    table.add_row("ModelNumber", "")
+    table.add_row("Model", node.model)
     table.add_row("name", node.name)
     table.add_row("position", node.position)
     table.add_row("IP", node.network.data_ip or '')
