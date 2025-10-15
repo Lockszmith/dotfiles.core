@@ -538,14 +538,26 @@ class Node:
     
     @cached_property
     def serial_number(self) -> str:
-        """Board serial number from FRU or system serial"""
-        # Check FRU for board serial
+        """Node serial number with priority for BlueField systems
+        
+        Priority:
+        1. lspci_vvv_info VPD serial (BlueField DPU cards)
+        2. FRU board serial (traditional servers)
+        3. monitor_result.json fallback
+        """
+        # First: Try lspci VPD serial (BlueField DPU systems)
+        lspci_serial = self._extract_node_serial_from_lspci()
+        if lspci_serial:
+            return lspci_serial
+        
+        # Second: Check FRU for board serial (traditional servers)
         fru_file = self._bundle.path / 'ipmitool' / 'ipmitool_fru_list.txt'
         if fru_file.exists():
             board_serial = self._extract_board_serial_from_fru(fru_file)
             if board_serial:
                 return board_serial
         
+        # Third: Fallback to monitor data
         return self._node_info.get('serial_number', 'Unknown')
     
     @cached_property
@@ -646,15 +658,26 @@ class Node:
     
     @cached_property
     def box_serial(self) -> Optional[str]:
-        """Box serial number from dmidecode (preferred) or FRU (fallback)"""
-        # First: Try dmidecode.txt (more reliable for CBox serial)
+        """Box serial number with priority for DBox systems
+        
+        Priority:
+        1. bmc_logs/*/fru.log (FRU 1 Chassis Serial - DBox serial)
+        2. dmidecode.txt (last Chassis Serial - CBox serial)
+        3. ipmitool FRU (fallback - Dtray serial)
+        """
+        # First: Try bmc_logs FRU 1 (DBox serial for multi-node systems)
+        bmc_fru_serial = self._extract_box_serial_from_bmc_logs()
+        if bmc_fru_serial and bmc_fru_serial != 'Uninitialized':
+            return bmc_fru_serial
+        
+        # Second: Try dmidecode.txt (CBox serial)
         dmidecode_file = self._bundle.path / 'dmidecode.txt'
         if dmidecode_file.exists():
             serial = self._extract_box_serial_from_dmidecode(dmidecode_file)
             if serial and serial != 'Uninitialized':
                 return serial
         
-        # Second: Fall back to FRU
+        # Third: Fall back to FRU (Dtray serial)
         fru_file = self._bundle.path / 'ipmitool' / 'ipmitool_fru_list.txt'
         if fru_file.exists():
             return self._extract_box_serial_from_fru(fru_file)
@@ -764,6 +787,76 @@ class Node:
         return devices
     
     # Private helper methods
+    def _extract_node_serial_from_lspci(self) -> Optional[str]:
+        """Extract node serial from lspci_vvv_info VPD section (BlueField DPU)
+        
+        Extracts serial number from VPD (Vital Product Data) section:
+        Pattern: [SN] Serial number: MT2326XZ0DRJ
+        """
+        lspci_file = self._bundle.path / 'lspci_vvv_info'
+        if not lspci_file.exists():
+            return None
+        
+        try:
+            with open(lspci_file, 'r') as f:
+                content = f.read()
+            
+            # Find the first VPD serial number (primary BlueField card)
+            match = re.search(r'\[SN\]\s+Serial number:\s+(\S+)', content)
+            if match:
+                serial = match.group(1).strip()
+                if serial and serial not in ['Unspecified', 'Not Specified']:
+                    logging.debug(f"Node serial from lspci VPD: {serial}")
+                    return serial
+        except IOError:
+            pass
+        
+        return None
+    
+    def _extract_box_serial_from_bmc_logs(self) -> Optional[str]:
+        """Extract box serial from bmc_logs/*/fru.log (FRU 1 Chassis Serial)
+        
+        For DBox systems, the bmc_logs contain FRU information where:
+        - FRU 0 = Dtray (individual node tray)
+        - FRU 1 = DBox (multi-node enclosure)
+        
+        We extract the Chassis Serial from FRU 1 which is the DBox serial.
+        """
+        bmc_logs_dir = self._bundle.path / 'bmc_logs'
+        if not bmc_logs_dir.exists():
+            return None
+        
+        # Find fru.log files in bmc_logs subdirectories
+        fru_log_files = list(bmc_logs_dir.glob('*/fru.log'))
+        if not fru_log_files:
+            return None
+        
+        # Use the first fru.log found
+        fru_log_file = fru_log_files[0]
+        
+        try:
+            with open(fru_log_file, 'r') as f:
+                content = f.read()
+            
+            # Split by "fru print" commands to isolate FRU sections
+            sections = re.split(r'fru print \d+', content)
+            
+            if len(sections) >= 3:  # Need at least FRU 0, FRU 1
+                # FRU 1 is the second section (index 2 after split)
+                fru1_section = sections[2] if len(sections) > 2 else sections[1]
+                
+                # Extract Chassis Serial from FRU 1
+                match = re.search(r'Chassis Serial\s+:\s+(\S+)', fru1_section)
+                if match:
+                    serial = match.group(1).strip()
+                    if serial and serial not in ['Unspecified', 'Not Specified']:
+                        logging.debug(f"Box serial from bmc_logs FRU 1: {serial}")
+                        return serial
+        except IOError:
+            pass
+        
+        return None
+    
     def _extract_ipmi_ip(self) -> Optional[str]:
         """Extract IPMI IP from lan print files"""
         ipmitool_dir = self._bundle.path / 'ipmitool'
