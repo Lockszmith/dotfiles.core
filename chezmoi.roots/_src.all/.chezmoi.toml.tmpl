@@ -33,6 +33,18 @@
     ) ( list .chezmoi.username " (@" $sysname ")" | join ""
     )) -}}
 
+{{- $szEnvFlagsChoices := list "default"
+        "NeoVIM" "broot" "television" "VAST.dockersh"
+-}}
+{{- $szEnvFlags := list (dig "sz" "env" "flags" "default" .) "dummy" | join " " | splitList " " -}}
+{{- $szEnvFlags  = slice $szEnvFlags 0 (sub (len $szEnvFlags) 1) -}}
+{{- $szEnvFlagsSelected := promptMultichoice (list "Choose sz.env flags (default is '" ($szEnvFlags | join ", ") "')" | join "") $szEnvFlagsChoices -}}
+{{/*
+{{- $szEnvFlagsSelected := promptMultichoice "Choose sz.env flags" $szEnvFlagsChoices $szEnvFlags -}}
+{{- $szEnvFlags = $szEnvFlagsSelected -}}
+*/}}
+{{- $szEnvFlags = $szEnvFlagsSelected | join " " -}}
+
 {{- $zellijLeaderModifier := list (dig "style" "zellij" "leader-modifier" "Alt" .) "dummy" | join " " | splitList " " -}}
 {{- $zellijLeaderModifier  = slice $zellijLeaderModifier 0 (sub (len $zellijLeaderModifier) 1) -}}
 {{- $zellijLeaderModifierChoices := list "Alt" "Ctrl" -}}
@@ -53,14 +65,13 @@
         "nord" "one-half-dark" "onedark" "solarized-dark" "tokyo-night-dark"
         "tokyo-night-storm" "tokyo-night" "vesper"
 -}}
-{{- $zellijThemeSelected := promptMultichoice (list "Choose zellij theme *(only first selection is chose - default is '" $zellijTheme "')" | join "") $zellijThemeChoices -}}
+{{- $zellijThemeSelected := promptMultichoice (list "Choose zellij theme *(only first selection is chose - default is '" $zellijTheme "')" | join "") $zellijThemeChoices $zellijTheme -}}
 {{- $zellijTheme = first $zellijThemeSelected | default $zellijTheme -}}
 
 {{- $promptStyle := dig "style" "prompt" "cool" . -}}
 {{- $promptStyleChoices := list "cool" "hot" "lux" -}}
-{{- $promptStyleSelected := promptMultichoice (list "Choose prompt style *(only first selection is chose - default is '" $promptStyle "')" | join "") $promptStyleChoices -}}
+{{- $promptStyleSelected := promptMultichoice (list "Choose prompt style *(only first selection is chose - default is '" $promptStyle "')" | join "") $promptStyleChoices $promptStyle -}}
 {{- $promptStyle = first $promptStyleSelected | default $promptStyle -}}
-{{/*{{- $promptStyle = promptChoice "Prompt style" $promptStyleChoices $promptStyle -}}*/}}
 
 {{- $scriptTempDir   := or ( get . "sz.os.scriptTempDir"   ) ( env "CZ_SCRIPT_TEMPDIR"      ) -}}
 {{- $chassisType     := or ( get . "sz.os.chassisType"     ) ( env "CZ_CHASSIS"             ) -}}
@@ -81,6 +92,11 @@
 
 {{- $scriptTempDir := "~/.cache/chezmoi/tmp" }}
 scriptTempDir={{ $scriptTempDir | quote }}
+
+[data.sz.env]
+{{- if ($szEnvFlags) }}
+   flags={{- $szEnvFlags | quote }}
+{{- end }}
 
 [data.sz.os]
 {{- if eq .chezmoi.os "linux" }}
@@ -162,11 +178,11 @@ scriptTempDir={{ $scriptTempDir | quote }}
 #   command = "nvim"
 #   args = ["-d",  "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
 
-   command = "delta"
-   args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
-   #pager = "delta" # Required until https://github.com/twpayne/chezmoi/issues/3523 is resolved.
+   #command = "delta"
+   #args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
+   pager = "delta" # Required until https://github.com/twpayne/chezmoi/issues/3523 is resolved.
    #pager = "moor"
-   pager=""
+   #pager=""
 {{- end }}
 
 # vim: set ft=toml expandtab tabstop=2 shiftwidth=2:
