@@ -7,6 +7,13 @@ bundle directories and formats it according to the specified output format. It c
 list all available nodes, show detailed information for a specific node, or show 
 SSD replacement information for a specific SSD.
 
+PDB (Protobuf Database) Discovery:
+- First searches the current bundle's pdb/ directory
+- Then prioritizes sibling leader bundles (primary source for cluster-wide PDB)
+- Falls back to other sibling bundles and parent directory
+- This supports the common pattern where a leader/CNode bundle contains 
+  cluster-wide PDB with complete device metadata while DNode bundles contain only local data
+
 Node types are determined by MGMT IP:
 - MGMT IP >= 100: dnode
 - MGMT IP < 100: cnode
@@ -59,16 +66,571 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Union
-from functools import cached_property
+from typing import List, Optional, Dict, Any, Union, Tuple
 
-# Try to import vapi for PDB support (Luna protobuf files)
+# Python 3.6/3.7 compatibility: cached_property was added in Python 3.8
 try:
-    from vapi.commander import STR_TO_TYPE_ID, Commander  # type: ignore
-    HAS_VAPI = True
+    from functools import cached_property
 except ImportError:
-    HAS_VAPI = False
-    logging.debug("vapi module not available - PDB support disabled, using fallback sources")
+    # Fallback for Python < 3.8
+    class cached_property:
+        """A property that is only computed once and then replaces itself with an ordinary attribute."""
+        def __init__(self, func):
+            self.func = func
+            self.__doc__ = func.__doc__
+        
+        def __get__(self, obj, objtype=None):
+            if obj is None:
+                return self
+            value = self.func(obj)
+            setattr(obj, self.func.__name__, value)
+            return value
+
+# Placeholder for vapi - will be imported dynamically per bundle
+HAS_VAPI = False
+STR_TO_TYPE_ID = None
+Commander = None
+
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+# File paths (relative to bundle directory)
+METADATA_BUNDLE_ARGS = 'METADATA/BUNDLE_ARGS'
+SYSTEMCTL_STATUS_PATH = 'systemctl_output/systemctl_status.txt'
+PLATFORM_CONFIG_PATH = 'config/platform.config'
+NVME_CLI_LIST_PATH = 'nvme_cli_list.json'
+NVME_LIST_PATH = 'nvme_list.json'
+IPMITOOL_FRU_PATH = 'ipmitool/ipmitool_fru_list.txt'
+IPMITOOL_MC_INFO_PATH = 'ipmitool/ipmitool_mc_info.txt'
+BMC_LOGS_PATH = 'bmc_logs'
+LSPCI_VVV_PATH = 'lspci_vvv_info'
+DMIDECODE_PATH = 'dmidecode.txt'
+IBDEV2NETDEV_PATH = 'ibdev2netdev.txt'
+MONITOR_RESULT_PATH = 'monitor_result.json'
+CONFIGURE_NETWORK_PARAMS = 'vast-configure_network.py-params.ini'
+SELF_GUID_PATH = 'self.guid'
+
+# Default values
+UNKNOWN_VALUE = 'Unknown'
+UNKNOWN_IP = (0, 0, 0, 0)
+
+# Invalid serial number indicators
+INVALID_SERIALS = {'Unspecified', 'Not Specified', '0'}
+
+# Node types
+NODE_TYPE_DNODE = 'dnode'
+NODE_TYPE_CNODE = 'cnode'
+NODE_TYPE_UNKNOWN = 'unknown'
+
+# Drive type indicators (NVRAM/SCM identifiers)
+NVRAM_INDICATORS = ['optane', 'dcpmm', 'ssdpe21k', 'ssdpf21', 'scm', 'nvdimm', 'pmem', 'pascari']
+
+# Directories to skip when searching for bundles
+SKIP_BUNDLE_DIRS = {
+    'compatible_vapi', 'venv', '__pycache__', 'node_modules',
+    'pdb', 'config', 'ipmitool', 'bmc_logs', 'systemctl_output',
+    'METADATA', 'ipmi_cmds_logs', 'nvme_cli_list', 'dmidecode',
+    'ipmi_lan_print', 'lspci', 'ibdev2netdev'
+}
+
+
+# ============================================================================
+# Regex Patterns
+# ============================================================================
+
+class RegexPatterns:
+    """Centralized regex patterns for parsing various files"""
+    
+    # Platform config patterns
+    NODE_INFO = re.compile(
+        r'(?:.|\n)*ip: "(?P<node_ip>.*)"(?:.|\n)*port: (?P<node_port>\d+)'
+        r'(?:.|\n)*node_type: "(?P<node_type>.*)"(?:.|\n)*'
+    )
+    NODE_ARCH = re.compile(r'node_architecture: "(.*?)"')
+    DNODE_INDEX = re.compile(r'dnode_index: "(.*?)"')
+    
+    # Serial number patterns
+    LSPCI_VPD_SERIAL = re.compile(r'\[SN\]\s+Serial number:\s+(\S+)')
+    CHASSIS_SERIAL = re.compile(r'Chassis Serial\s+:\s+(\S+)')
+    BOARD_SERIAL = re.compile(r'Board Serial\s+:\s+(\S+)')
+    
+    # IPMI patterns
+    IPMI_IP_ADDRESS = re.compile(r'IP Address\s+:\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)')
+    MANUFACTURER_ID = re.compile(r'Manufacturer ID\s+:\s+(\d+)')
+    PRODUCT_ID = re.compile(r'Product ID\s+:\s+(\d+)')
+    
+    # NIC patterns
+    PCI_ADDRESS = re.compile(r'([0-9a-fA-F:\.]+)\s')
+    CONNECTX_TYPE = re.compile(r'ConnectX-(\d+)')
+    NIC_SPEED = re.compile(r'(\d+)Gb')
+    
+    # Path patterns
+    CASE_NUMBER = re.compile(r'Case-(\d{8})', re.IGNORECASE)
+    PDB_TIMESTAMP = re.compile(r'\d{8}_\d{6}')
+    
+    # DMI type pattern
+    DMI_HANDLE = re.compile(r'Handle 0x[0-9A-Fa-f]+, DMI type')
+
+
+def try_import_vapi_from_path(vapi_path: Path) -> bool:
+    """Dynamically import vapi from a specific bundle path
+    
+    Returns True if successful, False otherwise.
+    
+    Note: vapi requires the 'vproto' package to be available in the Python environment.
+    If vproto is not installed, vapi import will fail and the script will fall back
+    to parsing JSON files directly. This means some metadata (e.g., PCI switch location
+    for devices) may not be available if the device wasn't exposed/attached when the
+    bundle was collected.
+    """
+    global HAS_VAPI, STR_TO_TYPE_ID, Commander
+    
+    if not vapi_path or not vapi_path.exists():
+        return False
+    
+    # Add to sys.path if not already there
+    vapi_path_str = str(vapi_path)
+    if vapi_path_str not in sys.path:
+        sys.path.insert(0, vapi_path_str)
+        logging.debug(f"Added {vapi_path_str} to sys.path")
+    
+    try:
+        # Import fresh from the path
+        import importlib
+        if 'vapi.commander' in sys.modules:
+            # Reload if already imported
+            import vapi.commander  # type: ignore
+            importlib.reload(vapi.commander)
+        else:
+            import vapi.commander  # type: ignore
+        
+        from vapi.commander import STR_TO_TYPE_ID as _STR_TO_TYPE_ID  # type: ignore
+        from vapi.commander import Commander as _Commander  # type: ignore
+        
+        STR_TO_TYPE_ID = _STR_TO_TYPE_ID
+        Commander = _Commander
+        HAS_VAPI = True
+        logging.debug(f"Successfully imported vapi from {vapi_path}")
+        return True
+    except ImportError as e:
+        if 'vproto' in str(e):
+            logging.debug(f"vapi import requires 'vproto' package (not available): {e}")
+            logging.debug("Falling back to JSON parsing (some PDB metadata may be unavailable)")
+        else:
+            logging.debug(f"Failed to import vapi from {vapi_path}: {e}")
+        return False
+    except Exception as e:
+        logging.debug(f"Failed to import vapi from {vapi_path}: {e}")
+        return False
+
+
+# ============================================================================
+# File Reading Utilities
+# ============================================================================
+
+def _read_text_file(path: Path) -> Optional[str]:
+    """Read text file with standard error handling
+    
+    Args:
+        path: Path to file to read
+        
+    Returns:
+        File contents as string, or None if file doesn't exist or can't be read
+    """
+    if not path.exists():
+        return None
+    try:
+        return path.read_text(encoding='utf-8')
+    except (IOError, OSError) as e:
+        logging.debug(f"Failed to read {path}: {e}")
+        return None
+
+
+def _read_json_file(path: Path) -> Optional[Dict[str, Any]]:
+    """Read JSON file with standard error handling
+    
+    Args:
+        path: Path to JSON file to read
+        
+    Returns:
+        Parsed JSON as dict, or None if file doesn't exist or can't be parsed
+    """
+    if not path.exists():
+        return None
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        logging.debug(f"Failed to parse JSON {path}: {e}")
+        return None
+
+
+def _search_file_for_pattern(path: Path, pattern, group: int = 1) -> Optional[str]:
+    """Search file for regex pattern and return first match
+    
+    Args:
+        path: Path to file to search
+        pattern: Regex pattern (string or compiled Pattern)
+        group: Capture group to return (default: 1)
+        
+    Returns:
+        Matched group string, or None if not found
+    """
+    content = _read_text_file(path)
+    if not content:
+        return None
+    
+    if isinstance(pattern, str):
+        pattern = re.compile(pattern)
+    
+    match = pattern.search(content)
+    if match:
+        return match.group(group)
+    return None
+
+
+def _search_file_for_patterns(path: Path, patterns: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    """Search file for multiple patterns and return dict of results
+    
+    Args:
+        path: Path to file to search
+        patterns: Dict of {key: pattern} to search for
+        
+    Returns:
+        Dict of {key: matched_value} with None for patterns not found
+    """
+    content = _read_text_file(path)
+    results = {}
+    
+    if not content:
+        return {key: None for key in patterns}
+    
+    for key, pattern in patterns.items():
+        if isinstance(pattern, str):
+            pattern = re.compile(pattern)
+        match = pattern.search(content)
+        results[key] = match.group(1) if match else None
+    
+    return results
+
+
+# ============================================================================
+# FRU (Field Replaceable Unit) Parser
+# ============================================================================
+
+class FRUParser:
+    """Parser for IPMI FRU (Field Replaceable Unit) files
+    
+    Handles both ipmitool FRU files and bmc_logs FRU files.
+    Provides methods to extract serial numbers from different FRU devices.
+    """
+    
+    def __init__(self, fru_file_path: Path):
+        """Initialize FRU parser
+        
+        Args:
+            fru_file_path: Path to FRU file (ipmitool/ipmitool_fru_list.txt or bmc_logs/*/fru.log)
+        """
+        self.path = fru_file_path
+        self._content = None
+    
+    @property
+    def content(self) -> Optional[str]:
+        """Lazy load file content"""
+        if self._content is None:
+            self._content = _read_text_file(self.path)
+        return self._content
+    
+    def get_chassis_serial(self, fru_id: Optional[int] = None) -> Optional[str]:
+        """Get Chassis Serial from specific FRU ID or first found
+        
+        Args:
+            fru_id: Specific FRU ID (0, 1, etc.) or None for first found
+            
+        Returns:
+            Chassis serial number, or None if not found
+        """
+        if not self.content:
+            return None
+        
+        if fru_id is not None:
+            # Search for specific FRU device
+            pattern = re.compile(
+                rf'FRU Device Description.*\(ID {fru_id}\).*?Chassis Serial\s+:\s+(\S+)',
+                re.DOTALL
+            )
+            match = pattern.search(self.content)
+        else:
+            # Search for any Chassis Serial
+            match = RegexPatterns.CHASSIS_SERIAL.search(self.content)
+        
+        if match:
+            serial = match.group(1).strip()
+            if serial and serial not in INVALID_SERIALS:
+                return serial
+        return None
+    
+    def get_board_serial(self) -> Optional[str]:
+        """Get Board Serial Number
+        
+        Returns:
+            Board serial number, or None if not found
+        """
+        if not self.content:
+            return None
+        
+        match = RegexPatterns.BOARD_SERIAL.search(self.content)
+        if match:
+            return match.group(1)
+        return None
+    
+    def get_all_chassis_serials(self) -> List[Tuple[int, str]]:
+        """Get all Chassis Serial numbers with their FRU IDs
+        
+        Returns:
+            List of (fru_id, serial) tuples
+        """
+        if not self.content:
+            return []
+        
+        results = []
+        pattern = re.compile(
+            r'FRU Device Description.*\(ID (\d+)\).*?Chassis Serial\s+:\s+(\S+)',
+            re.DOTALL
+        )
+        
+        for match in pattern.finditer(self.content):
+            fru_id = int(match.group(1))
+            serial = match.group(2).strip()
+            if serial and serial not in INVALID_SERIALS:
+                results.append((fru_id, serial))
+        
+        return results
+
+
+class BMCLogsFRUParser(FRUParser):
+    """Parser for BMC logs FRU files (bmc_logs/*/fru.log)
+    
+    BMC logs contain FRU data split by "fru print <id>" commands.
+    This parser handles the different format from ipmitool FRU files.
+    """
+    
+    def get_chassis_serial_by_section(self, fru_id: int) -> Optional[str]:
+        """Extract Chassis Serial from specific FRU ID section in bmc_logs
+        
+        BMC logs format: Content is split by "fru print <id>" commands
+        
+        Args:
+            fru_id: FRU ID (0, 1, etc.)
+            
+        Returns:
+            Chassis serial number, or None if not found
+        """
+        if not self.content:
+            return None
+        
+        # Split by "fru print" commands
+        sections = re.split(r'fru print \d+', self.content)
+        
+        # Section index is fru_id + 1 (split creates empty first element)
+        if fru_id + 1 < len(sections):
+            section = sections[fru_id + 1]
+            match = RegexPatterns.CHASSIS_SERIAL.search(section)
+            if match:
+                serial = match.group(1).strip()
+                if serial and serial not in INVALID_SERIALS:
+                    return serial
+        
+        return None
+
+
+# ============================================================================
+# Serial Number Extraction
+# ============================================================================
+
+class SerialNumberExtractor:
+    """Extract serial numbers from various system information sources
+    
+    Consolidates serial extraction logic for nodes and boxes from multiple
+    file types (lspci, FRU, BMC logs, dmidecode).
+    """
+    
+    def __init__(self, bundle_path: Path):
+        """Initialize serial extractor
+        
+        Args:
+            bundle_path: Path to bundle directory
+        """
+        self.bundle_path = bundle_path
+    
+    def get_node_serial_from_lspci(self) -> Optional[str]:
+        """Extract node serial from lspci VPD section (BlueField DPU)
+        
+        Extracts serial number from VPD (Vital Product Data) section:
+        Pattern: [SN] Serial number: MT2326XZ0DRJ
+        
+        Returns:
+            Node serial number, or None if not found
+        """
+        lspci_file = self.bundle_path / LSPCI_VVV_PATH
+        if not lspci_file.exists():
+            return None
+        
+        serial = _search_file_for_pattern(lspci_file, RegexPatterns.LSPCI_VPD_SERIAL)
+        if serial and serial not in INVALID_SERIALS:
+            logging.debug(f"Node serial from lspci VPD: {serial}")
+            return serial
+        return None
+    
+    def get_box_serial_from_bmc_logs(self) -> Optional[str]:
+        """Extract box serial from bmc_logs/*/fru.log
+        
+        For multi-node DBox systems (AIC DF-30):
+        - FRU 0 = Dtray (individual node tray) 
+        - FRU 1 = DBox (multi-node enclosure) - has Chassis Serial
+        
+        For single-node servers (Viking NSS2560):
+        - FRU 0 = Server chassis - has Chassis Serial
+        - FRU 1 = Riser board - no Chassis Serial
+        
+        Strategy: Try FRU 1 Chassis Serial first (DBox), fall back to FRU 0 (single-node)
+        
+        Returns:
+            Box serial number, or None if not found
+        """
+        bmc_logs_dir = self.bundle_path / BMC_LOGS_PATH
+        if not bmc_logs_dir.exists():
+            return None
+        
+        # Find fru.log files in bmc_logs subdirectories
+        fru_log_files = list(bmc_logs_dir.glob('*/fru.log'))
+        if not fru_log_files:
+            return None
+        
+        # Use the first fru.log found
+        fru_log_file = fru_log_files[0]
+        parser = BMCLogsFRUParser(fru_log_file)
+        
+        # Try FRU 1 first (multi-node DBox systems)
+        serial = parser.get_chassis_serial_by_section(fru_id=1)
+        if serial:
+            logging.debug(f"Box serial from bmc_logs FRU 1 (DBox): {serial}")
+            return serial
+        
+        # Fall back to FRU 0 (single-node traditional servers)
+        serial = parser.get_chassis_serial_by_section(fru_id=0)
+        if serial:
+            logging.debug(f"Box serial from bmc_logs FRU 0 (single-node): {serial}")
+            return serial
+        
+        return None
+    
+    def get_box_serial_from_dmidecode(self) -> Optional[str]:
+        """Extract box serial from dmidecode.txt
+        
+        For multi-node boxes (CBox), dmidecode shows multiple Chassis Information sections.
+        The LAST chassis serial is the CBox serial number.
+        
+        Returns:
+            Box serial number, or None if not found
+        """
+        dmidecode_file = self.bundle_path / DMIDECODE_PATH
+        content = _read_text_file(dmidecode_file)
+        if not content:
+            return None
+        
+        # Find all "Serial Number:" lines that appear after "Chassis Information"
+        chassis_sections = RegexPatterns.DMI_HANDLE.split(content)
+        
+        last_chassis_serial = None
+        for section in chassis_sections:
+            if 'Chassis Information' in section:
+                # Extract Serial Number from this chassis section
+                match = re.search(r'Serial Number:\s*(.+)', section)
+                if match:
+                    serial = match.group(1).strip()
+                    if serial:  # Update to last found serial
+                        last_chassis_serial = serial
+        
+        return last_chassis_serial
+
+
+# ============================================================================
+# IPMI Data Extraction
+# ============================================================================
+
+class IPMIExtractor:
+    """Extract IPMI-related information from various sources
+    
+    Consolidates IPMI data extraction logic (IP, manufacturer/product IDs) from
+    multiple file types (ipmitool outputs, ipmi_cmds_logs, mc_info).
+    """
+    
+    def __init__(self, bundle_path: Path):
+        """Initialize IPMI extractor
+        
+        Args:
+            bundle_path: Path to bundle directory
+        """
+        self.bundle_path = bundle_path
+    
+    def get_ipmi_ip(self) -> Optional[str]:
+        """Extract IPMI IP from multiple sources
+        
+        Priority:
+        1. ipmitool/ipmitool_lan_print_*.txt
+        2. ipmi_cmds_logs/ipmi_cmds.log (fallback for harvest bundles)
+        
+        Returns:
+            IPMI IP address, or None if not found
+        """
+        # First: Try ipmitool lan print files
+        ipmitool_dir = self.bundle_path / 'ipmitool'
+        if ipmitool_dir.exists():
+            for lan_file in ipmitool_dir.glob('ipmitool_lan_print_*.txt'):
+                ip = _search_file_for_pattern(lan_file, RegexPatterns.IPMI_IP_ADDRESS)
+                if ip and ip != '0.0.0.0':
+                    logging.debug(f"IPMI IP from ipmitool lan print: {ip}")
+                    return ip
+        
+        # Second: Try ipmi_cmds_logs (harvest bundles)
+        ipmi_cmds_log = self.bundle_path / 'ipmi_cmds_logs' / 'ipmi_cmds.log'
+        if ipmi_cmds_log.exists():
+            try:
+                with open(ipmi_cmds_log, 'r') as f:
+                    # Read in chunks to avoid loading huge files
+                    for line in f:
+                        if 'stdout IP Address' in line and ':' in line:
+                            match = RegexPatterns.IPMI_IP_ADDRESS.search(line)
+                            if match:
+                                ip = match.group(1)
+                                if ip != '0.0.0.0':
+                                    logging.debug(f"IPMI IP from ipmi_cmds_logs: {ip}")
+                                    return ip
+            except IOError:
+                pass
+        
+        return None
+    
+    def get_manufacturer_id(self) -> Optional[str]:
+        """Extract Manufacturer ID from mc_info
+        
+        Returns:
+            Manufacturer ID, or None if not found
+        """
+        mc_info_file = self.bundle_path / IPMITOOL_MC_INFO_PATH
+        return _search_file_for_pattern(mc_info_file, RegexPatterns.MANUFACTURER_ID)
+    
+    def get_product_id(self) -> Optional[str]:
+        """Extract Product ID from mc_info
+        
+        Returns:
+            Product ID, or None if not found
+        """
+        mc_info_file = self.bundle_path / IPMITOOL_MC_INFO_PATH
+        return _search_file_for_pattern(mc_info_file, RegexPatterns.PRODUCT_ID)
 
 
 # ============================================================================
@@ -103,9 +665,15 @@ class PDB:
     Falls back gracefully when vapi module is not available.
     """
     
-    def __init__(self, path: Optional[Path] = None):
+    def __init__(self, path: Optional[Path] = None, bundle_path: Optional[Path] = None):
         self._path = path
+        self._bundle_path = bundle_path
         self._cache = {}
+        self._vapi_loaded = False
+        
+        # Try to load vapi from bundle if available
+        if bundle_path:
+            self._try_load_vapi_from_bundle(bundle_path)
     
     def __repr__(self):
         return f'PDB({self._path or "None"})'
@@ -113,22 +681,193 @@ class PDB:
     def __bool__(self):
         return bool(self._path and self._path.exists())
     
+    def _try_load_vapi_from_bundle(self, bundle_path: Path):
+        """Try to load vapi from the bundle's vapi directory"""
+        if self._vapi_loaded:
+            return
+        
+        # Check bundle's vapi directory
+        vapi_dir = bundle_path / 'vapi'
+        if vapi_dir.exists():
+            if try_import_vapi_from_path(vapi_dir.parent):
+                self._vapi_loaded = True
+                logging.debug(f"Loaded vapi from bundle: {bundle_path.name}")
+                return
+        
+        # Check parent directory for sibling bundles with vapi
+        try:
+            parent_dir = bundle_path.parent
+            if parent_dir and parent_dir.exists():
+                # Try leader bundles first
+                for sibling in sorted(parent_dir.iterdir()):
+                    if not sibling.is_dir() or sibling == bundle_path:
+                        continue
+                    
+                    if 'leader' in sibling.name.lower():
+                        vapi_dir = sibling / 'vapi'
+                        if vapi_dir.exists():
+                            if try_import_vapi_from_path(vapi_dir.parent):
+                                self._vapi_loaded = True
+                                logging.debug(f"Loaded vapi from leader bundle: {sibling.name}")
+                                return
+        except (OSError, PermissionError) as e:
+            logging.debug(f"Error searching for vapi in sibling bundles: {e}")
+    
     @staticmethod
-    def find_pdb_folder(bundle_path: Path) -> Optional[Path]:
-        """Find the PDB directory in a bundle (usually pdb/<timestamp>/)"""
-        pdb_dir = bundle_path / 'pdb'
-        if not pdb_dir.exists():
-            return None
+    def _is_leader_bundle(bundle_path: Path) -> bool:
+        """Check if a bundle is a leader bundle
         
-        # Find timestamp folders (format: YYYYMMDD_HHMMSS)
-        pdb_folders = [f for f in pdb_dir.iterdir() 
-                      if f.is_dir() and re.match(r'\d{8}_\d{6}', f.name)]
+        A leader bundle is identified by having a non-empty leader_pid.info file.
+        """
+        leader_pid_file = bundle_path / 'leader_pid.info'
+        if leader_pid_file.exists():
+            try:
+                return leader_pid_file.stat().st_size > 0
+            except (OSError, PermissionError):
+                pass
+        return False
+    
+    @staticmethod
+    def _is_vms_bundle(bundle_path: Path) -> bool:
+        """Check if a bundle is a VMS bundle
         
-        if not pdb_folders:
-            return None
+        A VMS bundle is identified by having a docker_inspect_vast_vms file.
+        """
+        return (bundle_path / 'docker_inspect_vast_vms').exists()
+    
+    @staticmethod
+    def _get_pdb_from_bundle(bundle: Path) -> Optional[Tuple[Path, Path]]:
+        """Check if bundle has PDB and return (pdb_folder, bundle) or None
         
-        # Return the latest one
-        return max(pdb_folders, key=lambda f: f.name)
+        Args:
+            bundle: Path to bundle directory
+            
+        Returns:
+            Tuple of (pdb_folder, bundle) or None if no PDB found
+        """
+        pdb_dir = bundle / 'pdb'
+        if pdb_dir.exists():
+            pdb_folders = [f for f in pdb_dir.iterdir() 
+                          if f.is_dir() and RegexPatterns.PDB_TIMESTAMP.match(f.name)]
+            if pdb_folders:
+                latest_pdb = max(pdb_folders, key=lambda f: f.name)
+                return (latest_pdb, bundle)
+        return None
+    
+    @staticmethod
+    def _categorize_sibling_bundles(parent_dir: Path, exclude: Path) -> Dict[str, List[Path]]:
+        """Categorize bundles by type: leader, vms, other
+        
+        Args:
+            parent_dir: Parent directory containing bundles
+            exclude: Bundle path to exclude (usually current bundle)
+            
+        Returns:
+            Dict with keys 'leader', 'vms', 'other' containing lists of bundle paths
+        """
+        categories = {'leader': [], 'vms': [], 'other': []}
+        
+        for sibling in parent_dir.iterdir():
+            if not sibling.is_dir() or sibling == exclude:
+                continue
+            if not (sibling / METADATA_BUNDLE_ARGS).exists():
+                continue
+            
+            if PDB._is_leader_bundle(sibling):
+                categories['leader'].append(sibling)
+                logging.debug(f"Detected leader bundle (non-empty leader_pid.info): {sibling.name}")
+            elif PDB._is_vms_bundle(sibling):
+                categories['vms'].append(sibling)
+                logging.debug(f"Detected VMS bundle (docker_inspect_vast_vms exists): {sibling.name}")
+            else:
+                categories['other'].append(sibling)
+        
+        return categories
+    
+    @staticmethod
+    def _search_priority_bundles(categories: Dict[str, List[Path]]) -> Optional[Tuple[Path, Path]]:
+        """Search bundles in priority order: leader > vms
+        
+        Args:
+            categories: Dict from _categorize_sibling_bundles
+            
+        Returns:
+            Tuple of (pdb_folder, bundle) or None if no PDB found
+        """
+        # Search leader bundles first (highest priority)
+        for sibling in categories['leader']:
+            result = PDB._get_pdb_from_bundle(sibling)
+            if result:
+                logging.debug(f"Found PDB in leader bundle: {sibling.name}")
+                return result
+        
+        # Then search VMS bundles
+        for sibling in categories['vms']:
+            result = PDB._get_pdb_from_bundle(sibling)
+            if result:
+                logging.debug(f"Found PDB in VMS bundle: {sibling.name}")
+                return result
+        
+        return None
+    
+    @staticmethod
+    def find_pdb_folder(bundle_path: Path) -> Optional[Tuple[Path, Path]]:
+        """Find the PDB directory in a bundle (usually pdb/<timestamp>/)
+        
+        Search order:
+        1. Sibling leader bundles (primary source - has cluster-wide PDB with device metadata)
+        2. Sibling VMS bundles (secondary source - also has cluster-wide PDB)
+        3. Current bundle's pdb/ directory (local node data)
+        4. Other sibling bundles
+        5. Parent directory's pdb/ (for standalone PDB)
+        
+        Leader/VMS bundle detection:
+        - Leader: non-empty leader_pid.info file
+        - VMS: docker_inspect_vast_vms file exists
+        
+        Returns:
+            Tuple of (pdb_folder, bundle_containing_pdb) or None
+        """
+        # First: Check sibling leader and VMS bundles (ALWAYS prioritize these)
+        parent_dir = bundle_path.parent
+        if parent_dir and parent_dir.exists():
+            try:
+                categories = PDB._categorize_sibling_bundles(parent_dir, bundle_path)
+                result = PDB._search_priority_bundles(categories)
+                if result:
+                    return result
+            except (OSError, PermissionError) as e:
+                logging.debug(f"Error searching for leader/VMS bundles: {e}")
+        
+        # Second: Check current bundle (local node data)
+        result = PDB._get_pdb_from_bundle(bundle_path)
+        if result:
+            logging.debug(f"Found PDB in current bundle: {bundle_path.name}")
+            return result
+        
+        # Third: Check other sibling bundles
+        if parent_dir and parent_dir.exists():
+            try:
+                categories = PDB._categorize_sibling_bundles(parent_dir, bundle_path)
+                for sibling in categories['other']:
+                    result = PDB._get_pdb_from_bundle(sibling)
+                    if result:
+                        logging.debug(f"Found PDB in sibling bundle: {sibling.name}")
+                        return result
+                
+                # Finally: Check parent directory's pdb/ (standalone case)
+                parent_pdb_dir = parent_dir / 'pdb'
+                if parent_pdb_dir.exists():
+                    pdb_folders = [f for f in parent_pdb_dir.iterdir() 
+                                  if f.is_dir() and RegexPatterns.PDB_TIMESTAMP.match(f.name)]
+                    if pdb_folders:
+                        latest_pdb = max(pdb_folders, key=lambda f: f.name)
+                        logging.debug(f"Found PDB in parent directory")
+                        return (latest_pdb, parent_dir)
+            except (OSError, PermissionError) as e:
+                logging.debug(f"Error searching for PDB in sibling bundles: {e}")
+        
+        return None
     
     def _read_raw_data(self, type_name: str) -> Optional[bytes]:
         """Read raw protobuf data from a PDB file"""
@@ -211,13 +950,6 @@ class PDB:
 class PlatformConfig:
     """Parse config/platform.config file (Luna's source for node type/IP)"""
     
-    NODE_INFO_REGEX = re.compile(
-        r'(?:.|\n)*ip: \"(?P<node_ip>.*)\"(?:.|\n)*port: (?P<node_port>\d+)'
-        r'(?:.|\n)*node_type: \"(?P<node_type>.*)\"(?:.|\n)*'
-    )
-    NODE_ARCH_REGEX = re.compile(r'node_architecture: "(.*?)"')
-    DNODE_INDEX_REGEX = re.compile(r'dnode_index: "(.*?)"')
-    
     def __init__(self, config_file: Path):
         self.config_file = config_file
         self.node_ip = None
@@ -226,31 +958,26 @@ class PlatformConfig:
         self.node_architecture = None
         self.dnode_index = None
         
-        if not config_file.exists():
+        content = _read_text_file(config_file)
+        if not content:
             return
         
-        try:
-            content = config_file.read_text(encoding='utf-8')
-            
-            # Parse node info
-            match = self.NODE_INFO_REGEX.match(content)
-            if match:
-                self.node_ip = match.group('node_ip')
-                self.node_port = match.group('node_port')
-                self.node_type = match.group('node_type')
-            
-            # Parse architecture
-            arch_match = self.NODE_ARCH_REGEX.search(content)
-            if arch_match:
-                self.node_architecture = arch_match.group(1)
-            
-            # Parse dnode index
-            index_match = self.DNODE_INDEX_REGEX.search(content)
-            if index_match:
-                self.dnode_index = index_match.group(1)
+        # Parse node info
+        match = RegexPatterns.NODE_INFO.match(content)
+        if match:
+            self.node_ip = match.group('node_ip')
+            self.node_port = match.group('node_port')
+            self.node_type = match.group('node_type')
         
-        except (IOError, OSError) as e:
-            logging.debug(f"Failed to read platform.config: {e}")
+        # Parse architecture
+        arch_match = RegexPatterns.NODE_ARCH.search(content)
+        if arch_match:
+            self.node_architecture = arch_match.group(1)
+        
+        # Parse dnode index
+        index_match = RegexPatterns.DNODE_INDEX.search(content)
+        if index_match:
+            self.dnode_index = index_match.group(1)
 
 
 # ============================================================================
@@ -259,11 +986,25 @@ class PlatformConfig:
 
 class NetworkInfo:
     """Network configuration for a node"""
-    def __init__(self, mgmt_ip=None, ipmi_ip=None, mac_address=None, data_ip=None):
+    def __init__(self, mgmt_ip=None, ipmi_ip=None, mac_address=None, data_ip=None,
+                 mgmt_ip_from_cn=False, ipmi_ip_from_cn=False, data_ip_from_cn=False):
         self.mgmt_ip = mgmt_ip
         self.ipmi_ip = ipmi_ip
         self.mac_address = mac_address
         self.data_ip = data_ip
+        # Track which fields came from configure_network (not from actual system output)
+        self.mgmt_ip_from_cn = mgmt_ip_from_cn
+        self.ipmi_ip_from_cn = ipmi_ip_from_cn
+        self.data_ip_from_cn = data_ip_from_cn
+
+
+class DTrayInfo:
+    """DTray (Data Tray) information for multi-node DBox systems"""
+    def __init__(self, serial_number=None, position=None, mcu_state=None, ipmi_ip=None):
+        self.serial_number = serial_number
+        self.position = position  # "Right" or "Left"
+        self.mcu_state = mcu_state  # "active", "standby", etc.
+        self.ipmi_ip = ipmi_ip
 
 
 class Device:
@@ -321,6 +1062,11 @@ class Device:
                 path = self._get_device_path_from_nvme_cli()
                 if path:
                     result['path'] = path
+                else:
+                    # Fallback to nvme_list.json for devices not currently exposed
+                    path = self._get_device_path_from_nvme_list()
+                    if path:
+                        result['path'] = path
                 
                 logging.debug(f"Device {self.serial}: loaded from PDB")
                 return result
@@ -328,70 +1074,97 @@ class Device:
                 logging.debug(f"Device {self.serial}: PDB read failed ({e}), falling back")
         
         # Second: Try nvme_cli_list.json
-        nvme_cli_file = self._bundle.path / 'nvme_cli_list.json'
-        if nvme_cli_file.exists():
-            try:
-                with open(nvme_cli_file, 'r') as f:
-                    nvme_data = json.load(f)
-                
-                all_drives = nvme_data.get('drives', []) + nvme_data.get('nvrams', [])
-                for drive in all_drives:
-                    if drive.get('serial') == self.serial:
-                        logging.debug(f"Device {self.serial}: loaded from nvme_cli_list.json")
-                        return drive
-            except (json.JSONDecodeError, IOError):
-                pass
+        nvme_cli_file = self._bundle.path / NVME_CLI_LIST_PATH
+        nvme_data = _read_json_file(nvme_cli_file)
+        if nvme_data:
+            all_drives = nvme_data.get('drives', []) + nvme_data.get('nvrams', [])
+            for drive in all_drives:
+                if drive.get('serial') == self.serial:
+                    logging.debug(f"Device {self.serial}: loaded from nvme_cli_list.json")
+                    return drive
         
         # Third: Fallback to nvme_list.json
-        nvme_list_file = self._bundle.path / 'nvme_list.json'
-        if nvme_list_file.exists():
-            try:
-                with open(nvme_list_file, 'r') as f:
-                    nvme_data = json.load(f)
-                
-                devices = nvme_data.get('Devices', [])
-                for device in devices:
-                    if device.get('SerialNumber') == self.serial:
-                        logging.debug(f"Device {self.serial}: loaded from nvme_list.json")
-                        return {
-                            'serial': device.get('SerialNumber'),
-                            'model': device.get('ModelNumber'),
-                            'path': device.get('DevicePath'),
-                            'size': device.get('PhysicalSize'),
-                            'firmware_rev': device.get('Firmware'),
-                            'index': device.get('Index'),
-                        }
-            except (json.JSONDecodeError, IOError):
-                pass
+        # Try to enrich with location data from nvme_cli_list by matching device path
+        nvme_list_file = self._bundle.path / NVME_LIST_PATH
+        nvme_data = _read_json_file(nvme_list_file)
+        if nvme_data:
+            devices = nvme_data.get('Devices', [])
+            for device in devices:
+                if device.get('SerialNumber') == self.serial:
+                    logging.debug(f"Device {self.serial}: loaded from nvme_list.json")
+                    result = {
+                        'serial': device.get('SerialNumber'),
+                        'model': device.get('ModelNumber'),
+                        'path': device.get('DevicePath'),
+                        'size': device.get('PhysicalSize'),
+                        'firmware_rev': device.get('Firmware'),
+                        'index': device.get('Index'),
+                    }
+                    
+                    # Try to enrich with location data from nvme_cli_list
+                    # by matching DevicePath
+                    location_info = self._get_location_from_nvme_cli_by_path(result['path'])
+                    if location_info:
+                        result['pci_switch_position'] = location_info.get('pci_switch_position')
+                        result['pci_switch_slot'] = location_info.get('pci_switch_slot')
+                        logging.debug(f"Device {self.serial}: enriched with location from nvme_cli_list.json")
+                    
+                    return result
         
         return result if result else None
     
     def _get_device_path_from_nvme_cli(self) -> Optional[str]:
         """Get device path from nvme_cli_list.json"""
-        nvme_cli_file = self._bundle.path / 'nvme_cli_list.json'
-        if not nvme_cli_file.exists():
-            return None
-        
-        try:
-            with open(nvme_cli_file, 'r') as f:
-                nvme_data = json.load(f)
-            
+        nvme_cli_file = self._bundle.path / NVME_CLI_LIST_PATH
+        nvme_data = _read_json_file(nvme_cli_file)
+        if nvme_data:
             all_drives = nvme_data.get('drives', []) + nvme_data.get('nvrams', [])
             for drive in all_drives:
                 if drive.get('serial') == self.serial:
                     return drive.get('path')
-        except (json.JSONDecodeError, IOError):
-            pass
+        return None
+    
+    def _get_device_path_from_nvme_list(self) -> Optional[str]:
+        """Get device path from nvme_list.json (fallback for devices not currently exposed)"""
+        nvme_list_file = self._bundle.path / NVME_LIST_PATH
+        nvme_data = _read_json_file(nvme_list_file)
+        if nvme_data:
+            devices = nvme_data.get('Devices', [])
+            for device in devices:
+                if device.get('SerialNumber') == self.serial:
+                    return device.get('DevicePath')
+        return None
+    
+    def _get_location_from_nvme_cli_by_path(self, device_path: str) -> Optional[Dict[str, Any]]:
+        """Get location info from nvme_cli_list.json by matching device path
         
+        This helps when a device is in nvme_list.json but not in nvme_cli_list.json by serial,
+        but we can match by device path to get location metadata.
+        """
+        if not device_path:
+            return None
+        
+        nvme_cli_file = self._bundle.path / NVME_CLI_LIST_PATH
+        nvme_data = _read_json_file(nvme_cli_file)
+        if nvme_data:
+            all_drives = nvme_data.get('drives', []) + nvme_data.get('nvrams', [])
+            for drive in all_drives:
+                # Match by path (e.g., "/vast/dev/nvme10n1" or "/dev/nvme10n1")
+                drive_path = drive.get('path', '')
+                if drive_path == device_path or drive_path.endswith(device_path.replace('/dev/', '/')):
+                    return {
+                        'pci_switch_position': drive.get('pci_switch_position'),
+                        'pci_switch_slot': drive.get('pci_switch_slot'),
+                    }
         return None
     
     @cached_property
     def model(self) -> str:
-        return self.data.get('model', 'Unknown') if self.data else 'Unknown'
+        return self.data.get('model', UNKNOWN_VALUE) if self.data else UNKNOWN_VALUE
     
     @cached_property
     def path(self) -> str:
-        return self.data.get('path', 'Unknown') if self.data else 'Unknown'
+        return self.data.get('path', UNKNOWN_VALUE) if self.data else UNKNOWN_VALUE
     
     @cached_property
     def size(self) -> Optional[str]:
@@ -407,9 +1180,19 @@ class Device:
     
     @cached_property
     def location_in_box(self) -> str:
-        """Calculate location from PCI switch info"""
+        """Calculate location from PCI switch info
+        
+        Handles both string values (from JSON) and enum values (from PDB protobuf).
+        """
         if self.pci_switch_position and self.pci_switch_slot:
-            return f"{self.pci_switch_position}-{self.pci_switch_slot}"
+            # Handle enum values from PDB (e.g., PCISwitchPosition.RIGHT)
+            position = self.pci_switch_position
+            if not isinstance(position, str):
+                # If it's an enum, convert to string
+                # This handles protobuf enums like "PCISwitchPosition.RIGHT" -> "RIGHT"
+                position = str(position).split('.')[-1] if '.' in str(position) else str(position)
+            
+            return f"{position}-{self.pci_switch_slot}"
         return 'Unknown'
     
     @cached_property
@@ -418,7 +1201,7 @@ class Device:
         model_lower = self.model.lower()
         path_lower = self.path.lower()
         
-        nvram_indicators = ['optane', 'dcpmm', 'ssdpe21k', 'scm', 'nvdimm', 'pmem', 'pascari']
+        nvram_indicators = ['optane', 'dcpmm', 'ssdpe21k', 'ssdpf21', 'scm', 'nvdimm', 'pmem', 'pascari']
         
         for indicator in nvram_indicators:
             if indicator in model_lower or indicator in path_lower:
@@ -444,7 +1227,7 @@ class Node:
     @cached_property
     def platform_config(self) -> Optional[PlatformConfig]:
         """Load config/platform.config (Luna's source for node type/IP)"""
-        config_file = self._bundle.path / 'config' / 'platform.config'
+        config_file = self._bundle.path / PLATFORM_CONFIG_PATH
         if config_file.exists():
             return PlatformConfig(config_file)
         return None
@@ -452,12 +1235,10 @@ class Node:
     @cached_property
     def guid(self) -> Optional[str]:
         """Read self.guid file (Luna's node identifier)"""
-        guid_file = self._bundle.path / 'self.guid'
-        if guid_file.exists():
-            try:
-                return guid_file.read_text().strip()
-            except (IOError, OSError):
-                pass
+        guid_file = self._bundle.path / SELF_GUID_PATH
+        content = _read_text_file(guid_file)
+        if content:
+            return content.strip()
         return None
     
     @cached_property
@@ -490,15 +1271,8 @@ class Node:
     @cached_property
     def _monitor_data(self) -> Optional[Dict[str, Any]]:
         """Load monitor_result.json (fallback source)"""
-        monitor_file = self._bundle.path / 'monitor_result.json'
-        if not monitor_file.exists():
-            return None
-        
-        try:
-            with open(monitor_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return None
+        monitor_file = self._bundle.path / MONITOR_RESULT_PATH
+        return _read_json_file(monitor_file)
     
     @cached_property
     def _node_info(self) -> Dict[str, Any]:
@@ -538,31 +1312,158 @@ class Node:
     
     @cached_property
     def serial_number(self) -> str:
-        """Node serial number with priority for BlueField systems
+        """Node serial number with priority for BlueField vs traditional systems
         
         Priority:
-        1. lspci_vvv_info VPD serial (BlueField DPU cards)
-        2. FRU board serial (traditional servers)
+        1. lspci_vvv_info VPD serial (ONLY for DNodes with BlueField DPU)
+        2. FRU board serial (traditional servers and CNodes)
         3. monitor_result.json fallback
-        """
-        # First: Try lspci VPD serial (BlueField DPU systems)
-        lspci_serial = self._extract_node_serial_from_lspci()
-        if lspci_serial:
-            return lspci_serial
         
-        # Second: Check FRU for board serial (traditional servers)
-        fru_file = self._bundle.path / 'ipmitool' / 'ipmitool_fru_list.txt'
+        Note: For CNodes, lspci VPD serial would be the NIC card serial, not the node serial.
+        """
+        extractor = SerialNumberExtractor(self._bundle.path)
+        
+        # First: Check if this is a DNode (BlueField DPU system)
+        # Only use lspci serial for DNodes, as CNodes would return NIC card serial
+        if self.node_type == 'dnode':
+            lspci_serial = extractor.get_node_serial_from_lspci()
+            if lspci_serial:
+                return lspci_serial
+        
+        # Second: Check FRU for board serial (traditional servers and CNodes)
+        fru_file = self._bundle.path / IPMITOOL_FRU_PATH
         if fru_file.exists():
-            board_serial = self._extract_board_serial_from_fru(fru_file)
+            parser = FRUParser(fru_file)
+            board_serial = parser.get_board_serial()
             if board_serial:
                 return board_serial
         
-        # Third: Fallback to monitor data
+        # Third: For DNodes without BlueField or FRU, try lspci as last resort
+        if self.node_type == 'dnode':
+            lspci_serial = extractor.get_node_serial_from_lspci()
+            if lspci_serial:
+                return lspci_serial
+        
+        # Fourth: Fallback to monitor data
         return self._node_info.get('serial_number', 'Unknown')
     
     @cached_property
     def position(self) -> str:
         return self._node_info.get('position', 'Unknown')
+    
+    @cached_property
+    def _configure_network_params(self) -> Optional[Dict[str, str]]:
+        """Parse vast-configure_network.py-params.ini file
+        
+        Returns dict of key=value pairs from the config file
+        """
+        config_file = self._bundle.path / 'vast-configure_network.py-params.ini'
+        if not config_file.exists():
+            return None
+        
+        try:
+            params = {}
+            with open(config_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        # Remove quotes and list brackets
+                        value = value.strip().strip('"').strip("'").strip('[]')
+                        params[key] = value
+            return params if params else None
+        except (IOError, OSError):
+            return None
+    
+    def _get_data_ip_from_platform_config(self) -> Optional[str]:
+        """Get data IP from platform.config (primary source)
+        
+        Returns:
+            Data IP from platform.config or None
+        """
+        if self.platform_config and self.platform_config.node_ip:
+            logging.debug(f"Node {self.name}: data IP from platform.config")
+            return self.platform_config.node_ip
+        return None
+    
+    def _get_ips_from_monitor_data(self) -> Dict[str, Optional[str]]:
+        """Get IPs from monitor_result.json
+        
+        Returns:
+            Dict with keys 'mgmt_ip', 'data_ip', 'mac_address'
+        """
+        result = {'mgmt_ip': None, 'data_ip': None, 'mac_address': None}
+        
+        if not self._monitor_data:
+            return result
+        
+        nics = self._monitor_data.get('nics', {})
+        data_ips = []
+        
+        for nic_name, nic_info in nics.items():
+            nic_data = nic_info.get('info', {})
+            address = nic_data.get('address', '')
+            nic_mac = nic_data.get('mac_address', '')
+            
+            # Management IP (10.x.x.x)
+            if address and address.startswith('10.') and not result['mgmt_ip']:
+                result['mgmt_ip'] = address
+                result['mac_address'] = nic_mac
+            
+            # Data IP (172.16.x.x)
+            if address and address.startswith('172.16.'):
+                data_ips.append(address)
+        
+        # Use the lowest data IP if found
+        if data_ips:
+            result['data_ip'] = min(data_ips)
+            logging.debug(f"Node {self.name}: data IP from monitor_result.json")
+        
+        return result
+    
+    def _get_ips_from_configure_network(self) -> Dict[str, Any]:
+        """Get IPs from configure_network params (fallback)
+        
+        Returns:
+            Dict with keys: data_ip, mgmt_ip, ipmi_ip, and _from_cn flags
+        """
+        result = {
+            'data_ip': None, 'mgmt_ip': None, 'ipmi_ip': None,
+            'data_ip_from_cn': False, 'mgmt_ip_from_cn': False, 'ipmi_ip_from_cn': False
+        }
+        
+        if not self._configure_network_params:
+            return result
+        
+        cn_params = self._configure_network_params
+        
+        # Data IP from configure_network
+        if 'template' in cn_params and 'node' in cn_params:
+            try:
+                template = cn_params['template']
+                node_num = cn_params['node']
+                # Parse template like "172.16.{network}.{node}"
+                # Assume network=2 or 3 based on node number
+                network = '3' if int(node_num) >= 100 else '2'
+                result['data_ip'] = template.replace('{network}', network).replace('{node}', node_num)
+                result['data_ip_from_cn'] = True
+                logging.debug(f"Node {self.name}: data IP from configure_network")
+            except (ValueError, KeyError):
+                pass
+        
+        # MGMT IP from configure_network
+        if 'ext_ip' in cn_params:
+            result['mgmt_ip'] = cn_params['ext_ip']
+            result['mgmt_ip_from_cn'] = True
+            logging.debug(f"Node {self.name}: mgmt IP from configure_network")
+        
+        # IPMI IP from configure_network
+        if 'ipmi_ip' in cn_params:
+            result['ipmi_ip'] = cn_params['ipmi_ip']
+            result['ipmi_ip_from_cn'] = True
+            logging.debug(f"Node {self.name}: IPMI IP from configure_network")
+        
+        return result
     
     @cached_property
     def network(self) -> NetworkInfo:
@@ -572,47 +1473,50 @@ class Node:
         1. config/platform.config for data IP (Luna's source)
         2. monitor_result.json for MGMT IP and MAC
         3. ipmitool for IPMI IP
+        4. vast-configure_network.py-params.ini (fallback, marked with (!cn))
         """
-        mgmt_ip = None
-        mac_address = None
-        data_ip = None
+        # Try platform.config first for data IP
+        data_ip = self._get_data_ip_from_platform_config()
         
-        # First: Try to get data IP from platform.config (Luna's source)
-        if self.platform_config and self.platform_config.node_ip:
-            data_ip = self.platform_config.node_ip
-            logging.debug(f"Node {self.name}: data IP from platform.config")
+        # Try monitor data for MGMT IP, MAC, and data IP (if not from platform.config)
+        monitor_ips = self._get_ips_from_monitor_data()
+        mgmt_ip = monitor_ips['mgmt_ip']
+        mac_address = monitor_ips['mac_address']
+        if not data_ip:
+            data_ip = monitor_ips['data_ip']
         
-        # Second: Fall back to monitor_result.json
-        if self._monitor_data:
-            nics = self._monitor_data.get('nics', {})
-            data_ips = []
-            
-            for nic_name, nic_info in nics.items():
-                nic_data = nic_info.get('info', {})
-                address = nic_data.get('address', '')
-                nic_mac = nic_data.get('mac_address', '')
-                
-                # Management IP (10.x.x.x)
-                if address and address.startswith('10.') and not mgmt_ip:
-                    mgmt_ip = address
-                    mac_address = nic_mac
-                
-                # Data IP (172.16.x.x) - only if not already set from platform.config
-                if address and address.startswith('172.16.'):
-                    data_ips.append(address)
-            
-            # Use monitor data for data_ip only if platform.config didn't provide it
-            if not data_ip and data_ips:
-                data_ip = min(data_ips)
-                logging.debug(f"Node {self.name}: data IP from monitor_result.json")
+        # Try IPMI
+        extractor = IPMIExtractor(self._bundle.path)
+        ipmi_ip = extractor.get_ipmi_ip()
         
-        ipmi_ip = self._extract_ipmi_ip()
+        # Fall back to configure_network
+        cn_ips = self._get_ips_from_configure_network()
+        if not data_ip:
+            data_ip = cn_ips['data_ip']
+            data_ip_from_cn = cn_ips['data_ip_from_cn']
+        else:
+            data_ip_from_cn = False
+        
+        if not mgmt_ip:
+            mgmt_ip = cn_ips['mgmt_ip']
+            mgmt_ip_from_cn = cn_ips['mgmt_ip_from_cn']
+        else:
+            mgmt_ip_from_cn = False
+        
+        if not ipmi_ip:
+            ipmi_ip = cn_ips['ipmi_ip']
+            ipmi_ip_from_cn = cn_ips['ipmi_ip_from_cn']
+        else:
+            ipmi_ip_from_cn = False
         
         return NetworkInfo(
             mgmt_ip=mgmt_ip,
             ipmi_ip=ipmi_ip,
             mac_address=mac_address,
-            data_ip=data_ip
+            data_ip=data_ip,
+            mgmt_ip_from_cn=mgmt_ip_from_cn,
+            ipmi_ip_from_cn=ipmi_ip_from_cn,
+            data_ip_from_cn=data_ip_from_cn
         )
     
     @cached_property
@@ -665,39 +1569,84 @@ class Node:
         2. dmidecode.txt (last Chassis Serial - CBox serial)
         3. ipmitool FRU (fallback - Dtray serial)
         """
+        extractor = SerialNumberExtractor(self._bundle.path)
+        
         # First: Try bmc_logs FRU 1 (DBox serial for multi-node systems)
-        bmc_fru_serial = self._extract_box_serial_from_bmc_logs()
+        bmc_fru_serial = extractor.get_box_serial_from_bmc_logs()
         if bmc_fru_serial and bmc_fru_serial != 'Uninitialized':
             return bmc_fru_serial
         
         # Second: Try dmidecode.txt (CBox serial)
-        dmidecode_file = self._bundle.path / 'dmidecode.txt'
-        if dmidecode_file.exists():
-            serial = self._extract_box_serial_from_dmidecode(dmidecode_file)
-            if serial and serial != 'Uninitialized':
-                return serial
+        serial = extractor.get_box_serial_from_dmidecode()
+        if serial and serial != 'Uninitialized':
+            return serial
         
         # Third: Fall back to FRU (Dtray serial)
-        fru_file = self._bundle.path / 'ipmitool' / 'ipmitool_fru_list.txt'
+        fru_file = self._bundle.path / IPMITOOL_FRU_PATH
         if fru_file.exists():
-            return self._extract_box_serial_from_fru(fru_file)
+            parser = FRUParser(fru_file)
+            return parser.get_chassis_serial()
+        return None
+    
+    @cached_property
+    def dtray_info(self) -> Optional[DTrayInfo]:
+        """DTray (Data Tray) information for multi-node DBox systems
+        
+        Returns DTray info only for DNodes in multi-node DBox systems.
+        For single-node servers, DTray serial == Box serial, so we don't show it.
+        """
+        if self.node_type != 'dnode':
+            return None
+        
+        # Extract DTray serial from FRU 0 Chassis Serial
+        dtray_serial = None
+        fru_file = self._bundle.path / IPMITOOL_FRU_PATH
+        if fru_file.exists():
+            parser = FRUParser(fru_file)
+            dtray_serial = parser.get_chassis_serial(fru_id=0)
+        
+        # Skip if DTray serial is the same as Box serial (single-node server)
+        if dtray_serial and dtray_serial == self.box_serial:
+            return None
+        
+        # Determine position based on node position
+        # Right side: "right" in position, Left side: "left" in position
+        position = None
+        if self.position:
+            pos_lower = self.position.lower()
+            if 'right' in pos_lower:
+                position = 'Right'
+            elif 'left' in pos_lower:
+                position = 'Left'
+        
+        # Extract MCU state from BMC logs
+        mcu_state = self._extract_mcu_state()
+        
+        # IPMI IP is shared by nodes on the same DTray
+        ipmi_ip = self.network.ipmi_ip
+        
+        # Only return DTray info if we have at least the serial
+        if dtray_serial:
+            return DTrayInfo(
+                serial_number=dtray_serial,
+                position=position,
+                mcu_state=mcu_state,
+                ipmi_ip=ipmi_ip
+            )
+        
         return None
     
     @cached_property
     def manufacturer_id(self) -> Optional[str]:
         """Manufacturer ID from mc_info"""
-        mc_info_file = self._bundle.path / 'ipmitool' / 'ipmitool_mc_info.txt'
-        if mc_info_file.exists():
-            return self._extract_manufacturer_id(mc_info_file)
-        return None
+        extractor = IPMIExtractor(self._bundle.path)
+        return extractor.get_manufacturer_id()
     
     @cached_property
     def product_id(self) -> Optional[str]:
         """Product ID from mc_info"""
-        mc_info_file = self._bundle.path / 'ipmitool' / 'ipmitool_mc_info.txt'
-        if mc_info_file.exists():
-            return self._extract_product_id(mc_info_file)
-        return None
+        extractor = IPMIExtractor(self._bundle.path)
+        return extractor.get_product_id()
     
     @cached_property
     def nics(self) -> Optional[str]:
@@ -710,6 +1659,20 @@ class Node:
         if ibdev_file.exists():
             return self._extract_nics_from_ibdev(ibdev_file)
         return None
+    
+    @cached_property
+    def is_node_ipmi(self) -> bool:
+        """Determine if IPMI IP should be shown in node section
+        
+        Returns:
+            True: Show IPMI in node section (no DTray, or node has its own BMC)
+            False: Don't show IPMI in node section (shown in DTray section instead)
+        
+        Logic:
+            - Nodes with DTray: IPMI IP belongs to DTray (shared BMC), shown in DTray section
+            - Nodes without DTray: IPMI IP belongs to node, shown in node section
+        """
+        return not bool(self.dtray_info)
     
     @cached_property
     def model(self) -> str:
@@ -730,6 +1693,7 @@ class Node:
         Priority:
         1. PDB (protobuf) - Luna's authoritative device list
         2. nvme_cli_list.json - fallback
+        3. nvme_list.json - last resort fallback
         """
         devices = []
         
@@ -763,7 +1727,11 @@ class Node:
             except Exception as e:
                 logging.debug(f"Node {self.name}: PDB device loading failed ({e}), falling back")
         
-        # Second: Fall back to nvme_cli_list.json
+        # Second: Fall back to nvme_cli_list.json and nvme_list.json (merge both sources)
+        # Track which serials we've already added to avoid duplicates
+        seen_serials = set()
+        
+        # Try nvme_cli_list.json first (preferred for current system state)
         nvme_cli_file = self._bundle.path / 'nvme_cli_list.json'
         if nvme_cli_file.exists():
             try:
@@ -776,196 +1744,87 @@ class Node:
                 
                 for drive_data in all_drives:
                     serial = drive_data.get('serial')
-                    if serial:
+                    if serial and serial not in seen_serials:
                         devices.append(Device(serial, self._bundle))
+                        seen_serials.add(serial)
                 
                 if devices:
                     logging.debug(f"Node {self.name}: loaded {len(devices)} devices from nvme_cli_list.json")
             except (json.JSONDecodeError, IOError):
                 pass
         
+        # Also try nvme_list.json (may have additional devices not in nvme_cli_list)
+        nvme_list_file = self._bundle.path / 'nvme_list.json'
+        if nvme_list_file.exists():
+            try:
+                with open(nvme_list_file, 'r') as f:
+                    nvme_data = json.load(f)
+                
+                devices_list = nvme_data.get('Devices', [])
+                devices_before = len(devices)
+                
+                for device_data in devices_list:
+                    serial = device_data.get('SerialNumber')
+                    if serial and serial not in seen_serials:
+                        devices.append(Device(serial, self._bundle))
+                        seen_serials.add(serial)
+                
+                devices_added = len(devices) - devices_before
+                if devices_added > 0:
+                    logging.debug(f"Node {self.name}: loaded {devices_added} additional devices from nvme_list.json")
+            except (json.JSONDecodeError, IOError):
+                pass
+        
         return devices
     
     # Private helper methods
-    def _extract_node_serial_from_lspci(self) -> Optional[str]:
-        """Extract node serial from lspci_vvv_info VPD section (BlueField DPU)
+    def _extract_mcu_state(self) -> Optional[str]:
+        """Extract MCU state from BMC logs and position
         
-        Extracts serial number from VPD (Vital Product Data) section:
-        Pattern: [SN] Serial number: MT2326XZ0DRJ
+        For multi-node DBox systems with dual DTray controllers:
+        - Right DTray (position "Right") = active (primary controller)
+        - Left DTray (position "Left") = standby (secondary controller)
+        
+        Returns "active" or "standby" based on DTray position.
         """
-        lspci_file = self._bundle.path / 'lspci_vvv_info'
-        if not lspci_file.exists():
-            return None
+        # Determine MCU state based on DTray position
+        # Right side = active, Left side = standby
+        if self.position:
+            pos_lower = self.position.lower()
+            if 'right' in pos_lower:
+                return 'active?'
+            elif 'left' in pos_lower:
+                return 'standby?'
         
-        try:
-            with open(lspci_file, 'r') as f:
-                content = f.read()
-            
-            # Find the first VPD serial number (primary BlueField card)
-            match = re.search(r'\[SN\]\s+Serial number:\s+(\S+)', content)
-            if match:
-                serial = match.group(1).strip()
-                if serial and serial not in ['Unspecified', 'Not Specified']:
-                    logging.debug(f"Node serial from lspci VPD: {serial}")
-                    return serial
-        except IOError:
-            pass
-        
-        return None
-    
-    def _extract_box_serial_from_bmc_logs(self) -> Optional[str]:
-        """Extract box serial from bmc_logs/*/fru.log (FRU 1 Chassis Serial)
-        
-        For DBox systems, the bmc_logs contain FRU information where:
-        - FRU 0 = Dtray (individual node tray)
-        - FRU 1 = DBox (multi-node enclosure)
-        
-        We extract the Chassis Serial from FRU 1 which is the DBox serial.
-        """
+        # Fallback: try to detect from misc_info.log
         bmc_logs_dir = self._bundle.path / 'bmc_logs'
-        if not bmc_logs_dir.exists():
-            return None
+        if bmc_logs_dir.exists():
+            misc_info_files = list(bmc_logs_dir.glob('*/misc_info.log'))
+            if misc_info_files:
+                try:
+                    with open(misc_info_files[0], 'r') as f:
+                        lines = f.readlines()
+                    
+                    for line in lines:
+                        line_stripped = line.strip()
+                        if line_stripped in ['Standby', 'Inactive']:
+                            return line_stripped.lower()
+                        elif line_stripped == 'Master':
+                            return 'active'
+                except IOError:
+                    pass
         
-        # Find fru.log files in bmc_logs subdirectories
-        fru_log_files = list(bmc_logs_dir.glob('*/fru.log'))
-        if not fru_log_files:
-            return None
-        
-        # Use the first fru.log found
-        fru_log_file = fru_log_files[0]
-        
-        try:
-            with open(fru_log_file, 'r') as f:
-                content = f.read()
-            
-            # Split by "fru print" commands to isolate FRU sections
-            sections = re.split(r'fru print \d+', content)
-            
-            if len(sections) >= 3:  # Need at least FRU 0, FRU 1
-                # FRU 1 is the second section (index 2 after split)
-                fru1_section = sections[2] if len(sections) > 2 else sections[1]
-                
-                # Extract Chassis Serial from FRU 1
-                match = re.search(r'Chassis Serial\s+:\s+(\S+)', fru1_section)
-                if match:
-                    serial = match.group(1).strip()
-                    if serial and serial not in ['Unspecified', 'Not Specified']:
-                        logging.debug(f"Box serial from bmc_logs FRU 1: {serial}")
-                        return serial
-        except IOError:
-            pass
-        
-        return None
-    
-    def _extract_ipmi_ip(self) -> Optional[str]:
-        """Extract IPMI IP from lan print files"""
-        ipmitool_dir = self._bundle.path / 'ipmitool'
-        if not ipmitool_dir.exists():
-            return None
-        
-        for lan_file in ipmitool_dir.glob('ipmitool_lan_print_*.txt'):
-            try:
-                with open(lan_file, 'r') as f:
-                    content = f.read()
-                
-                match = re.search(r'IP Address\s+:\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', content)
-                if match:
-                    ipmi_ip = match.group(1)
-                    if ipmi_ip != '0.0.0.0':
-                        return ipmi_ip
-            except IOError:
-                continue
-        
-        return None
-    
-    @staticmethod
-    def _extract_box_serial_from_dmidecode(dmidecode_file_path: Path) -> Optional[str]:
-        """Extract Box serial from dmidecode.txt
-        
-        For multi-node boxes (CBox), dmidecode shows multiple Chassis Information sections.
-        The LAST chassis serial is the CBox serial number.
-        """
-        try:
-            with open(dmidecode_file_path, 'r') as f:
-                content = f.read()
-            
-            # Find all "Serial Number:" lines that appear after "Chassis Information"
-            # Pattern: Find "Chassis Information" section and extract its Serial Number
-            chassis_sections = re.split(r'Handle 0x[0-9A-Fa-f]+, DMI type', content)
-            
-            last_chassis_serial = None
-            for section in chassis_sections:
-                if 'Chassis Information' in section:
-                    # Extract Serial Number from this chassis section
-                    match = re.search(r'Serial Number:\s*(.+)', section)
-                    if match:
-                        serial = match.group(1).strip()
-                        if serial:  # Update to last found serial
-                            last_chassis_serial = serial
-            
-            return last_chassis_serial
-        except IOError:
-            pass
-        return None
-    
-    @staticmethod
-    def _extract_box_serial_from_fru(fru_file_path: Path) -> Optional[str]:
-        """Extract Box serial from FRU file"""
-        try:
-            with open(fru_file_path, 'r') as f:
-                content = f.read()
-            match = re.search(r'Chassis Serial\s+:\s+(\S+)', content)
-            if match:
-                return match.group(1)
-        except IOError:
-            pass
-        return None
-    
-    @staticmethod
-    def _extract_board_serial_from_fru(fru_file_path: Path) -> Optional[str]:
-        """Extract Board serial from FRU file"""
-        try:
-            with open(fru_file_path, 'r') as f:
-                content = f.read()
-            match = re.search(r'Board Serial\s+:\s+(\S+)', content)
-            if match:
-                return match.group(1)
-        except IOError:
-            pass
-        return None
-    
-    @staticmethod
-    def _extract_manufacturer_id(mc_info_file: Path) -> Optional[str]:
-        """Extract Manufacturer ID from mc_info"""
-        try:
-            with open(mc_info_file, 'r') as f:
-                content = f.read()
-            match = re.search(r'Manufacturer ID\s+:\s+(\d+)', content)
-            if match:
-                return match.group(1)
-        except IOError:
-            pass
-        return None
-    
-    @staticmethod
-    def _extract_product_id(mc_info_file: Path) -> Optional[str]:
-        """Extract Product ID from mc_info"""
-        try:
-            with open(mc_info_file, 'r') as f:
-                content = f.read()
-            match = re.search(r'Product ID\s+:\s+(\d+)', content)
-            if match:
-                return match.group(1)
-        except IOError:
-            pass
         return None
     
     @staticmethod
     def _extract_nics_from_ibdev(ibdev_file: Path) -> Optional[str]:
         """Extract NIC types from ibdev2netdev.txt
         
-        Parses the file to find ConnectX-5/6/7 cards and groups them by PCI slot.
-        Returns a comma-separated list like "CX6, CX7" in PCI slot order.
+        Parses the file to find ConnectX-5/6/7 and BlueField cards, groups by PCI slot.
+        
+        Returns:
+        - ConnectX cards: "CX5, CX6, CX7"
+        - BlueField cards: "IB BF 2x100Gbs" (format: IB BF {ports}x{speed}Gbs)
         """
         try:
             with open(ibdev_file, 'r') as f:
@@ -997,12 +1856,30 @@ class Node:
                 if pci_slot in pci_slots:
                     continue
                 
+                # Check for BlueField card first
+                if 'BlueField Controller card' in line:
+                    # Extract port count: "Dual Port" -> 2, "Single Port" -> 1
+                    port_count = 1  # Default
+                    if 'Dual Port' in line:
+                        port_count = 2
+                    elif 'Quad Port' in line:
+                        port_count = 4
+                    elif 'Single Port' in line:
+                        port_count = 1
+                    
+                    # Extract speed: "100Gbs" -> 100, "200Gbs" -> 200
+                    speed_match = re.search(r'(\d+)Gb', line)
+                    speed = speed_match.group(1) if speed_match else '?'
+                    
+                    pci_slots[pci_slot] = f'IB BF {port_count}x{speed}Gbs'
+                    continue
+                
                 # Extract ConnectX type
                 cx_match = re.search(r'ConnectX-(\d+)', line)
                 if cx_match:
                     pci_slots[pci_slot] = f'CX{cx_match.group(1)}'
                 else:
-                    pci_slots[pci_slot] = 'No CX found in ibdev2netdev.txt'
+                    pci_slots[pci_slot] = 'Unknown NIC'
             
             if not pci_slots:
                 return None
@@ -1031,10 +1908,11 @@ class Bundle:
     @cached_property
     def pdb(self) -> Optional[PDB]:
         """Get PDB (protobuf database) for this bundle (Luna's data source)"""
-        pdb_folder = PDB.find_pdb_folder(self.path)
-        if pdb_folder:
+        pdb_result = PDB.find_pdb_folder(self.path)
+        if pdb_result:
+            pdb_folder, bundle_with_pdb = pdb_result
             logging.debug(f"Bundle {self.path.name}: found PDB at {pdb_folder.name}")
-            return PDB(pdb_folder)
+            return PDB(pdb_folder, bundle_path=bundle_with_pdb)
         logging.debug(f"Bundle {self.path.name}: no PDB found")
         return None
     
@@ -1153,7 +2031,7 @@ class Cluster:
         return ", ".join(names)
     
     @cached_method
-    def nodes_by_box(self, box_serial: str) -> List[tuple[Node, Bundle]]:
+    def nodes_by_box(self, box_serial: str) -> List[Tuple[Node, Bundle]]:
         """Get all nodes in a specific box"""
         results = []
         for bundle in self._bundles:
@@ -1163,7 +2041,7 @@ class Cluster:
         return results
     
     @cached_method
-    def find_device(self, serial: str) -> Optional[tuple[Device, Node, Bundle]]:
+    def find_device(self, serial: str) -> Optional[Tuple[Device, Node, Bundle]]:
         """Find a device across all bundles"""
         for bundle in self._bundles:
             device = bundle.find_device(serial)
@@ -1171,12 +2049,84 @@ class Cluster:
                 return device, bundle.node, bundle
         return None
     
-    @cached_method
-    def find_node(self, identifier: str) -> List[tuple[Node, Bundle]]:
-        """Find node(s) by name, serial, IP, or regex pattern"""
-        results = []
+    def _quick_hostname_check(self, bundle: Bundle) -> Optional[str]:
+        """Quickly extract hostname without loading full node data
         
-        # Try exact match first
+        Args:
+            bundle: Bundle to check
+            
+        Returns:
+            Hostname or None
+        """
+        systemctl_file = bundle.path / SYSTEMCTL_STATUS_PATH
+        if systemctl_file.exists():
+            try:
+                with open(systemctl_file, 'r') as f:
+                    first_line = f.readline().strip()
+                if first_line.startswith('●'):
+                    return first_line[1:].strip()
+            except (IOError, OSError):
+                pass
+        return None
+    
+    def _create_search_pattern(self, identifier: str) -> Tuple[Optional[Any], bool]:
+        """Create regex pattern if identifier looks like regex
+        
+        Args:
+            identifier: Search identifier
+            
+        Returns:
+            Tuple of (compiled_pattern, is_regex)
+        """
+        if any(c in identifier for c in ['.*', '[', ']', '^', '$', '\\', '|']):
+            try:
+                return re.compile(identifier, re.IGNORECASE), True
+            except re.error:
+                pass
+        return None, False
+    
+    def _fast_hostname_search(self, identifier: str, pattern: Optional[Any]) -> List[Bundle]:
+        """Quick search using just hostname without loading full nodes
+        
+        Args:
+            identifier: Search identifier
+            pattern: Compiled regex pattern (if any)
+            
+        Returns:
+            List of candidate bundles
+        """
+        candidate_bundles = []
+        for bundle in self._bundles:
+            hostname = self._quick_hostname_check(bundle)
+            if not hostname:
+                continue
+            
+            # Exact match on hostname
+            if hostname == identifier:
+                candidate_bundles.append(bundle)
+                continue
+            
+            # Regex match on hostname
+            if pattern and pattern.search(hostname):
+                candidate_bundles.append(bundle)
+                continue
+            
+            # Partial match for common patterns like "dnode213" matching "cluster-dnode213"
+            if identifier.lower() in hostname.lower():
+                candidate_bundles.append(bundle)
+        
+        return candidate_bundles
+    
+    def _exact_match_search(self, identifier: str) -> List[Tuple[Node, Bundle]]:
+        """Search for exact matches on node fields
+        
+        Args:
+            identifier: Search identifier
+            
+        Returns:
+            List of (node, bundle) tuples
+        """
+        results = []
         for bundle in self._bundles:
             node = bundle.node
             if not node:
@@ -1185,28 +2135,87 @@ class Cluster:
             if (node.name == identifier or
                 node.serial_number == identifier or
                 node.network.mgmt_ip == identifier or
-                node.network.data_ip == identifier):
-                results.append((node, bundle))
-        
-        if results:
-            return results
-        
-        # Try regex match
-        try:
-            pattern = re.compile(identifier, re.IGNORECASE)
-            for bundle in self._bundles:
-                node = bundle.node
-                if not node:
-                    continue
-                
-                if (pattern.search(node.name) or
-                    pattern.search(node.serial_number or '') or
-                    pattern.search(node.network.mgmt_ip or '') or
-                    pattern.search(node.network.data_ip or '') or
-                    pattern.search(node.box_serial or '')):
+                node.network.data_ip == identifier or
+                node.box_serial == identifier):
+                if (node, bundle) not in results:
                     results.append((node, bundle))
-        except re.error:
-            pass
+        
+        return results
+    
+    def _regex_match_search(self, pattern: Any) -> List[Tuple[Node, Bundle]]:
+        """Search for regex matches on node fields
+        
+        Args:
+            pattern: Compiled regex pattern
+            
+        Returns:
+            List of (node, bundle) tuples
+        """
+        results = []
+        for bundle in self._bundles:
+            node = bundle.node
+            if not node:
+                continue
+            
+            if (pattern.search(node.name) or
+                pattern.search(node.serial_number or '') or
+                pattern.search(node.network.mgmt_ip or '') or
+                pattern.search(node.network.data_ip or '') or
+                pattern.search(node.box_serial or '')):
+                if (node, bundle) not in results:
+                    results.append((node, bundle))
+        
+        return results
+    
+    @cached_method
+    def find_node(self, identifier: str) -> List[Tuple[Node, Bundle]]:
+        """Find node(s) by name, serial, IP, or regex pattern
+        
+        Optimized to quickly check node identity without loading full node data.
+        
+        Search strategies:
+        1. Fast hostname check (no full node load)
+        2. Full exact match search
+        3. Regex search (if identifier looks like regex)
+        4. Fallback regex search (treat as regex even if not obvious)
+        """
+        results = []
+        pattern, is_regex = self._create_search_pattern(identifier)
+        
+        # Strategy 1: Fast hostname check
+        candidate_bundles = self._fast_hostname_search(identifier, pattern)
+        if candidate_bundles:
+            logging.debug(f"Fast hostname check found {len(candidate_bundles)} candidate bundles")
+            for bundle in candidate_bundles:
+                node = bundle.node
+                if node:
+                    results.append((node, bundle))
+            
+            # If we found exact matches, return them
+            if any(node.name == identifier for node, _ in results):
+                return results
+            
+            # If we have results from hostname match and not regex, return them
+            if results and not is_regex:
+                return results
+        
+        # Strategy 2: Full exact match search
+        if not results:
+            logging.debug(f"No fast matches, doing full node scan for '{identifier}'")
+            results = self._exact_match_search(identifier)
+        
+        # Strategy 3: Regex search (if identifier looks like regex)
+        if not results and is_regex and pattern:
+            results = self._regex_match_search(pattern)
+        
+        # Strategy 4: Fallback regex search (treat as regex even if not obvious)
+        if not results and not is_regex:
+            logging.debug(f"No exact matches, trying regex fallback for '{identifier}'")
+            try:
+                pattern = re.compile(identifier, re.IGNORECASE)
+                results = self._regex_match_search(pattern)
+            except re.error:
+                pass  # If it's not a valid regex, just return empty results
         
         return results
 
@@ -1220,30 +2229,73 @@ class ClusterDiscovery:
     
     @staticmethod
     def find_bundle_directories(max_depth: int = 5) -> List[Path]:
-        """Find all bundle directories by looking for METADATA/BUNDLE_ARGS"""
+        """Find all bundle directories by looking for METADATA/BUNDLE_ARGS
+        
+        Optimized for file servers: stops at depth 5 and only searches likely bundle locations.
+        """
         bundle_dirs = []
         current_dir = Path('.')
         
-        # Check current directory
+        # Check current directory first
         if (current_dir / 'METADATA' / 'BUNDLE_ARGS').exists():
             bundle_dirs.append(current_dir)
+            logging.debug(f"Found bundle in current directory")
+            return bundle_dirs  # Stop if current dir is a bundle
         
-        # Recursively search subdirectories
-        def search_directory(directory: Path, current_level: int = 0):
+        # Recursively search subdirectories, with aggressive early termination
+        def search_directory(directory: Path, current_level: int = 0) -> bool:
+            """Returns True if bundles were found at this level"""
             if current_level > max_depth:
-                return
+                return False
+            
+            found_at_level = False
+            dirs_to_recurse = []
+            
+            # Skip known non-bundle directory names
+            skip_dirs = {'compatible_vapi', 'venv', '__pycache__', 'node_modules', 
+                        'pdb', 'config', 'ipmitool', 'bmc_logs', 'systemctl_output',
+                        'METADATA', 'ipmi_cmds_logs', 'nvme_cli_list', 'dmidecode',
+                        'ipmi_lan_print', 'lspci', 'ibdev2netdev'}
             
             try:
+                # Single pass through directory items
                 for item in directory.iterdir():
-                    if item.is_dir():
-                        if (item / 'METADATA' / 'BUNDLE_ARGS').exists():
-                            bundle_dirs.append(item)
-                        else:
-                            search_directory(item, current_level + 1)
-            except (PermissionError, OSError):
+                    # Skip non-directories and hidden directories immediately
+                    if not item.is_dir() or item.name.startswith('.'):
+                        continue
+                    
+                    # Skip known non-bundle directories
+                    if item.name in skip_dirs:
+                        continue
+                    
+                    # Check if this is a bundle directory
+                    if (item / 'METADATA' / 'BUNDLE_ARGS').exists():
+                        bundle_dirs.append(item)
+                        found_at_level = True
+                        logging.debug(f"Found bundle: {item.name} at level {current_level}")
+                    else:
+                        # Remember to recurse into this directory later (if needed)
+                        dirs_to_recurse.append(item)
+                
+                # If bundles found at this level, STOP - don't search deeper
+                # Bundles are typically all at the same level (e.g., harvest-* directories)
+                if found_at_level and current_level > 0:
+                    logging.debug(f"Bundles found at level {current_level}, stopping deeper search")
+                    return True
+                
+                # Only recurse if no bundles found at this level
+                if not found_at_level:
+                    for item in dirs_to_recurse:
+                        search_directory(item, current_level + 1)
+                    
+            except (PermissionError, OSError) as e:
+                logging.debug(f"Skipping {directory}: {e}")
                 pass
+            
+            return found_at_level
         
         search_directory(current_dir)
+        logging.debug(f"Found {len(bundle_dirs)} total bundles")
         return bundle_dirs
     
     @staticmethod
@@ -1851,77 +2903,160 @@ def _render_node_and_siblings(table: Table, node: Node, sibling_nodes: List[Node
                 _add_node_details_to_table(table, sibling)
 
 
+# ============================================================================
+# RMA Form Builder
+# ============================================================================
+
+class RMAFormBuilder:
+    """Builder for RMA forms with common structure and fields
+    
+    Consolidates the repetitive form construction logic used in node and drive RMA forms.
+    """
+    
+    def __init__(self, cluster: Cluster, case_number: Optional[str]):
+        """Initialize RMA form builder
+        
+        Args:
+            cluster: Cluster object containing cluster name
+            case_number: Case number from path or None
+        """
+        self.table = Table()
+        self.cluster = cluster
+        self.case_number = case_number
+        self.nodes = []  # Track nodes for legend
+    
+    def add_header(self, title: str, fru_code: str = "") -> 'RMAFormBuilder':
+        """Add form header (title and FRU code)
+        
+        Args:
+            title: Form title (e.g., "DNODE Replacement", "SSD Replacement")
+            fru_code: FRU code placeholder (e.g., "FRU-___-DNODE-___")
+        
+        Returns:
+            Self for method chaining
+        """
+        self.table.add_row(title, fru_code)
+        self.table.add_separator()
+        return self
+    
+    def add_standard_fields(self) -> 'RMAFormBuilder':
+        """Add standard RMA fields (case, cluster, tracking, delivery, room)
+        
+        Returns:
+            Self for method chaining
+        """
+        # Case number (with smart default)
+        case_label = format_case_number(self.case_number)
+        self.table.add_row(case_label, "RMA-0000.... / FE-000.....")
+        
+        # Standard fields
+        self.table.add_row("Cluster", self.cluster.cluster_name)
+        self.table.add_row("Tracking", "FedEx #  <TBD>")
+        self.table.add_row("Delivery ETA", "")
+        self.table.add_row("Room / Rack / RU", "")
+        return self
+    
+    def add_box_serial(self, box_serial: Optional[str], label: str = "Box S/N") -> 'RMAFormBuilder':
+        """Add box serial number field
+        
+        Args:
+            box_serial: Box serial number or None
+            label: Field label (default: "Box S/N")
+        
+        Returns:
+            Self for method chaining
+        """
+        self.table.add_row(label, box_serial or '')
+        return self
+    
+    def add_drive_info(self, device: Device, node: Node) -> 'RMAFormBuilder':
+        """Add drive-specific information (location, index, path, model, serial)
+        
+        Args:
+            device: Device object
+            node: Node containing the device (for position/index)
+        
+        Returns:
+            Self for method chaining
+        """
+        self.table.add_row("Location in Box", device.location_in_box)
+        index = "1" if node.position == "bottom" else "2"
+        self.table.add_row("Index", index)
+        self.table.add_row("DevicePath", device.path)
+        self.table.add_row("Model", device.model)
+        self.table.add_row("SerialNumber", device.serial)
+        return self
+    
+    def add_node_and_siblings(self, node: Node, sibling_nodes: List[Node],
+                              include_dtray: bool = True, include_index: bool = True,
+                              include_model: bool = False, include_nics: bool = False,
+                              node_section_label: Optional[str] = None) -> 'RMAFormBuilder':
+        """Add node and sibling node information
+        
+        Args:
+            node: Primary node
+            sibling_nodes: List of sibling nodes
+            include_dtray: Whether to show DTray info
+            include_index: Whether to show Index field
+            include_model: Whether to show Model field
+            include_nics: Whether to show NICs field
+            node_section_label: Custom label for node section
+        
+        Returns:
+            Self for method chaining
+        """
+        _render_node_and_siblings(self.table, node, sibling_nodes,
+                                  include_dtray=include_dtray, include_index=include_index,
+                                  include_model=include_model, include_nics=include_nics,
+                                  node_section_label=node_section_label)
+        self.nodes = [node] + sibling_nodes
+        return self
+    
+    def render(self, print_legend: bool = True) -> str:
+        """Render the form and optionally print legend
+        
+        Args:
+            print_legend: Whether to print the (!cn) legend if applicable
+        
+        Returns:
+            Rendered table string
+        """
+        result = render_table(self.table)
+        print(result)
+        
+        if print_legend:
+            _print_cn_legend(self.nodes)
+        
+        return result
+
+
 def show_node_rma_form(node: Node, sibling_nodes: List[Node], cluster: Cluster, case_number: Optional[str]):
     """Show RMA form for a node"""
-    table = Table()
-    
-    # Header
     node_type_display = node.node_type.upper()
-    table.add_row(f"{node_type_display} Replacement", f"FRU-___-{node_type_display}-___")
-    table.add_separator()
     
-    # Case number (always shown with smart default)
-    case_label = format_case_number(case_number)
-    table.add_row(case_label, "RMA-0000.... / FE-000.....")
-    
-    # Standard fields
-    table.add_row("Cluster", cluster.cluster_name)
-    table.add_row("Tracking", "FedEx #  <TBD>")
-    table.add_row("Delivery ETA", "")
-    table.add_row("Room / Rack / RU", "")
-    table.add_row("Box S/N", node.box_serial or '')
-    
-    # Render node and siblings with DTray awareness
-    _render_node_and_siblings(table, node, sibling_nodes, 
-                              include_dtray=True, include_model=True, include_nics=True)
-    
-    print(render_table(table))
-    
-    # Check if any (!cn) markers were added and print legend
-    _print_cn_legend([node] + sibling_nodes)
+    (RMAFormBuilder(cluster, case_number)
+        .add_header(f"{node_type_display} Replacement", f"FRU-___-{node_type_display}-___")
+        .add_standard_fields()
+        .add_box_serial(node.box_serial, "Box S/N")
+        .add_node_and_siblings(node, sibling_nodes, 
+                               include_dtray=True, include_model=True, include_nics=True)
+        .render())
 
 
 def show_drive_rma_form(device: Device, node: Node, sibling_nodes: List[Node], cluster: Cluster, case_number: Optional[str]):
     """Show RMA form for a drive"""
-    table = Table()
-    
-    # Header
     title = "SSD Replacement" if device.drive_type == "ssd" else "NVRAM Replacement"
-    table.add_row(title, "FRU_...")
-    table.add_separator()
-    
-    # Format node type for display
     node_type_display = _format_node_type(node.node_type)
     
-    # Case number (always shown with smart default)
-    case_label = format_case_number(case_number)
-    table.add_row(case_label, "RMA-0000.... / FE-000.....")
-    
-    # Standard fields
-    table.add_row("Cluster", cluster.cluster_name)
-    table.add_row("Tracking", "FedEx #  <TBD>")
-    table.add_row("Delivery ETA", "")
-    table.add_row("Room / Rack / RU", "")
-    
-    # Drive information
-    table.add_row("DBox", node.box_serial or '')
-    table.add_row("Location in Box", device.location_in_box)
-    index = "1" if node.position == "bottom" else "2"
-    table.add_row("Index", index)
-    table.add_row("DevicePath", device.path)
-    table.add_row("Model", device.model)
-    table.add_row("SerialNumber", device.serial)
-    
-    # Render associated node and siblings with DTray awareness
-    # Note: Index already shown above, so include_index=False
-    _render_node_and_siblings(table, node, sibling_nodes,
-                              include_dtray=True, include_index=False,
-                              node_section_label=f"associated {node_type_display}")
-    
-    print(render_table(table))
-    
-    # Check if any (!cn) markers were added and print legend
-    _print_cn_legend([node] + sibling_nodes)
+    (RMAFormBuilder(cluster, case_number)
+        .add_header(title, "FRU_...")
+        .add_standard_fields()
+        .add_box_serial(node.box_serial, "DBox")
+        .add_drive_info(device, node)
+        .add_node_and_siblings(node, sibling_nodes,
+                               include_dtray=True, include_index=False,
+                               node_section_label=f"associated {node_type_display}")
+        .render())
 
 
 def show_device_list(node: Node, sibling_nodes: List[Node], drive_type_filter: Optional[str] = None, nodes_for_drives: Optional[List[Node]] = None):
