@@ -2969,8 +2969,47 @@ class RMAFormBuilder:
         self.table.add_row(label, box_serial or '')
         return self
     
+    def add_box_details(self, node: Node, label: str = "DBox S/N") -> 'RMAFormBuilder':
+        """Add DBox S/N row
+        
+        Args:
+            node: Node object containing box information
+            label: Field label (default: "DBox S/N")
+        
+        Returns:
+            Self for method chaining
+        """
+        self.table.add_row(label, node.box_serial or '')
+        return self
+    
+    def add_drive_section(self, device: Device, node: Node) -> 'RMAFormBuilder':
+        """Add drive section with header and drive-specific information
+        
+        Args:
+            device: Device object
+            node: Node containing the device (for position/index)
+        
+        Returns:
+            Self for method chaining
+        """
+        # Add drive section header
+        drive_label = "SSD Drive" if device.drive_type == "ssd" else "NVRAM Drive"
+        self.table.add_row("", drive_label, style="subtitle")
+        
+        # Add drive details
+        self.table.add_row("Location in Box", device.location_in_box)
+        index = "1" if node.position == "bottom" else "2"
+        self.table.add_row("Index", index)
+        self.table.add_row("DevicePath", device.path)
+        self.table.add_row("Model", device.model)
+        self.table.add_row("SerialNumber", device.serial)
+        return self
+    
     def add_drive_info(self, device: Device, node: Node) -> 'RMAFormBuilder':
         """Add drive-specific information (location, index, path, model, serial)
+        
+        DEPRECATED: Use add_drive_section() instead for new code.
+        This method is kept for backward compatibility.
         
         Args:
             device: Device object
@@ -3051,10 +3090,11 @@ def show_drive_rma_form(device: Device, node: Node, sibling_nodes: List[Node], c
     (RMAFormBuilder(cluster, case_number)
         .add_header(title, "FRU_...")
         .add_standard_fields()
-        .add_box_serial(node.box_serial, "DBox")
-        .add_drive_info(device, node)
+        .add_box_details(node)
+        .add_drive_section(device, node)
         .add_node_and_siblings(node, sibling_nodes,
                                include_dtray=True, include_index=False,
+                               include_model=True, include_nics=True,
                                node_section_label=f"associated {node_type_display}")
         .render())
 
