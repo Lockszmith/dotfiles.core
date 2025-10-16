@@ -1497,12 +1497,13 @@ def ip_to_sort_key(ip_address: Optional[str]) -> tuple:
         return (0, 0, 0, 0)
 
 
-def extract_case_from_path() -> Optional[str]:
-    """Extract case number from current working directory path"""
+def extract_case_from_path(path_str: str) -> Optional[str]:
+    """Extract case number from path string
+    
+    Args:
+        path_str: Path string to search for case number
+    """
     try:
-        current_path = Path.cwd()
-        path_str = str(current_path)
-        
         # Look for Case-######## pattern
         match = re.search(r'Case-(\d{8})', path_str, re.IGNORECASE)
         if match:
@@ -1512,37 +1513,67 @@ def extract_case_from_path() -> Optional[str]:
     return None
 
 
-def format_case_number(case_number: Optional[str] = None) -> str:
-    """Format case number for display with appropriate default
+def resolve_case_number(explicit_case: Optional[str], original_path: str) -> Optional[str]:
+    """Resolve case number from explicit argument or path (data collection)
     
-    Returns tuple of (case_label, rma_label)
+    Args:
+        explicit_case: Explicitly provided case number (--case argument)
+        original_path: Path to search for case number
+    
+    Returns:
+        Case number if found (with '?' suffix if auto-detected), None otherwise
+    """
+    if explicit_case:
+        # Explicitly provided case number - return as-is
+        return explicit_case
+    
+    # Try to extract from path (auto-detect)
+    path_case = extract_case_from_path(original_path)
+    if path_case:
+        # Add '?' suffix to indicate auto-detected
+        return path_case + '?'
+    
+    return None
+
+
+def format_case_number(case_number: Optional[str]) -> str:
+    """Format case number for display (rendering only)
+    
+    Args:
+        case_number: Case number to format (may include '?' suffix), None for default
+    
+    Returns: Formatted case label
     """
     if case_number:
-        # Explicitly provided case number
-        formatted_case = str(case_number).zfill(8)
-        return f"Case-{formatted_case}"
-    
-    # Try to extract from path
-    path_case = extract_case_from_path()
-    if path_case:
-        formatted_case = str(path_case).zfill(8)
-        return f"Case-{formatted_case}?"
+        # Check if this is auto-detected (has '?' suffix)
+        if case_number.endswith('?'):
+            formatted_case = str(case_number[:-1]).zfill(8)
+            return f"Case-{formatted_case}?"
+        else:
+            # Explicitly provided case number
+            formatted_case = str(case_number).zfill(8)
+            return f"Case-{formatted_case}"
     
     # Default
     return "Case-000....."
 
 
-def list_nodes(node_bundle_list: List[tuple[Node, Bundle]], title: str = "Available Nodes"):
+def list_nodes(node_bundle_list: List[Tuple[Node, Bundle]], title: str = "Available Nodes"):
     """List specific nodes in tabular format"""
     if not node_bundle_list:
         print("No nodes found", file=sys.stderr)
         return
     
-    # Group by box
+    # Group by box (but don't group nodes with Unknown box serial)
     box_nodes = defaultdict(list)
+    unknown_box_nodes = []
     for node, bundle in node_bundle_list:
-        if node and node.box_serial:
-            box_nodes[node.box_serial].append((node, bundle))
+        if node:
+            if node.box_serial and node.box_serial != 'Unknown':
+                box_nodes[node.box_serial].append((node, bundle))
+            else:
+                # Each node with Unknown box serial gets its own group
+                unknown_box_nodes.append([(node, bundle)])
     
     # Sort boxes by first node's MGMT IP (numerically)
     def get_first_mgmt_ip_key(item):
@@ -1554,6 +1585,10 @@ def list_nodes(node_bundle_list: List[tuple[Node, Bundle]], title: str = "Availa
         return ip_to_sort_key(sorted_nodes[0][0].network.mgmt_ip)
     
     sorted_boxes = sorted(box_nodes.items(), key=get_first_mgmt_ip_key)
+    
+    # Add unknown box nodes (each as a separate "box")
+    for unknown_node_list in unknown_box_nodes:
+        sorted_boxes.append(('Unknown', unknown_node_list))
     
     # Build table
     table = Table()
@@ -1575,13 +1610,26 @@ def list_nodes(node_bundle_list: List[tuple[Node, Bundle]], title: str = "Availa
         first_box = False
         
         for node, bundle in node_list:
+            # Add (!cn) marker for IPs from configure_network
+            data_ip_str = node.network.data_ip or 'Unknown'
+            if node.network.data_ip_from_cn:
+                data_ip_str += ' (!cn)'
+            
+            mgmt_ip_str = node.network.mgmt_ip or 'Unknown'
+            if node.network.mgmt_ip_from_cn:
+                mgmt_ip_str += ' (!cn)'
+            
+            ipmi_ip_str = node.network.ipmi_ip or 'Unknown'
+            if node.network.ipmi_ip_from_cn:
+                ipmi_ip_str += ' (!cn)'
+            
             table.add_row(
                 node.name,
                 node.node_type.upper(),
                 node.position,
-                node.network.data_ip or 'Unknown',
-                node.network.mgmt_ip or 'Unknown',
-                node.network.ipmi_ip or 'Unknown',
+                data_ip_str,
+                mgmt_ip_str,
+                ipmi_ip_str,
                 node.serial_number,
                 node.box_serial or 'Unknown',
                 node.manufacturer_id or '',
@@ -1593,6 +1641,9 @@ def list_nodes(node_bundle_list: List[tuple[Node, Bundle]], title: str = "Availa
     
     print(title + ":")
     print(render_table(table))
+    
+    # Check if any (!cn) markers were added and print legend
+    _print_cn_legend([node for node, _ in node_bundle_list])
 
 
 def list_all_nodes(cluster: Cluster):
@@ -1601,7 +1652,206 @@ def list_all_nodes(cluster: Cluster):
     list_nodes(node_bundle_list, "Available Nodes")
 
 
-def show_node_rma_form(node: Node, sibling_nodes: List[Node], cluster: Cluster, case_number: Optional[str] = None):
+# ============================================================================
+# Helper Functions for RMA Form Rendering
+# ============================================================================
+
+def _format_node_type(node_type: str) -> str:
+    """Format node type for display by uppercasing first 2 chars.
+    
+    Examples: 'dnode' -> 'DNode', 'cnode' -> 'CNode'
+    """
+    if len(node_type) >= 2:
+        return node_type[:2].upper() + node_type[2:]
+    return node_type.upper()
+
+
+def _has_cn_marker(node: Node) -> bool:
+    """Check if a single node has any (!cn) markers from configure_network"""
+    return (node.network.data_ip_from_cn or 
+            node.network.mgmt_ip_from_cn or 
+            node.network.ipmi_ip_from_cn)
+
+
+def _print_cn_legend(nodes: List[Node], newline: bool = True):
+    """Print (!cn) legend if any nodes have configure_network markers
+    
+    Args:
+        nodes: List of nodes to check for markers
+        newline: Whether to add a newline before the legend
+    """
+    if any(_has_cn_marker(n) for n in nodes):
+        prefix = "\n" if newline else ""
+        print(f"{prefix}(!cn) = Value from vast-configure_network.py-params.ini (not from actual system output)")
+
+
+def _group_siblings_by_dtray(node: Node, sibling_nodes: List[Node]) -> tuple:
+    """Group sibling nodes by DTray for multi-node DBox systems.
+    
+    Siblings are grouped into:
+    - Same DTray as primary node (including those with no DTray info)
+    - Other DTrays (grouped by DTray serial number)
+    
+    Args:
+        node: Primary node being displayed
+        sibling_nodes: List of sibling nodes to group
+    
+    Returns:
+        Tuple of (same_dtray_siblings, other_dtray_siblings_dict)
+        where other_dtray_siblings_dict is {dtray_serial: [nodes]}
+    """
+    primary_dtray_serial = node.dtray_info.serial_number if node.dtray_info else None
+    same_dtray_siblings = []
+    other_dtray_siblings = {}
+    
+    for sibling in sibling_nodes:
+        sib_dtray_serial = sibling.dtray_info.serial_number if sibling.dtray_info else None
+        
+        if sib_dtray_serial == primary_dtray_serial or sib_dtray_serial is None:
+            same_dtray_siblings.append(sibling)
+        else:
+            if sib_dtray_serial not in other_dtray_siblings:
+                other_dtray_siblings[sib_dtray_serial] = []
+            other_dtray_siblings[sib_dtray_serial].append(sibling)
+    
+    return same_dtray_siblings, other_dtray_siblings
+
+
+def _add_node_details_to_table(table: Table, node: Node):
+    """Helper function to add node SerialNumber, MAC, and IPs to table
+    
+    The node's metadata (is_node_ipmi) determines whether to show IPMI IP.
+    
+    Args:
+        table: Table object to add rows to
+        node: Node object with network information
+    """
+    # SerialNumber and MAC first
+    table.add_row("SerialNumber", node.serial_number)
+    table.add_row("MAC Address", node.network.mac_address or "")
+    
+    # Then all IPs at the end
+    # Add (!cn) markers for IPs from configure_network
+    data_ip_str = node.network.data_ip or ""
+    if node.network.data_ip_from_cn and data_ip_str:
+        data_ip_str += " (!cn)"
+    table.add_row("IP", data_ip_str)
+    
+    mgmt_ip_str = node.network.mgmt_ip or ""
+    if node.network.mgmt_ip_from_cn and mgmt_ip_str:
+        mgmt_ip_str += " (!cn)"
+    table.add_row("MGMT IP", mgmt_ip_str)
+    
+    # IPMI IP: use node's metadata to decide
+    if node.is_node_ipmi:
+        ipmi_ip_str = node.network.ipmi_ip or ""
+        if node.network.ipmi_ip_from_cn and ipmi_ip_str:
+            ipmi_ip_str += " (!cn)"
+        table.add_row("IPMI IP", ipmi_ip_str)
+
+
+def _render_node_and_siblings(table: Table, node: Node, sibling_nodes: List[Node], 
+                               include_dtray: bool = True, include_index: bool = True,
+                               include_model: bool = False, include_nics: bool = False,
+                               node_section_label: Optional[str] = None):
+    """Unified function to render primary node and siblings with DTray awareness.
+    
+    This function provides consistent rendering across all display modes (drive listing,
+    drive RMA form, node RMA form) with DTray-aware sibling grouping.
+    
+    Args:
+        table: Table object to add rows to
+        node: Primary node to display
+        sibling_nodes: List of sibling nodes
+        include_dtray: Whether to show DTray information (for multi-node DBox systems)
+        include_index: Whether to show Index field for primary node
+        include_model: Whether to show Model field for primary node
+        include_nics: Whether to show NICs field for primary node
+        node_section_label: Custom label for node section (default: auto-detect from node_type)
+    """
+    # DTray information (only for DNodes in multi-node systems)
+    if include_dtray and node.dtray_info:
+        dtray = node.dtray_info
+        table.add_row("", "associated DTray", style="subtitle")
+        table.add_row("Position", dtray.position or '')
+        table.add_row("SerialNumber", dtray.serial_number or '')
+        table.add_row("MCU State", dtray.mcu_state or '')
+        table.add_row("IPMI IP", dtray.ipmi_ip or '')
+    
+    # Primary node information
+    if node_section_label is None:
+        node_section_label = _format_node_type(node.node_type)
+    
+    table.add_row("", node_section_label, style="subtitle")
+    
+    if include_index:
+        index = "1" if node.position == "bottom" else "2"
+        table.add_row("Index", index)
+    
+    if include_model:
+        table.add_row("Model", node.model)
+    
+    if include_nics and node.nics:
+        table.add_row("NICs", node.nics)
+    
+    table.add_row("name", node.name)
+    table.add_row("position", node.position)
+    _add_node_details_to_table(table, node)
+    
+    # Group sibling nodes by DTray (for multi-node DBox systems)
+    same_dtray_siblings, other_dtray_siblings = _group_siblings_by_dtray(node, sibling_nodes)
+    
+    # Display siblings on same DTray first
+    sibling_counter = 1
+    for sibling in same_dtray_siblings:
+        node_type_display = _format_node_type(sibling.node_type)
+        
+        header = f"sibling {node_type_display}"
+        if len(sibling_nodes) > 1:
+            header += f" {sibling_counter}"
+        sibling_counter += 1
+        table.add_row("", header, style="subtitle")
+        table.add_row("name", sibling.name)
+        table.add_row("position", sibling.position)
+        _add_node_details_to_table(table, sibling)
+    
+    # Display siblings on other DTrays with DTray info headers
+    if include_dtray:
+        for dtray_serial, dtray_siblings in sorted(other_dtray_siblings.items()):
+            # Show "other DTray" section
+            if dtray_siblings and dtray_siblings[0].dtray_info:
+                other_dtray = dtray_siblings[0].dtray_info
+                table.add_row("", "other DTray", style="subtitle")
+                table.add_row("Position", other_dtray.position or '')
+                table.add_row("SerialNumber", other_dtray.serial_number or '')
+                table.add_row("MCU State", other_dtray.mcu_state or '')
+                table.add_row("IPMI IP", other_dtray.ipmi_ip or '')
+            
+            # Display siblings on this DTray
+            # Sort by position (bottom first, then top) for consistent ordering
+            dtray_siblings_sorted = sorted(dtray_siblings, key=lambda s: (s.position != 'bottom' if s.position else True))
+            
+            for sibling in dtray_siblings_sorted:
+                # Format node type
+                node_type_display = _format_node_type(sibling.node_type)
+                
+                # For nodes on other DTrays, use "other DNode bottom/top" format
+                position_desc = ''
+                if sibling.position:
+                    pos_lower = sibling.position.lower()
+                    if 'bottom' in pos_lower:
+                        position_desc = ' bottom'
+                    elif 'top' in pos_lower:
+                        position_desc = ' top'
+                
+                header = f"other {node_type_display}{position_desc}"
+                table.add_row("", header, style="subtitle")
+                table.add_row("name", sibling.name)
+                table.add_row("position", sibling.position)
+                _add_node_details_to_table(table, sibling)
+
+
+def show_node_rma_form(node: Node, sibling_nodes: List[Node], cluster: Cluster, case_number: Optional[str]):
     """Show RMA form for a node"""
     table = Table()
     
@@ -1621,39 +1871,17 @@ def show_node_rma_form(node: Node, sibling_nodes: List[Node], cluster: Cluster, 
     table.add_row("Room / Rack / RU", "")
     table.add_row("Box S/N", node.box_serial or '')
     
-    # Node information
-    table.add_row("", node.node_type, style="subtitle")
-    index = "1" if node.position == "bottom" else "2"
-    table.add_row("Index", index)
-    table.add_row("Model", node.model)
-    if node.nics:
-        table.add_row("NICs", node.nics)
-    table.add_row("name", node.name)
-    table.add_row("position", node.position)
-    table.add_row("IP", node.network.data_ip or "")
-    table.add_row("MGMT IP", node.network.mgmt_ip or "")
-    table.add_row("IPMI IP", node.network.ipmi_ip or "")
-    table.add_row("SerialNumber", node.serial_number)
-    table.add_row("MAC Address", node.network.mac_address or "")
-    
-    # Sibling nodes
-    for i, sibling in enumerate(sibling_nodes, 1):
-        header = f"sibling {sibling.node_type}"
-        if len(sibling_nodes) > 1:
-            header += f" {i}"
-        table.add_row("", header, style="subtitle")
-        table.add_row("name", sibling.name)
-        table.add_row("position", sibling.position)
-        table.add_row("IP", sibling.network.data_ip or "")
-        table.add_row("MGMT IP", sibling.network.mgmt_ip or "")
-        table.add_row("IPMI IP", sibling.network.ipmi_ip or "")
-        table.add_row("SerialNumber", sibling.serial_number)
-        table.add_row("MAC Address", sibling.network.mac_address or "")
+    # Render node and siblings with DTray awareness
+    _render_node_and_siblings(table, node, sibling_nodes, 
+                              include_dtray=True, include_model=True, include_nics=True)
     
     print(render_table(table))
+    
+    # Check if any (!cn) markers were added and print legend
+    _print_cn_legend([node] + sibling_nodes)
 
 
-def show_drive_rma_form(device: Device, node: Node, sibling_nodes: List[Node], cluster: Cluster, case_number: Optional[str] = None):
+def show_drive_rma_form(device: Device, node: Node, sibling_nodes: List[Node], cluster: Cluster, case_number: Optional[str]):
     """Show RMA form for a drive"""
     table = Table()
     
@@ -1661,6 +1889,9 @@ def show_drive_rma_form(device: Device, node: Node, sibling_nodes: List[Node], c
     title = "SSD Replacement" if device.drive_type == "ssd" else "NVRAM Replacement"
     table.add_row(title, "FRU_...")
     table.add_separator()
+    
+    # Format node type for display
+    node_type_display = _format_node_type(node.node_type)
     
     # Case number (always shown with smart default)
     case_label = format_case_number(case_number)
@@ -1681,28 +1912,16 @@ def show_drive_rma_form(device: Device, node: Node, sibling_nodes: List[Node], c
     table.add_row("Model", device.model)
     table.add_row("SerialNumber", device.serial)
     
-    # Associated node
-    table.add_row("", "associated dnode", style="subtitle")
-    table.add_row("name", node.name)
-    table.add_row("position", node.position)
-    table.add_row("IP", node.network.data_ip or "")
-    table.add_row("MGMT IP", node.network.mgmt_ip or "")
-    table.add_row("IPMI IP", node.network.ipmi_ip or "")
-    table.add_row("SerialNumber", node.serial_number)
-    table.add_row("MAC Address", node.network.mac_address or "")
-    
-    # Sibling nodes
-    for sibling in sibling_nodes:
-        table.add_row("", f"sibling {sibling.node_type}", style="subtitle")
-        table.add_row("name", sibling.name)
-        table.add_row("position", sibling.position)
-        table.add_row("IP", sibling.network.data_ip or "")
-        table.add_row("MGMT IP", sibling.network.mgmt_ip or "")
-        table.add_row("IPMI IP", sibling.network.ipmi_ip or "")
-        table.add_row("SerialNumber", sibling.serial_number)
-        table.add_row("MAC Address", sibling.network.mac_address or "")
+    # Render associated node and siblings with DTray awareness
+    # Note: Index already shown above, so include_index=False
+    _render_node_and_siblings(table, node, sibling_nodes,
+                              include_dtray=True, include_index=False,
+                              node_section_label=f"associated {node_type_display}")
     
     print(render_table(table))
+    
+    # Check if any (!cn) markers were added and print legend
+    _print_cn_legend([node] + sibling_nodes)
 
 
 def show_device_list(node: Node, sibling_nodes: List[Node], drive_type_filter: Optional[str] = None, nodes_for_drives: Optional[List[Node]] = None):
@@ -1724,6 +1943,9 @@ def show_device_list(node: Node, sibling_nodes: List[Node], drive_type_filter: O
         for device in n.devices:
             if drive_type_filter and device.drive_type != drive_type_filter:
                 continue
+            # Skip boot drives (typically /dev/nvme0n1)
+            if device.path == '/dev/nvme0n1':
+                continue
             all_devices.append((device, n))
     
     if not all_devices:
@@ -1733,29 +1955,15 @@ def show_device_list(node: Node, sibling_nodes: List[Node], drive_type_filter: O
     # Render node section
     table = Table()
     table.add_row("DBox S/N", node.box_serial or '')
-    table.add_row("", "dnode", style="subtitle")
-    index = "1" if node.position == "bottom" else "2"
-    table.add_row("Index", index)
-    table.add_row("Model", node.model)
-    table.add_row("name", node.name)
-    table.add_row("position", node.position)
-    table.add_row("IP", node.network.data_ip or '')
-    table.add_row("MGMT IP", node.network.mgmt_ip or '')
-    table.add_row("IPMI IP", node.network.ipmi_ip or '')
-    table.add_row("SerialNumber", node.serial_number)
-    table.add_row("MAC Address", node.network.mac_address or '')
     
-    for sibling in sibling_nodes:
-        table.add_row("", "sibling dnode", style="subtitle")
-        table.add_row("name", sibling.name)
-        table.add_row("position", sibling.position)
-        table.add_row("IP", sibling.network.data_ip or '')
-        table.add_row("MGMT IP", sibling.network.mgmt_ip or '')
-        table.add_row("IPMI IP", sibling.network.ipmi_ip or '')
-        table.add_row("SerialNumber", sibling.serial_number)
-        table.add_row("MAC Address", sibling.network.mac_address or '')
+    # Render node and siblings with DTray awareness
+    _render_node_and_siblings(table, node, sibling_nodes,
+                              include_dtray=True, include_index=True, include_model=True)
     
     print(render_table(table))
+    
+    # Check if any (!cn) markers were added and print legend
+    _print_cn_legend([node] + sibling_nodes, newline=False)
     print()
     
     # Render devices table
@@ -1818,6 +2026,7 @@ Examples:
     
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
     parser.add_argument('--case', metavar='CASE_NUMBER', help='Case number for RMA form')
+    parser.add_argument('--original-path-name', metavar='PATH', default=str(Path.cwd()), help=argparse.SUPPRESS)  # Undocumented: for Docker wrapper
     
     args = parser.parse_args()
     
@@ -1836,6 +2045,9 @@ Examples:
         sys.exit(1)
     
     logging.debug(f"Cluster initialized with {len(cluster.bundles)} bundles")
+    
+    # Resolve case number (data collection - do this once)
+    resolved_case = resolve_case_number(args.case, args.original_path_name)
     
     # Handle drive mode
     drive_serial = args.ssd or args.drive or args.nvram or args.scm
@@ -1908,7 +2120,7 @@ Examples:
             # Sort siblings by last octet of data IP
             siblings.sort(key=lambda n: get_ip_last_octet(n.network.data_ip))
             
-            show_drive_rma_form(device, node, siblings, cluster, args.case)
+            show_drive_rma_form(device, node, siblings, cluster, resolved_case)
         
         return
     
@@ -1936,7 +2148,7 @@ Examples:
     siblings = [n for n, b in cluster.nodes_by_box(node.box_serial) if n != node]
     # Sort siblings by last octet of data IP
     siblings.sort(key=lambda n: get_ip_last_octet(n.network.data_ip))
-    show_node_rma_form(node, siblings, cluster, args.case)
+    show_node_rma_form(node, siblings, cluster, resolved_case)
 
 
 if __name__ == "__main__":
