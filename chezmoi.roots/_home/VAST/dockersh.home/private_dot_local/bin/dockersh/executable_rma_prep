@@ -1,0 +1,7 @@
+#! /usr/bin/env bash
+
+docker run --rm \
+  -v /home/gal.szkolnik/VAST/dockersh.home/.local/bin/dockersh:/scripts \
+  -v "$(pwd)":/bundle -w /bundle \
+  110450271409.dkr.ecr.eu-west-1.amazonaws.com/dev/orion/hubble:keep-hubble-master \
+  python3 /scripts/rma_prep.py --original-path-name "$(pwd)" "$@"
