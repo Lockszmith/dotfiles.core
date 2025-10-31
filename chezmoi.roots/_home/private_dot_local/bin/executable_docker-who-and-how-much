@@ -2,13 +2,13 @@
 
 set -e
 
-FMT="%-20s %-8s %-12s %-20s %-20s %-40s %-10s %-20s"
+FMT="%-20s %-8s %-12s %-24s %-20s %-10s %-20s %s"
 
-printf "$FMT\n" "UNAME" "UID" "CID" "NAME" "STARTED_AT" "IMAGE" "CPU %" "MEM USAGE"
+printf "$FMT\n" "UNAME" "UID" "CID" "NAME" "STARTED_AT" "CPU %" "MEM USAGE" "IMAGE"
 
 # Get base info
-docker ps --format "{{.ID}}\t{{.Image}}\t{{.Names}}\t{{.RunningFor}}" | \
-while IFS=$'\t' read -r cid image name started; do
+docker ps --format "{{.ID}}\t{{.Names}}\t{{.RunningFor}}\t{{.Image}}" | \
+while IFS=$'\t' read -r cid name started image; do
   user=$(docker inspect --format '{{.Config.User}}' "$cid")
   uid=${user%%:*}
   [[ -z "$uid" ]] && uid=0
@@ -25,5 +25,5 @@ docker stats --no-stream --format "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" | sor
 # Join: ps_info NAME is field 4, stats_info NAME is field 1
 join -t $'\t' -1 4 -2 1 /tmp/ps_info.txt /tmp/stats_info.txt | \
 while IFS=$'\t' read -r name uname uid cid started image cpu mem; do
-  printf "$FMT\n" "$uname" "$uid" "$cid" "$name" "$started" "$image" "$cpu" "$mem"
+  printf "$FMT\n" "$uname" "$uid" "$cid" "$name" "$started" "$cpu" "$mem" "$image"
 done
