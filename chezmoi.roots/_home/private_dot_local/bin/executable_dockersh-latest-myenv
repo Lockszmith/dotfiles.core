@@ -1,0 +1,36 @@
+#! /usr/bin/env bash
+
+set -e
+
+DCKHM="\${HOME}/VAST/dockersh.home"
+D_CZM=".config/chezmoi"
+D_ZLJ=".config/zellij"
+F_STS=".config/starship.toml"
+eval "mkdir -p \"${DCKHM}/${D_CZM}\" \"${DCKHM}/${D_ZLJ}\"; touch \"${DCKHM}/${F_STS}\""
+
+DCK_VOLS="-v ${DCKHM}/${D_CZM}:\${HOME}/${D_CZM}:z -v ${DCKHM}/${D_ZLJ}:\${HOME}/${D_ZLJ}:z -v ${DCKHM}/${F_STS}:\${HOME}/${F_STS}:z "
+
+CONTAINER_NAME="${USER}-dockersh-$(docker run --rm fnichol/names)"
+DO_ZELLIJ_AUTO_EXIT="-e ZELLIJ_AUTO_EXIT=true"
+DO_ZELLIJ_AUTO_EXIT=""
+DO_NO_ZELLIJ="-e ZELLIJ_SESSION_NAME=__NO_LOAD__"
+DO_NO_ZELLIJ=""
+SED_SCRIPT="
+    s|--rm|--rm --name $CONTAINER_NAME --hostname $CONTAINER_NAME|;
+    s|/bin/bash -c.*|/bin/bash -li|;
+    s|(-v \\\$HOME:\\\$HOME)|\\1 $DCK_VOLS $DO_ZELLIJ_AUTO_EXIT $DO_NO_ZELLIJ|;
+"
+[[ -z "$DOCKER_USER" ]] || SED_SCRIPT="$SED_SCRIPT "'
+    s|id -u|id -u $DOCKER_USER|;
+'
+[[ "$PWD" != "$HOME" ]] || SED_SCRIPT="$SED_SCRIPT "'
+    s|-v \$PWD:\$PWD||;
+'
+
+# sed -Ee "$SED_SCRIPT" /file_server/scripts/dockersh && exit
+SCRIPT_SRC=/file_server/scripts
+DOCKERSH=cs_dockersh
+[ -r "${SCRIPT_SRC}/${DOCKERSH}" ] || SCRIPT_SRC=/file_server_var2/scripts
+! [ -r "${SCRIPT_SRC}/${DOCKERSH}" ] && printf "Can't find %s source!\n" "${DOCKERSH}" >&1 && exit 1 || true
+${SCRIPT_SRC}/login_to_aws_ecr.sh
+exec bash <( sed -Ee "$SED_SCRIPT" "${SCRIPT_SRC}/${DOCKERSH}" ) ${HUBLE:-keep-hubble-latest} ${1:+"${@}"}

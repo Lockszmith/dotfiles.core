@@ -1,0 +1,6 @@
+#! /usr/bin/env bash
+
+SCRIPT_DIR=${SCRIPT_DIR:-"$( cd -- "$( dirname -- "$0" )" &> /dev/null && pwd )"}
+
+HUBLE=${1:-${HUBLE}} exec ${SCRIPT_DIR}/dockersh-latest-myenv ${2:+"${@:2}"}
+

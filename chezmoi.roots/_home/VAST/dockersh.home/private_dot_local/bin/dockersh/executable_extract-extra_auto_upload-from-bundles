@@ -1,0 +1,8 @@
+#! /usr/bin/env bash
+
+for f in tar/*.tar; do
+< "$f" tar x --to-stdout \
+    | zstd -d \
+    | tar vx --strip-components='1' \*/extra_auto_upload 2>/dev/null
+done
+

@@ -1,5 +1,7 @@
 #! /usr/bin/env bash
 
+set -o vi
+
 unalias _r 2>/dev/null || true
 _r() {
     local prefered_shell="$(command -v zsh 2>/dev/null)"

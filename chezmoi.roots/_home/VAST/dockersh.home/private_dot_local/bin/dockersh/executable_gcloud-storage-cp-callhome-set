@@ -1,0 +1,20 @@
+#! /usr/bin/env bash
+
+export GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS:-/file_server/CUSTOMERS/CS/creds/gcp_account.json}"
+
+PTR_CUST="Hudson River Trading"
+PTR_CUST="HRT"
+PRT_PSNT="*"
+PTR_YM="2025-08"
+PTR_D="04"
+PTR_T="2[12]:*"
+PTR_NODES="*.1"
+gcloud storage ls "gs://cvms-prod-callhome-data/${PTR_CUST}/*/${PTR_YM}/${PTR_YM}-${PTR_D}/*-logs-${PTR_YM}-${PTR_D}T${PTR_T}/${PTR_NODES}.tar"\
+    | sed -Ee '
+        s|gs://(.*)$|gcloud storage cp "gs://\1" "###\1";|;
+        :loop
+            s|( "###[^/]*)/|\1_._|g;
+        t loop
+        s| "###| "|
+    '
+

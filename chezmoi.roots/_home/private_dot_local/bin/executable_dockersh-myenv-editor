@@ -1,0 +1,31 @@
+#! /usr/bin/env bash
+
+set -e
+
+DCKHM="${HOME}/VAST/dockersh.home"
+D_CZM=".config/chezmoi"
+D_ZLJ=".config/zellij"
+F_STS=".config/starship.toml"
+D_BIN=".local/bin/dockersh"
+eval "mkdir -p \"${DCKHM}/${D_CZM}\" \"${DCKHM}/${D_ZLJ}\" \"${DCKHM}/${D_BIN}\"; touch \"${DCKHM}/${F_STS}\""
+
+eval 'DCK_VOLS="-v ${DCKHM}/${D_CZM}:${HOME}/${D_CZM}:z -v ${DCKHM}/${D_ZLJ}:${HOME}/${D_ZLJ}:z -v ${DCKHM}/${D_BIN}:${HOME}/${D_BIN}:z -v ${DCKHM}/${F_STS}:${HOME}/${F_STS}:z "'
+
+CONTAINER_NAME="${USER}-editor-$(docker run --rm fnichol/names)"
+DO_ZELLIJ_AUTO_EXIT="-e ZELLIJ_AUTO_EXIT=true"
+DO_ZELLIJ_AUTO_EXIT=""
+DO_NO_ZELLIJ="-e ZELLIJ_SESSION_NAME=__NO_LOAD__"
+DO_NO_ZELLIJ=""
+
+cd ~/VAST/dockersh.home \
+&& docker build . --tag ubuntu-gsz \
+&& docker run --rm --name $CONTAINER_NAME --hostname $CONTAINER_NAME \
+    -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
+    -v $HOME:$HOME $DCK_VOLS \
+    -u $UID:${GID:-$UID} \
+    -e UMASK=$(umask) \
+    -e SHELL=$SHELL $DO_ZELLIJ_AUTO_EXIT $DO_NO_ZELLIJ \
+    -w "$HOME" \
+    -it ubuntu-gsz \
+    $SHELL -l ${1:+"${@}"}
+

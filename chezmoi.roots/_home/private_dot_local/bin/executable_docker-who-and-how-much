@@ -1,0 +1,29 @@
+#! /usr/bin/env bash
+
+set -e
+
+FMT="%-20s %-8s %-12s %-20s %-20s %-40s %-10s %-20s"
+
+printf "$FMT\n" "UNAME" "UID" "CID" "NAME" "STARTED_AT" "IMAGE" "CPU %" "MEM USAGE"
+
+# Get base info
+docker ps --format "{{.ID}}\t{{.Image}}\t{{.Names}}\t{{.RunningFor}}" | \
+while IFS=$'\t' read -r cid image name started; do
+  user=$(docker inspect --format '{{.Config.User}}' "$cid")
+  uid=${user%%:*}
+  [[ -z "$uid" ]] && uid=0
+  uname=$(getent passwd "$uid" | cut -d: -f1)
+  printf "%s\t%s\t%s\t%s\t%s\t%s\n" "${uname:-UID:$uid}" "$uid" "$cid" "$name" "$started" "$image"
+done > /tmp/ps_info_raw.txt
+
+# Sort ps_info on NAME (4th field)
+sort -t $'\t' -k4,4 /tmp/ps_info_raw.txt > /tmp/ps_info.txt
+
+# Get stats info sorted on NAME
+docker stats --no-stream --format "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" | sort -t $'\t' -k1,1 > /tmp/stats_info.txt
+
+# Join: ps_info NAME is field 4, stats_info NAME is field 1
+join -t $'\t' -1 4 -2 1 /tmp/ps_info.txt /tmp/stats_info.txt | \
+while IFS=$'\t' read -r name uname uid cid started image cpu mem; do
+  printf "$FMT\n" "$uname" "$uid" "$cid" "$name" "$started" "$image" "$cpu" "$mem"
+done
