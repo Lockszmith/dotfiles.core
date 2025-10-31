@@ -1,0 +1,7 @@
+#! /usr/bin/env bash
+
+FN="-H"
+[ -z "$NO_FN" ] || FN=""
+
+xargs "${XARGS[@]:--r}" egrep $FN "${@}" || true
+

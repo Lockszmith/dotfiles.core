@@ -1,0 +1,4 @@
+#! /usr/bin/env bash
+
+find -maxdepth ${DEPTH:-4} -type f -name "${@}"
+
