@@ -2,11 +2,11 @@
 
 FN="${FN:--H}"
 [ -z "$NO_FN" ] || FN=""
-PRE="${PRE:-cat}"
+PRE="${PRE:-}"
 POST="${POST:-}"
 
 GREP_ARG="${1:+$(printf '"%s" ' "${@}" )}"
 GREP_ARG="${GREP_ARG:-\"\"}"
 
-xargs -I {} "${XARGS[@]:--r}" sh -c "${PRE} -- \"\$1\" | egrep --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} || true
+xargs -I {} "${XARGS[@]:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} egrep --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} || true
 
