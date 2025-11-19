@@ -108,3 +108,19 @@ chezmoi environments.
 For more information abot each envrionment, see their respective (WIP)
 `README.md` files.
 
+## Working within an active environment
+
+`cz` is a shorthand to `chezmoi`
+`czx` is `chezmoi` with the `.chezmoiexternals` context enabled.
+
+`czu` a script to update the environment.
+`czg` `cz git` with git autocompletion
+`czed` shorthand for `chezmoi edit`
+`czedext` edit the .chezmoiexternal.toml template
+`czedignore` edit the .chezmoiignore template
+
+`cz[x]s` `chezmoi status`
+`cz[x]a` `chezmoi apply`
+
+`cz-cd` cd into the chezmoi home dir
+`czgcd` cd into the root of the chezmoi git repo
