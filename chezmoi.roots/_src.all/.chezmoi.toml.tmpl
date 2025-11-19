@@ -34,7 +34,7 @@
     )) -}}
 
 {{- $szEnvFlagsChoices := list "default"
-        "NeoVIM" "broot" "television" "VAST.personal" "VAST.dockersh"
+      "VAST.personal" "VAST.dockersh" "cz-prefer-delta"
 -}}
 {{- $szEnvFlags := list (dig "sz" "env" "flags" "default" .) "dummy" | join " " | splitList " " -}}
 {{- $szEnvFlags  = slice $szEnvFlags 0 (sub (len $szEnvFlags) 1) -}}
@@ -173,6 +173,7 @@ scriptTempDir={{ $scriptTempDir | quote }}
    leader-key={{- $zellijLeaderKey | quote }}
 {{- end }}
 
+{{- if has "cz-prefer-delta" (list (dig "sz" "env" "flags" "" .)) -}}
 {{- if lookPath "delta" }}
 [diff]
 #   command = "nvim"
@@ -183,6 +184,7 @@ scriptTempDir={{ $scriptTempDir | quote }}
    pager = "delta" # Required until https://github.com/twpayne/chezmoi/issues/3523 is resolved.
    #pager = "moor"
    #pager=""
+{{- end }}
 {{- end }}
 
 # vim: set ft=toml expandtab tabstop=2 shiftwidth=2:
