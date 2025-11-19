@@ -43,7 +43,7 @@
 {{- $szEnvFlagsSelected := promptMultichoice "Choose sz.env flags" $szEnvFlagsChoices $szEnvFlags -}}
 {{- $szEnvFlags = $szEnvFlagsSelected -}}
 */}}
-{{- $szEnvFlags = $szEnvFlagsSelected | join " " -}}
+{{- $szEnvFlags = (or $szEnvFlagsSelected $szEnvFlags) | join " " -}}
 
 {{- $zellijLeaderModifier := list (dig "style" "zellij" "leader-modifier" "Alt" .) "dummy" | join " " | splitList " " -}}
 {{- $zellijLeaderModifier  = slice $zellijLeaderModifier 0 (sub (len $zellijLeaderModifier) 1) -}}
