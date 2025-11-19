@@ -34,7 +34,7 @@
     )) -}}
 
 {{- $szEnvFlagsChoices := list "default"
-        "NeoVIM" "broot" "television" "VAST.dockersh"
+        "NeoVIM" "broot" "television" "VAST.personal" "VAST.dockersh"
 -}}
 {{- $szEnvFlags := list (dig "sz" "env" "flags" "default" .) "dummy" | join " " | splitList " " -}}
 {{- $szEnvFlags  = slice $szEnvFlags 0 (sub (len $szEnvFlags) 1) -}}

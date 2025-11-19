@@ -1,0 +1,326 @@
+{{- if has "VAST.personal" (list (dig "sz" "env" "flags" "" .)) -}}
+#! /usr/bin/env bash
+
+set -e
+
+SCRIPT_NAME="${0##*/}"
+usage() {
+    printf '%s\n' \
+        'VAST lab connection helper/manager for Customer Support/Success' \
+        '' \
+        'Usage:' \
+        "  ${SCRIPT_NAME} <command> [args...]" \
+        '' \
+        'Commands:' \
+        '  prerpmac     Configure MacOS network interfaces for lab physcal NIC connection' \
+        '  ssh          Connect over ssh (to CS-DBG by default)' \
+        "  cs-dbg       Connect to CS-DBG (${CS_DBG}) utilizes 'ssh' command (above)" \
+        '  get          various VAST related queries' \
+        '' \
+        ''
+    exit 2
+}
+
+usage-prepmac() {
+    printf '%s\n' \
+        'Configure MacOS network interfaces for lab physcal NIC connection' \
+        '' \
+        'Usage:' \
+        "  ${SCRIPT_NAME} prepmac <TO> [<FROM>] [<Interface>]" \
+        '' \
+        'Configure MacOS iface to connect to <TO> address from <FROM> address' \
+        'Default <Interface> is en9' \
+        '' \
+        'FROM and FROM_SN will be autofilled for the following subnets:' \
+        '    10.117.10.0/24' \
+        '    192.168.[1 or 2].0/24' \
+        '' \
+        "for other subnets, you'll need to specify a FROM argument and a FROM_SN env variable" \
+        '' \
+        'What the script does:' \
+        '    1. Attempts a ping to the destination IP.' \
+        '    2. If unsuccessful:' \
+        "       a. if FROM (2nd arg) isn't specified or set to 'dhcp':" \
+        '       - tries to guess the FROM and FROM_SN based on known TO ranges.' \
+        '       b. if FROM was specied - uses FROM/2nd argument and FROM_SN from env' \
+        '       c. compares desired FROM and assigned IP on outgoing interface (IFACE env or default: en9)' \
+        '       d. if different, asssigns ip address to interface (temporary, using sudo)' \
+        '       e. Attempts ping once again' \
+        '    3. If ping was successful, tries to grab hostname via ssh' \
+        '' \
+        "    The entire process will do it's best to communicate error states and" \
+        '    recommend possible actions if any steps fail' \
+        ''\
+        'Predefined CIDR and  aliases' \
+        '    10.117.10.254/24  ' \
+        '    192.168.1.254/24  ' \
+        '    192.168.2.254/24  ' \
+        '    169.254.1.15/27   ' \
+        '    169.254.111.15/27 ' \
+        '    169.254.3.254/24  ' \
+        '' \
+        'Examples:' \
+        "    ${SCRIPT_NAME} prepmac 192.168.2.2 # connect to tech port" \
+        ''
+    exit 2
+}
+
+usage-get() {
+    printf '%s\n' \
+        'various VAST related queries' \
+        '' \
+        'Usage:' \
+        "  ${SCRIPT_NAME} get <sub-command> [args...]" \
+        '' \
+        'Commands:' \
+        '  s3-releases  Get release names available on s3' \
+        '  s3-callhome  Get callhome list available on s3' \
+        '' \
+        ''
+    exit 2
+}
+if [ $# -eq 0 ]; then
+    usage
+elif [[ $# -eq 1 && "$1" == "editme" ]]; then
+    exec ${VISUAL:-${EDITOR:-vi}} "$(readlink -f "$0")"
+    exit 0
+fi
+
+_myip() {
+    lsip | awk "/${IFACE}/"'{split($3, a, "/"); print a[1];}'
+}
+
+_ping() {
+    ping -c "${PING_C:-3}" -W 250 "${TO}"
+}
+
+_log() {
+    printf '%s\n' \
+            "${@:2}" \
+    >&2
+    exit ${1} 
+}
+
+do_prepmac() {
+    local TO="${1}"
+    local IFACE="${IFACE:-en9}"
+    local PINGOK=1
+    local CMDs=("${@:2}")
+
+    [ "${#CMDs}" -gt 0 ] || CMDs=( hostname )
+
+    if _ping &>/dev/null; then
+        printf "Connection detected.\n"
+    else
+        PINGOK=0
+        if [ "${FROM:-${2:-}}" == "dhcp" ]; then
+            FROM=dhcp
+            FROM_SN=auto
+            SLEEP="${SLEEP:-15s}"
+        else
+            SLEEP="${SLEEP:-3s}"
+            case "${FROM:+__}${TO}" in
+                10.117.10.*)
+                    FROM=10.117.10.254
+                    FROM_SN=255.255.255.0
+                    ;;
+                192.168.1.*)
+                    FROM=192.168.1.254
+                    FROM_SN=255.255.255.0
+                    ;;
+                192.168.2.*)
+                    FROM=192.168.2.254
+                    FROM_SN=255.255.255.0
+                    ;;
+                169.254.1.*)
+                    FROM=169.254.1.15
+                    FROM_SN=255.255.255.224
+                    ;;
+                169.254.111.*)
+                    FROM=169.254.111.15
+                    FROM_SN=255.255.255.224
+                    ;;
+                169.254.3.*)
+                    FROM=169.254.3.253
+                    FROM_SN=255.255.255.0
+                    ;;
+                *)
+                    FROM=${FROM:-${2:?FROM and FROM_SN Must be supplied for unknown IPv4 destination $1}} || usage-prepmac
+                    FROM_SN=${FROM_SN:?FROM and FROM_SN Must be supplied for unknown IPv4 destination $1} || usage-prepmac
+                    ;;
+            esac
+        fi
+
+        MYIP=''
+        MYIP="$(_myip)"
+
+        if [ "$FROM" == "$MYIP" ]; then
+            _log 2 "Already setup with $MYIP, but ping to $TO is failing, you'll need to troubleshoot this."
+            exit 2
+        fi
+
+        echo "$MYIP detected on $IFACE, Setting up $FROM / $FROM_SN - \`sudo\` might be prompting you for your password"
+
+        if [ "${FROM}" == "dhcp" ]; then
+            sudo ipconfig set "${IFACE}" bootp || true
+            sudo ipconfig set "${IFACE}" dhcp
+        else
+            sudo ipconfig set "${IFACE}" manual "${FROM}" "${FROM_SN}"
+        fi \
+        && printf 'Waiting %s...' "${SLEEP}" \
+        && sleep "${SLEEP}" \
+        && MYIP="$(_myip)"
+    fi
+
+    if [ $PINGOK -eq 0 ] && _ping &>/dev/null; then
+        PINGOK=1
+    fi
+
+    if [ $PINGOK -eq 1 ]; then
+        # auto-copy-ssh-id "${TO}"
+
+        ssh-keygen -R "${TO}" || true
+
+        ssh \
+            -o PasswordAuthentication=no \
+            -o BatchMode=yes \
+            -o ConnectTimeout=2 \
+            -ttn \
+            "${TO}" -- "${CMDs[*]}" \
+        || 1>&2 printf '%s\n' \
+            "Could not SSH into ${TO}, you might want to run 'pull-vast.id_rsa ${TO}' or 'auto-copy-ssh-id ${TO}'"
+    else
+        _log 2 "Ping faild."
+    fi
+}
+
+do_get_s3-releases() {
+    # Get the list of releases, order in reverse, where non-sp/hf are listed first.
+    aws s3 ls --human-readable s3://vastdata-releases/release_bundles/service-packs/ \
+    | sed -E 's|^[[:space:]]+[^[:space:]]+[[:space:]](.+)/$|999\1|; s/^999release/111release/; s/([[:digit:]])$/\1.zzz/' \
+    | sort --field-separator=- -k2,2Vr -k3,3Vr -k4,4Vr -k5,5Vr \
+    | sed -Ee 's/^[[:digit:]]{3}//; s/.zzz$//'
+}
+
+do_get_s3-callhome() {
+    # Get the list of callhome bundles
+    aws s3 ls --human-readable s3://vast-callhomebundle/ \
+    | sed -E 's|^[[:space:]]+[^[:space:]]+[[:space:]](.+)/$|\1|;'
+}
+
+do_get() {
+    local DO_CMD='usage-get'
+    if [[ $# -gt 0 ]] && declare -f "do_get_${1}" > /dev/null; then
+        DO_CMD="do_get_${1}"
+        shift
+    fi
+    ${DO_CMD} "$@"
+}
+
+usage-ssh() {
+    printf '%s\n' \
+        'SSH into remote hosts/nodes with some useful defaults and tooling' \
+        '' \
+        'Usage:' \
+        "  [<ENV VARS>] ${SCRIPT_NAME} ssh [<ssh_args>]" \
+        '' \
+        'By default, ssh connection will be opened in a new mux (zellij) tab.' \
+        "If no arguments are passed, the connection will be to '${CS_DBG}'" \
+        '' \
+        'The following ENV variables would change the behavior:' \
+        '    SSH_PASS   sshpass command line override, if SSHPASS var exists, it will' \
+        '               default to `sshpass -e`' \
+        '    SSHPASS    activates default SSH_PASS behavior (see above)' \
+        '    SSH_ARGS   by default, the value is \$SSH_DEFAULT_ARGS' \
+        '               Another preset is \$SSH_UNSAFE' \
+        "    MUX        This is the multiplexer's command" \
+        '               Default value is `zellij`' \
+        '               MUX=0 will disable zellij use' \
+        '    MUX_CMD    Arguments for the MUX command' \
+        "               default is \"run --name='\$TAB_NAME' -- \$SSH_PASS ssh \$SSH_ARGS \$SSH_CMD # \"" \
+        '' \
+        'Examples:' \
+        '  The following command lines will:' \
+        '    * Open a new zellij tab titled VASTDATA@192.168.2.2' \
+        '      (To disable this, add MUX=0)' \
+        '    * connect to the techport IP Address (192.168.2.2)' \
+        '    * as the "vastdata" user' \
+        '    * pass "vastdata" plaintext password' \
+        '    * use the \$SSH_UNSAFE template to bypass host validation keys' \
+        '' \
+        "    SSHPASS=vastdata SSH_ARGS=\\\$SSH_UNSAFE ${SCRIPT_NAME} ssh vastdata@192.168.2.2 # connect to tech port" \
+        '' \
+        '  The following commands will open a new zellij tab to ${CS_DBG}:' \
+        "    ${SCRIPT_NAME} ssh" \
+        "    ${SCRIPT_NAME} ssh ${CS_DBG}" \
+        ''
+    exit 2
+}
+
+do_ssh() {
+    if [[ $# -eq 0 ]]; then
+        do_cs-dbg
+        return $?
+    elif [[ "$1" == '--help' ]]; then
+        usage-ssh
+        return $?
+    fi
+
+    SSH_DEFAULT_ARGS='-o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa'
+    SSH_UNSAFE='-q -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null ${SSH_DEFAULT_ARGS}'
+    SSH_ARGS="$(eval "echo \"${SSH_ARGS:-"\${SSH_DEFAULT_ARGS}"} \"")"
+    SSH_CMD="${*}"
+    [ -z "$SSHPASS" ] || SSH_PASS="${SSH_PASS:-$(command -v sshpass) -e}"
+
+    if [ "$MUX" = "zellij" ]; then
+        KDL_PATH="$HOME/.config/zellij/layouts/ssh_${1}.kdl"
+
+        [ -r "$KDL_PATH" ] \
+        && rm  "$KDL_PATH"
+
+        TAB_NAME="$( echo "${1}" | tr '[:lower:]' '[:upper:]' )"
+        cat "$HOME/.config/zellij/layouts/ssh_tmpl.kdl.tmpl" | \
+        SSHPASS="$SSHPASS" SSH_PASS="$SSH_PASS" SSH_ARGS="$SSH_ARGS" SSH_CMD="$SSH_CMD" \
+        TAB_NAME="$TAB_NAME" \
+        envsubst \
+        > "$KDL_PATH"
+
+        MUX_CMD="$(eval "echo \"${MUX_CMD:-action new-tab}\"")"
+        [ "$MUX_CMD" != "run" ] \
+        || MUX_CMD="run --name='$TAB_NAME' -- $SSH_PASS ssh $SSH_ARGS $SSH_CMD # "
+
+        
+        if [ -r "$KDL_PATH" ]; then
+            eval "$MUX $MUX_CMD '--layout=$KDL_PATH'"
+            ${NO_RM} rm "$KDL_PATH"
+        else
+            echo "Some bad 💩 happened, couldn't find (or create) ssh_$1 layout."
+        fi
+    else
+        eval "$MUX $SSH_PASS ssh $SSH_ARGS ${SSH_CMD}"
+    fi
+}
+
+CS_DBG="${CS_DBG:-var-cs-dbg}"
+do_cs-dbg() {
+    do_ssh ${CS_DBG}
+}
+
+_main_() {
+    local DO_CMD='usage'
+
+    MUX="${MUX:-zellij}"
+    [ "$MUX" = ":" ] || [ "$MUX" = "0" ] || [ "$SZ_NOMUX" = "1" ] \
+        || [ -z "$ZELLIJ_SESSION_NAME" ] || [ "$ZELLIJ_SESSION_NAME" = '__NO_LOAD__' ] \
+        && unset MUX
+
+    if [[ $# -gt 0 ]] && declare -f "do_${1}" > /dev/null; then
+        DO_CMD="do_${1}"
+        shift
+    fi
+    ${DO_CMD} "$@"
+}
+_main_ "$@"
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+{{- end -}}
