@@ -34,7 +34,7 @@
     )) -}}
 
 {{- $szEnvFlagsChoices := list "default"
-      "VAST.personal" "VAST.dockersh" "cz-prefer-delta"
+      "VAST.personal" "VAST.dockersh" "cz-prefer-delta" "with-atuin"
 -}}
 {{- $szEnvFlags := list (dig "sz" "env" "flags" "default" .) "dummy" | join " " | splitList " " -}}
 {{- $szEnvFlags  = slice $szEnvFlags 0 (sub (len $szEnvFlags) 1) -}}
