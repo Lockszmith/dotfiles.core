@@ -1,5 +1,5 @@
 {{- if stat (list (env "HOME") "/.local/bin/squashfs-root/usr/bin/nvim" | join "/") -}}
 squashfs-root/usr/bin/nvim
-{{- else -}}
+{{- else if stat (list (env "HOME") "/.local/bin/nvim.AppImage" | join "/") -}}
 nvim.AppImage
 {{- end -}}
