@@ -32,7 +32,7 @@ by `.chezmoiexternals`. **rust** and **go** based tools are best for
 this.
 
 Assume a system has `bash`, `git`, `curl` or `wget`, anything else that
-is missing, chezmoi should be able to grab.
+is missing, chezmoi should be able to grab or handle without it.
 
 NEVER store personal identifying secrets/details or work/employer
 specific details in the repo.
@@ -41,6 +41,10 @@ Assume others will be interested in investigating/cloning this
 envrionment (I know, a bit arrogant), so keep it as generic as possible,
 so it can be shared.
 
+Modularity and configurability - be able to control how the system
+installs by considering different 'modules' (or group of functionality)
+that can be switched on/off in the .chezmoi.toml configuration file.
+
 ## Repo structure
 
 The root dir of the repo is for documentation/orientation, as little
@@ -48,7 +52,12 @@ content as possible.
 
 It contains:
 
-* A 'throwaway' chezmoi bootstrap environment:
+* This `README.md` and a `docs` directory for additional documentation.
+* `chezmoi.roots` containing environment specific chezmoi roots.
+* A 'throwaway' chezmoi bootstrap environment (more details below)
+
+## Bootstrap
+
 
   ```
   .chezmoiscripts/
@@ -56,10 +65,6 @@ It contains:
   .chezmoiignore
   .gitignore
   ```
-* This `README.md` and a `docs` directory for additional documentation.
-* `chezmoi.roots` containing environment specific chezmoi roots.
-
-## Bootstrap
 
 `.chezmoiroot` points to the source-state of the current envrionments.  
 I creted this so I can ensure I have the necessary tooling to
@@ -74,14 +79,15 @@ every machine.
 
 ## The Different Envrionments
 
-At this point Home and Home.MacOS are almost identical and they will
-probably be merged in the future.
+Currently existing:
+* `_src.all`
+* `_home`
+* `_home.windows`
 
-I crated the MacOS envionrment when I was unsure about the differences,
-wanting to separate the envrionments while I currate them.
+`_home` is the unix like environment (Linux, MacOS or WSL), and
+`_home.windows` is for Windows.
 
-Both are POSIX based (to a degree), and my expectation for them is to
-behave in as similar a manner as possible.
+`_src.all` is linked by all environment.
 
 To make the envrionments 'inherit' from one another, I've written
 `symclone.sh`, a tool script that creats symlinks across different
