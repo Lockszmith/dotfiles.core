@@ -58,24 +58,36 @@ It contains:
 
 ## Bootstrap
 
+* The files:
 
   ```
-  .chezmoiscripts/
+  .init.me.sh
+  .chezmoiscripts/run_init.ps1.tmpl
   .chezmoi.toml.tmpl
   .chezmoiignore
   .gitignore
   ```
 
-`.chezmoiroot` points to the source-state of the current envrionments.  
-I creted this so I can ensure I have the necessary tooling to
-effectively initialize an envrionment assuming as little as possible.
+`.init.me.sh` a script to re-initialize environment. Cleans up chezmoi
+state and goes through `chezmoi init` process.
 
-Initializing the bootstrap envrionment, detects the macine type,
-generates the `.chezmoiroot`, scraps the bootstrap configuration and
-initializes chezmoi now that `.chezmoiroot` exitst.
+`.chezmoi.toml.tmpl` this is the bootstrap configuration template that
+handles the initial system detection and props chezmoi to run the auto
+intialization script.
 
-This is why `.gitignore` ignores `.chezmoiroot`, as it is different on
-every machine.
+`.chezmoiignore` makes sure chezmoi only considers the above listed
+files as the source of truth (this is for the temporary bootstrap
+invocation only) - it **ignores** `.chezmoiroot` as that is unique to
+the active envrionment.
+
+`.chezmoiscripts/run_init.ps1.tmpl` is the auto initialization script
+that will generate `.chezmoiroot` based on further detection and 
+uset-prompts. When it's done, it (on non-Windows) scraps the bootstrap
+configuration and initoalizes the actual chezmoi envrionment.
+(on Windows, it will prompt you with instructions on how to initialize)
+
+The process above ensure I have the necessary tooling to effectively
+initialize a full envrionment, while assuming as little as possible.
 
 ## The Different Envrionments
 
