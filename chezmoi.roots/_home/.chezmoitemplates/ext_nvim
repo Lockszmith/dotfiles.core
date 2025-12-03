@@ -1,3 +1,4 @@
+{{- if has "nvim.AppImage" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
 {{ if and (env "CZ_EXTR") (and ( eq .chezmoi.os "linux" ) ( ne .chezmoi.osRelease.id "centos" )) -}}
 {{- $defaultRefresh := "168h" -}}
 ".local/bin/nvim.AppImage":
@@ -6,4 +7,4 @@
   executable: true
   refreshPeriod: "{{ $defaultRefresh }}"
 
-{{ end -}}
+{{ end -}}{{ end -}}
