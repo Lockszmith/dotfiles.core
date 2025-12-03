@@ -33,9 +33,10 @@
     ) ( list .chezmoi.username " (@" $sysname ")" | join ""
     )) -}}
 
-{{- $szEnvFlagsChoices := list "default"
-      "VAST.personal" "VAST.dockersh" "cz-prefer-delta" "with-atuin"
--}}
+{{- $szEnvFlagsChoices := (
+        list .chezmoi.sourceDir ".chezmoidata" "szEnv.yaml" |
+        join "/" | include | fromYaml
+    ).choices.szEnvFlags -}}
 {{- $szEnvFlags := list (dig "sz" "env" "flags" "default" .) "dummy" | join " " | splitList " " -}}
 {{- $szEnvFlags  = slice $szEnvFlags 0 (sub (len $szEnvFlags) 1) -}}
 {{- $szEnvFlagsSelected := promptMultichoice (list "Choose sz.env flags (default is '" ($szEnvFlags | join ", ") "')" | join "") $szEnvFlagsChoices -}}

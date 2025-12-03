@@ -1,0 +1,7 @@
+choices:
+  szEnvFlags:
+    - "default"
+    - "VAST.personal"
+    - "VAST.dockersh"
+    - "cz-prefer-delta"
+    - "with-atuin"
