@@ -68,10 +68,10 @@ if [[ $all -eq 1 ]]; then
     fi
 
     echo Applying External changes...
-    env chezmoi apply --interactive --include externals $verbose $debug
+    PAGER="$CZ_PAGER" env chezmoi apply --interactive --include externals $verbose $debug
 fi
 echo Applying pending changes...
-env chezmoi apply --less-interactive --verbose $verbose $debug
+PAGER="$CZ_PAGER" env chezmoi apply --less-interactive --verbose $verbose $debug
 
 export CZ_EXTR="$CZ_EXTR_SAVE"
 unset CZ_EXTR_SAVE
