@@ -1,4 +1,4 @@
-{{- if has "VAST.personal" (list (dig "sz" "env" "flags" "" .)) -}}
+{{- if has "VAST.personal" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
 #!/usr/bin/env bash
 
 # Usage: ./vast-teleport get version [auto|major|<vMajor>]

@@ -174,7 +174,7 @@ scriptTempDir={{ $scriptTempDir | quote }}
    leader-key={{- $zellijLeaderKey | quote }}
 {{- end }}
 
-{{- if has "cz-prefer-delta" (list (dig "sz" "env" "flags" "" .)) -}}
+{{- if has "cz-prefer-delta" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
 {{- if lookPath "delta" }}
 [diff]
 #   command = "nvim"
