@@ -133,7 +133,9 @@ get_latest_version_by_major() {
 }
 
 _do_upgrade() {
-    eval "$(_go_get_version_server_major -) CZ_EXTR=1 chezmoi apply --verbose --include externals $(command -v tsh)"
+    local TSH_PATH="$(command -v tsh | true)"
+    TSH_PATH="${TSH_PATH:-~/.local/bin/tsh}"
+    eval "$(_go_get_version_server_major -) CZ_EXTR=1 chezmoi apply --verbose --no-pager --less-interactive --include externals ${TSH_PATH} ${TSH_PATH}-get"
 }
 
 _go_get() {
