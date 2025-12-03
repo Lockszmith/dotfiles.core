@@ -1,0 +1,14 @@
+#! /usr/bin/env bash
+
+set -e
+
+jq --arg search "$*" -r '
+    paths(objects) as $p
+    | (getpath($p) | keys) as $all_keys
+    | $all_keys[] as $key
+    | select($key | contains($search))
+    | $p + [$key]
+    | join(".")
+'
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
