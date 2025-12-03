@@ -174,20 +174,6 @@ scriptTempDir={{ $scriptTempDir | quote }}
    leader-key={{- $zellijLeaderKey | quote }}
 {{- end }}
 
-{{- if has "cz-prefer-delta" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
-{{- if lookPath "delta" }}
-[diff]
-#   command = "nvim"
-#   args = ["-d",  "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
-
-   #command = "delta"
-   #args = ["--paging=never", "{{ "{{ .Destination }}" }}", "{{ "{{ .Target }}" }}"]
-   pager = "delta" # Required until https://github.com/twpayne/chezmoi/issues/3523 is resolved.
-   #pager = "moor"
-   #pager=""
-{{- end }}
-{{- end }}
-
 {{/*
 vim: set filetype=gotexttmpl.toml expandtab tabstop=2 shiftwidth=2:
 */}}
