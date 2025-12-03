@@ -1,4 +1,4 @@
-{{- if has "VAST.personal" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
+{{/* # */}}{{- if has "VAST.personal" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
 #!/usr/bin/env bash
 
 # Usage: ./vast-teleport get version [auto|major|<vMajor>]
@@ -374,4 +374,8 @@ _go() {
 }
 
 _go "${@}"
+
 {{ end -}}
+{{/*
+vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+*/}}
