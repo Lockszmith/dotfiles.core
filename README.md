@@ -5,7 +5,7 @@ This is my chezmoi dotfiles repo
 ## One line install
 
 ```bash
-sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply https://code.lksz.me/lksz/dotfiles.git
+sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply https://code.lksz.me/dotfiles/core.git
 ```
 
 ## Why even bother?
