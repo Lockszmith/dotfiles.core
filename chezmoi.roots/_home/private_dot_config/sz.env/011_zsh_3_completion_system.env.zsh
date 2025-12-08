@@ -9,6 +9,7 @@ else
     znap source 'marlonrichert/zsh-autocomplete'
     znap source 'zsh-users/zsh-completions'
     znap source 'zsh-users/zsh-autosuggestions'
+    znap source 'MichaelAquilina/zsh-you-should-use'
 
     # Make Tab and ShiftTab cycle completions on the command line
     # bindkey              '^I'         menu-complete

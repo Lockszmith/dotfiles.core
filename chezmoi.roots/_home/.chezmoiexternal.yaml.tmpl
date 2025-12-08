@@ -155,6 +155,17 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- with $app_name := "intelli-shell" -}}
+{{- with $repo := (printf "%s/%s" "lasantosr" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s-%s.tar.gz" $repo $version $app_name $myArch)
+        "path" (printf "%s" $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
 {{- with $app_name := "ripgrep" -}}
 {{- with $bin_name := "rg" -}}
 {{- with $repo := (printf "%s/%s" "BurntSushi" $app_name) -}}
@@ -486,4 +497,5 @@
 {{ template "ext_lib_complete-alias" . }}
 {{ template "ext_nvim" . }}
 {{ template "ext_nvim_config" . }}
+
 # vim: set ft=yaml expandtab tabstop=2 shiftwidth=2:
