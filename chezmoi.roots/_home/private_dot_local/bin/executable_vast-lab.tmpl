@@ -177,16 +177,15 @@ do_prepmac() {
     fi
 
     if [ $PINGOK -eq 1 ]; then
-        # auto-copy-ssh-id "${TO}"
-
         ssh-keygen -R "${TO}" || true
 
-        ssh \
-            -o PasswordAuthentication=no \
-            -o BatchMode=yes \
-            -o ConnectTimeout=2 \
-            -ttn \
-            "${TO}" -- "${CMDs[*]}" \
+        local ssh_cli='ssh'$(
+            )' -o PasswordAuthentication=no'$(
+            )' -o BatchMode=yes'$(
+            )' -o ConnectTimeout=2'$(
+            )' -ttn'
+
+        $ssh_cli "${TO}" -- "${CMDs[*]}" \
         || 1>&2 printf '%s\n' \
             "Could not SSH into ${TO}, you might want to run 'pull-vast.id_rsa ${TO}' or 'auto-copy-ssh-id ${TO}'"
     else
@@ -271,6 +270,10 @@ do_ssh() {
     SSH_ARGS="$(eval "echo \"${SSH_ARGS:-"\${SSH_DEFAULT_ARGS}"} \"")"
     SSH_CMD="${*}"
     [ -z "$SSHPASS" ] || SSH_PASS="${SSH_PASS:-$(command -v sshpass) -e}"
+    SSH_CLI="ssh ${SSH_ARGS}"
+    if [ -n "$MOSH" ] && [ ${#CMDs} -eq 0 ]; then
+        SSH_CLI="$MOSH --ssh='$SSH_CLI'"
+    fi
 
     if [ "$MUX" = "zellij" ]; then
         KDL_PATH="$HOME/.config/zellij/layouts/ssh_${1}.kdl"
@@ -280,14 +283,15 @@ do_ssh() {
 
         TAB_NAME="$( echo "${1}" | tr '[:lower:]' '[:upper:]' )"
         cat "$HOME/.config/zellij/layouts/ssh_tmpl.kdl.tmpl" | \
-        SSHPASS="$SSHPASS" SSH_PASS="$SSH_PASS" SSH_ARGS="$SSH_ARGS" SSH_CMD="$SSH_CMD" \
+        SSHPASS="$SSHPASS" SSH_PASS="$SSH_PASS" \
+        SSH_CLI="$SSH_CLI" SSH_CMD="$SSH_CMD" \
         TAB_NAME="$TAB_NAME" \
         envsubst \
         > "$KDL_PATH"
 
         MUX_CMD="$(eval "echo \"${MUX_CMD:-action new-tab}\"")"
         [ "$MUX_CMD" != "run" ] \
-        || MUX_CMD="run --name='$TAB_NAME' -- $SSH_PASS ssh $SSH_ARGS $SSH_CMD # "
+        || MUX_CMD="run --name='$TAB_NAME' -- $SSH_PASS $SSH_CLI # "
 
         
         if [ -r "$KDL_PATH" ]; then
@@ -297,7 +301,7 @@ do_ssh() {
             echo "Some bad 💩 happened, couldn't find (or create) ssh_$1 layout."
         fi
     else
-        eval "$MUX $SSH_PASS ssh $SSH_ARGS ${SSH_CMD}"
+        eval "$MUX $SSH_PASS $SSH_CLI ${SSH_CMD}"
     fi
 }
 

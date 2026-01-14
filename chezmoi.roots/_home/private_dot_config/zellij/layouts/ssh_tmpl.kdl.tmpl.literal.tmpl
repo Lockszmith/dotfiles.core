@@ -1,0 +1,15 @@
+layout {
+    tab name="${TAB_NAME}" hide_floating_panes=true {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        pane command="sh" size="55%" {
+            args "-ic" "SSHPASS=${SSHPASS} ${SSH_PASS} ${SSH_CLI} ${SSH_CMD}"
+            start_suspended false
+        }
+        pane size=1 borderless=true {
+            plugin location="zellij:status-bar"
+        }
+    }
+}
+
