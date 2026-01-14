@@ -1,0 +1,7 @@
+{{- if lookPath "nvim" -}}
+#! /usr/bin/env sh
+
+POSTFIX_BUITINS=1 nvim -p "${@}"
+
+# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+{{- end -}}
