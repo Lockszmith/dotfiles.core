@@ -18,7 +18,7 @@ DO_NO_ZELLIJ="-e ZELLIJ_SESSION_NAME=__NO_LOAD__"
 DO_NO_ZELLIJ=""
 
 cd ~/VAST/dockersh.home \
-&& docker build . --tag ubuntu-gsz \
+&& docker build . --tag rocky-gsz \
 && docker run --rm --name $CONTAINER_NAME --hostname $CONTAINER_NAME \
     -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
     -v $HOME:$HOME $DCK_VOLS \
