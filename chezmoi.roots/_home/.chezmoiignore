@@ -1,5 +1,6 @@
 /**/.git
 /**/.git/**
+*.zwc
 
 .config/vim/autoload
 .config/raycast/node_modules
