@@ -1,12 +1,17 @@
 #! /usr/bin/env bash
 
+LS_COLORS=
+set | sort | grep -E '^(POST|PRE|XARGS|FN)' >&2
+
 FN="${FN:--H}"
 [ -z "$NO_FN" ] || FN=""
 PRE="${PRE:-}"
 POST="${POST:-}"
+XARGS=(${XARGS:-})
 
 GREP_ARG="${1:+$(printf '"%s" ' "${@}" )}"
 GREP_ARG="${GREP_ARG:-\"\"}"
 
+echo \-I {} "${XARGS:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} egrep --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} >&2 || true
 xargs -I {} "${XARGS[@]:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} egrep --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} || true
 
