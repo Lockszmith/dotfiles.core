@@ -1,8 +1,28 @@
 #! /usr/bin/env bash
 
+set -euo pipefail
+
+get-cz-managed() {
+    cz managed --exclude=remove,dirs,externals || true
+}
+get-cz-unmanaged() {
+    cz unmanaged --nul-path-separator \
+        | xargs -r0I{} sh -c $(
+            )'printf "%s%s\n" "{}" "$('$(
+                )'stat ~/"{}" '$(
+                    )'| grep -Eo "^[[:digit:]]+ [[:digit:]]+ ." '$(
+                    )'| grep -Eo ".$" '$(
+                    )'| sed -Ee "s|d\$|/|; s|[^/]\$||;" '$(
+                )'|| true '$(
+            )')"' \
+       | grep -Ev '\.zwc$'
+}
+
+${SET_X:-:} -x
 (
     sed 's/^/M: /' <(get-cz-managed);
     grep -Ev '/$' <(get-cz-unmanaged) | sed 's/^/U: /'
 ) | sort -Vk'2,2'
 
+${SET_X:-:} +x
 # vim: set ft=sh sw=4 sts=4 et:

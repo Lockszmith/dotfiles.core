@@ -1,0 +1,12 @@
+#! /usr/bin/env bash
+
+set -euo pipefail
+${SET_X:-:} -x
+
+FILES="$(SET_X=: cz select-files "${@}")"
+[ -n "$FILES" ] \
+&& ${VISUAL:-${EDITOR:-vi}} $(SET_X=: <<<"$FILES" cz smart-path) \
+&& (${CZA:-env} chezmoi apply --interactive $(<<<"$FILES" sed -Ee 's|^.: ||'))
+
+${SET_X:-:} +x
+# vim: set ft=sh sw=4 sts=4 et:

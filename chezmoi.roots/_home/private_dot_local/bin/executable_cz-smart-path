@@ -6,15 +6,19 @@ set -euo pipefail
 # 'U: ' or no prefix means an unmanaged path
 # All paths are assumed to be relative to home, unless it starts with / - which is an absolute path
 
+${SET_X:-:} -x
+
 eval "printf '%s\n' $(                          # Build a printf multi-line command so that eval will evaluate managed paths
 sed -Ee '
     s|"|\\"|g;                                  # preserve quotes
-    s|^M: (.*)$|\$(cz source-path ~/"\1")|;     # resolve chezmoi managed path
-    s|^(U: )?(.+)$|~/"\2"|;                     # Add quotes (for printf being eval-ed)
-    s|^~/("[/\$])|\1|;                          # Remove ~/ prefix for absolute paths
+    s|^|U: |; s|^U: ([MU]: )|\1|;
+    s|^([UM]: )([^~/].*)$|~/"\2"|;              # Add quotes (for printf being eval-ed)
+    s|^M: (.*)$|\$(cz source-path "\1")|;       # resolve chezmoi managed path
+#   s@(^| )~/("[/\$])@\1\2@;                    # Remove ~/ prefix for absolute paths
     s|$| \\|;                                   # passing to printf
 '
 )" | grep -vE '^\\$'
 
+${SET_X:-:} +x
 # vim: set ft=sh sw=4 sts=4 et:
 

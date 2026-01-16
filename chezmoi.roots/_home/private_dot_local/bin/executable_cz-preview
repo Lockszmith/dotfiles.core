@@ -1,0 +1,14 @@
+#! /usr/bin/env bash
+
+set -euo pipefail
+FILE_PATH="$(cz smart-path <<<"$1")"
+
+if [ -d "$FILE_PATH" ]; then
+    ls -lAFh "$FILE_PATH"
+elif [ -r "$FILE_PATH" ]; then
+    cat "$FILE_PATH"
+else
+    stat "$FILE_PATH"
+fi
+
+# vim: set ft=sh sw=4 sts=4 et:
