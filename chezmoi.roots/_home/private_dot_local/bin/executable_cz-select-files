@@ -22,7 +22,7 @@ fi
 declare -a singles=()             # resolved to one match or passed as-is when no match
 declare -a multi_candidates=()    # accumulate ambiguous matches to fuzzy-pick from
 
-for arg in "$@"; do
+for arg in "${@}"; do
     # Substring match (literal). Switch grep -F to -E if you want regex patterns.
     matches="$(<<<"$all_files" grep -E -- "^.: (.*/)?${arg}\$" || true)"
     [ -n "$matches" ] || matches="$(<<<"$all_files" grep -E -- "^.: .*${arg}.*\$" || true)"
