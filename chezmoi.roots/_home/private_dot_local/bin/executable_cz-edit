@@ -3,6 +3,32 @@
 set -euo pipefail
 ${SET_X:-:} -x
 
+if [ "$#" -eq 1 ] && [ "$1" == "--help" ]; then
+    printf '%s\n' \
+        'Description' \
+        '  sz-env override of `chezmoi edit` subcommand.' \
+        '' \
+        '  If target is managed in chezmoi, editor will open source state, otherwise' \
+        '  editor will open local file.' \
+        '' \
+        '  No encryption support at this point.' \
+        '' \
+        '  When editing is done, user is prompted to apply state.' \
+        '  ' \
+        '  targets are matched by fuzzy matching, presenting a fuzzy search UI (via' \
+        '  television) unless a single match is found.' \
+        '' \
+        'Usage:' \
+        '  chezmoi edit targets...' \
+        '' \
+        'Examples:' \
+        '  chezmoi edit ~/.bashrc' \
+        '  chezmoi edit bashrc' \
+        '  chezmoi edit' \
+        ''
+    exit 2
+fi
+
 FILES="$(SET_X=: cz select-files "${@}")"
 [ -n "$FILES" ] \
 && ${VISUAL:-${EDITOR:-vi}} $(SET_X=: <<<"$FILES" cz smart-path) \
