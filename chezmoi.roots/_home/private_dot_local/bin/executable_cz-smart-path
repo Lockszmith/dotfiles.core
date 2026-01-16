@@ -1,0 +1,20 @@
+#! /usr/bin/env bash
+
+set -euo pipefail
+
+# 'M: ' prefix means a chezmoi managed path
+# 'U: ' or no prefix means an unmanaged path
+# All paths are assumed to be relative to home, unless it starts with / - which is an absolute path
+
+eval "printf '%s\n' $(                          # Build a printf multi-line command so that eval will evaluate managed paths
+sed -Ee '
+    s|"|\\"|g;                                  # preserve quotes
+    s|^M: (.*)$|\$(cz source-path ~/"\1")|;     # resolve chezmoi managed path
+    s|^(U: )?(.+)$|~/"\2"|;                     # Add quotes (for printf being eval-ed)
+    s|^~/("[/\$])|\1|;                          # Remove ~/ prefix for absolute paths
+    s|$| \\|;                                   # passing to printf
+'
+)" | grep -vE '^\\$'
+
+# vim: set ft=sh sw=4 sts=4 et:
+
