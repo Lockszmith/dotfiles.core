@@ -8,13 +8,14 @@ set -euo pipefail
 
 ${SET_X:-:} -x
 
+# echo \
 eval "printf '%s\n' $(                          # Build a printf multi-line command so that eval will evaluate managed paths
 sed -Ee '
     s|"|\\"|g;                                  # preserve quotes
-    s|^|U: |; s|^U: ([MU]: )|\1|;
-    s|^([UM]: )([^~/].*)$|~/"\2"|;              # Add quotes (for printf being eval-ed)
+    s|^|U: |; s|^U: ([MU]: )|\1|;               # 
+    s|^([UM]: )([^~/"].*)$|~/"\2"|;             # Add quotes (for printf being eval-ed)
     s|^M: (.*)$|\$(cz source-path "\1")|;       # resolve chezmoi managed path
-#   s@(^| )~/("[/\$])@\1\2@;                    # Remove ~/ prefix for absolute paths
+    s|^U: ||;                                   # Remove unmanaged prefix
     s|$| \\|;                                   # passing to printf
 '
 )" | grep -vE '^\\$'
