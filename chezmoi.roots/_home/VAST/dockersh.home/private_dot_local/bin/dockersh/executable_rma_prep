@@ -1,5 +1,7 @@
 #! /usr/bin/env bash
 
+2>&1 /file_server_var2/scripts/cs_dockersh keep-hubble-latest echo > /dev/null
+
 docker run --rm \
   -v /home/gal.szkolnik/VAST/dockersh.home/.local/bin/dockersh:/scripts \
   -v "$(pwd)":/bundle -w /bundle \
