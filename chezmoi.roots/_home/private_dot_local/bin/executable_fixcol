@@ -1,25 +1,61 @@
 #! /usr/bin/env bash
 
+#tail -n+60 | \
+#    grep -Ev 'Scheduler: Sending|GET \{\{FILE' | \
 perl -pe'
-    s/(^|:\[?)('"$(date +%Y)"'[[:digit:]T\-\:\.]{15,19})/:|$2:|/;
-    s/:\|\] /:|/;
-    s@^([^\.])@:|:|:|:|$1@;
-    s@/([^/:]+):@:|$1:@;
-    s@/([^/:]+):@:|$1:@;
-    s/-172/:|172/;
-    s/^(?<all>'`
-#      `'(?<p1>([^|]+:\|)+[^:]+):\[?'`
-#      `'((?<ts>[[:digit:]]{4}([- :,][[:digit:]]{2,3}){6})(\]|:) )?'`
-#      `'(?<type>[A-Z]+)[\[ \/]+'`
-#      `'(?<src>[^\/-]+)[\/]'`
-#      `'(?<x>[^\]]+)'`
-       `')/all:$+{all}\n$+{p1}:|$+{ts}:|$+{type}:|$+{src}:|$+{x}:|/;
-    #     s/^(([^|]+:\|)+[^:]+):\[?(([[:digit:]]{4}([- :,][[:digit:]]{2,3}){6})(\]|:) )?(([A-Z]+)[ /]\[?([^/]+)/?)?/\1:|\4:|8:\8:|9:\9:|0:/;
-    # s/^(([^|]+:\|)+[^:]+):\[?(([[:digit:]]{4}([- :,][[:digit:]]{2,3}){6})(\]|:) )?(([A-Z]+)[ /]([^]/]+)([^]/]+)?\] )?/\1:|\4:|\8:|\9:|/;
-    # s/(\+00:00|\]):? /\1:|/g;
-    # s/:\|([^:|\[]+ )/:|:|\1/;
-    # s/\]:\|(:\|| )*/]:|/;
-    # s/ (\(P[[:digit:]]+|[\{\[])/:|\1/g;
+    # Mark path and add ts placeholder
+    s/^([^:]+):/:|$1##path##:|##ts##:|/;
+
+    # break up path to mark node IP
+    s/^(.+)-([[:digit:]\.]{8,15})(.*#path##)?\//$1:|$2$3:|/;
+
+    # Timestamp definition and normalization
+    s/(##ts##:\|)\[?(202[[:digit:]\-]{7})[ T]([[:digit:]\:\.,]{3,16}[[:digit:]])(\+00:00)?[ :]*/$2 $3$1/;
+
+    # lvl definition (potentially after src)
+    #s/(##:\|)[ {]*([A-Z]{3,})[ }]*/$1$2##lvl##:|##src##:|/;
+    s/(##:\|)[ \]{]*(ALERT|PANIC|ALLOK|INFO|WARNING|ERROR|ERR|DEBUG|NOTE)[\[ }:\/]/$1$2##lvl##:|/;
+
+    # modify field order, so that level will always be before SRC
+    s/(##ts##(?::\|){1,2})([^\|]+##src##:\|)([^\|]+##lvl##:\|)?(?:##src##:\|)/$1$3$2/;
+    s/(##ts##:\|)([^\|]+##src##:\|)/$1##lvl##:|$2/;
+
+    # Make sure all fields exist
+    s/(##path##:\|)(#?[^#]+)$/$1##ts##:|$2/;
+      s/(##ts##:\|)(#?[^#]+)$/$1##lvl##:|$2/;
+
+    # src definition P####
+    s/(##lvl##:\|)((:?[^] ]+))[\] ]/$1$2##src##:|/;
+#   s/(##lvl##:\|)[\[\(]?((:?[PES]?[[:digit:]]+[ :]|F[[:digit:]a-f]|[[:digit:]a-f\-]){2,}|[^\]]+)[ \)\]]*/$1$2##src##:|/;
+
+    # Cleanup of leading whitespace
+#   s/(##:\|)[[:space:]:]+/$1/g;
+
+    # Clear ANSI color codes
+    s/#[[:digit:]\];]+@//;
+    s/(##lvl##:\|)(#?[^#]+)$/$1##src##:|$2/;
+    # Idenitify additional src
+#   s/(:\|)(##src##:\|)\[?([^\]]+)\]/$1$3$2/;
+#   s/(:\|)(##src##:\|)((?:[^: ]+ *){1,3}): ?/$1$3$2/;
+
+    # Cleanup trailing whitespace
+    s/[[:space:]]+(##[a-z]+##:\|)/$1/g;
+    # Cleanup of leading whitespace (again)
+    s/(##:\|)[[:space:]:]+/$1/g;
+
+    # allow filtering on `grep "__sz"`
+ #  s/^/__sz/;
+   #s/^(.*(?:[A-Z]{3,}).*)$/__sz$1/;
+   #s|.*smb_logs/.*||;
+
+    # Debugging: truncate fields longer than 40 chars to 25...
+ #  s/([^#|\n]{35})[^#|\n]{15}[^#|\n]+/$1.../g;
+    # Debugging: truncate output before ##path##
+    s/^__sz.*##path##/__sz/;
+
+    # Remove field ##labels##
+    s/##[a-z]+##:\|/:|/g;
+
 '
 
 # vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
