@@ -6,22 +6,15 @@ get-cz-managed() {
     cz managed --exclude=remove,dirs,externals || true
 }
 get-cz-unmanaged() {
-    cz unmanaged --nul-path-separator \
-        | xargs -r0I{} sh -c $(
-            )'printf "%s%s\n" "{}" "$('$(
-                )'stat ~/"{}" '$(
-                    )'| grep -Eo "^[[:digit:]]+ [[:digit:]]+ ." '$(
-                    )'| grep -Eo ".$" '$(
-                    )'| sed -Ee "s|d\$|/|; s|[^/]\$||;" '$(
-                )'|| true '$(
-            )')"' \
+#   cz unmanaged --include=dirs | sed -Ee 's|$|/|;'
+    cz unmanaged --exclude=dirs \
        | grep -Ev '\.zwc$'
 }
 
 ${SET_X:-:} -x
 (
     sed 's/^/M: /' <(get-cz-managed);
-    grep -Ev '/$' <(get-cz-unmanaged) | sed 's/^/U: /'
+    sed 's/^/U: /' <(get-cz-unmanaged)
 ) | sort -Vk'2,2'
 
 ${SET_X:-:} +x
