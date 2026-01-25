@@ -5,3 +5,4 @@ choices:
     - "VAST.dockersh"
     - "cz-prefer-delta"
     - "with-atuin"
+    - "withBrowser"
