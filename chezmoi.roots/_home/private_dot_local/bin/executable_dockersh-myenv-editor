@@ -26,6 +26,6 @@ cd ~/VAST/dockersh.home \
     -e UMASK=$(umask) \
     -e SHELL=$SHELL $DO_ZELLIJ_AUTO_EXIT $DO_NO_ZELLIJ \
     -w "$HOME" \
-    -it ubuntu-gsz \
+    -it rocky-gsz \
     $SHELL -l ${1:+"${@}"}
 
