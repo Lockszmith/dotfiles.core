@@ -2,20 +2,51 @@
 
 set -euo pipefail
 
+PREFIXED=0
+
 get-cz-managed() {
-    cz managed --exclude=remove,dirs,externals || true
+    SET_X=: cz managed --exclude=remove,dirs,externals || true
 }
 get-cz-unmanaged() {
 #   cz unmanaged --include=dirs | sed -Ee 's|$|/|;'
-    cz unmanaged --exclude=dirs \
+    SET_X=: cz unmanaged --exclude=dirs \
        | grep -Ev '\.zwc$'
+}
+get-cz-git() {
+    cz git  -- ls-files ${@}
+}
+
+get-group() {
+    local sedCode="| sed -Ee 's/^/${2:-?}: /'"
+    [ -n "$2" ] || [ "$PREFIXED" = 1 ] || sedCode=""
+    [ -z "$sedCode" ] || PREFIXED=1
+    eval "$1 $sedCode"
+}
+
+get-all() {
+    local sets=()
+    while [ -n "${1:-}" ]; do
+        case "$1" in
+            "all" ) sets=(managed unmanaged) ;;
+            * )
+                    sets+=("$1") ;;
+        esac
+        shift
+    done
+
+    local sU=''
+    if [ "${#sets}" -eq 1 ]; then
+        eval "get-cz-${sets}"
+    else
+        ( for s in "${sets[@]}"; do
+            sU=${s:0:1}
+            get-group "get-cz-$s" ${sU^}
+        done ) | sort -Vk'2,2'
+    fi
+
 }
 
 ${SET_X:-:} -x
-(
-    sed 's/^/M: /' <(get-cz-managed);
-    sed 's/^/U: /' <(get-cz-unmanaged)
-) | sort -Vk'2,2'
-
+get-all "${@:-all}" | ( [ "$PREFIXED" = 0 ] && cat - || sort -Vk'2,2' )
 ${SET_X:-:} +x
 # vim: set ft=sh sw=4 sts=4 et:
