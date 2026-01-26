@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-set -euo pipefail
+set -eo pipefail
 
 PREFIXED=0
 
@@ -52,12 +52,13 @@ get-all() {
     done
 
     local sU=''
-    if [ "${#sets[@]}" -eq 1 ]; then
+    if [ "${#sets[@]:-}" -eq 1 ]; then
         eval "get-cz-${sets}"
     else
         ( for s in "${sets[@]}"; do
-            sU=${s:0:1}
-            get-group "get-cz-$s" ${sU^}
+            sU="$(<<<"${s}?" tr '[:lower:]' '[:upper:]')"
+            sU=${sU:0:1}
+            get-group "get-cz-$s" "${sU}"
         done ) | sort -Vk'2,2'
     fi
 
