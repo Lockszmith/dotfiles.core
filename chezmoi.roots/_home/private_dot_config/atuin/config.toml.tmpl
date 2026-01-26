@@ -241,9 +241,12 @@ records = true
 ## Enables using the daemon to sync. Requires the daemon to be running in the background. Start it with `atuin daemon`
 # enabled = false
 {{- if eq .chezmoi.os "linux" }}
-{{- $systemd_unit := output "sh" "-c" "/usr/bin/systemctl --user is-enabled atuin.service 2> /dev/null || true" }}
-{{- if eq $systemd_unit "enabled" }}
+{{- $systemd_test := output "sh" "-c" "/usr/bin/systemctl is-system-running 2> /dev/null || true" }}
+{{- if eq $systemd_test "online" }}
+{{- $systemd_test  = output "sh" "-c" "/usr/bin/systemctl --user is-enabled atuin.service 2> /dev/null || true" }}
+{{- if eq $systemd_test "enabled" }}
 enabled = true
+{{- end -}}
 {{- end -}}
 {{- end }}
 

@@ -24,6 +24,7 @@
 {{- else if eq .chezmoi.os "linux" }}
 {{-   $chassisType = (and
           (lookPath "hostnamectl")
+          ( eq "online" (output "sh" "-c" "/usr/bin/systemctl is-system-running 2> /dev/null || true") )
           ( regexReplaceAll "Chassis:\\s*" (regexFind "Chassis:\\s*\\S+" (output "hostnamectl" "status")) "" )
         ) | default "server"
 }}
