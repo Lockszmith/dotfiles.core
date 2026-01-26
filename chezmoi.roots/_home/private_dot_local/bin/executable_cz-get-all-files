@@ -52,7 +52,7 @@ get-all() {
     done
 
     local sU=''
-    if [ "${#sets[@]:-}" -eq 1 ]; then
+    if [ "${#sets[@]}" -eq 1 ]; then
         eval "get-cz-${sets}"
     else
         ( for s in "${sets[@]}"; do
