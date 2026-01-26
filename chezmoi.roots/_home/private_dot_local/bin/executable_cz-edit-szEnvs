@@ -1,0 +1,9 @@
+#! /usr/bin/env bash
+
+set -euo pipefail
+
+CZ_ENV="$(find $(SET_X=':' chezmoi source-path) -mindepth 2 -maxdepth 2 -type f,l -name 'szEnv.yaml')"
+CZ_CFG="$(find $(SET_X=':' chezmoi source-path) -mindepth 1 -maxdepth 1 -type f,l -name '.chezmoi.*')"
+"${VISUAL:-${EDITOR:-vi}}" "${CZ_ENV}" "${CZ_CFG}"
+
+# vim: set ft=sh sw=4 sts=4 et:

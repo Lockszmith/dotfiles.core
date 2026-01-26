@@ -1,0 +1,9 @@
+#! /usr/bin/env bash
+
+set -euo pipefail
+
+CZ_EXT="$(find $(SET_X=':' chezmoi source-path) -mindepth 1 -maxdepth 1 -type f,l -name '.chezmoiexternal.*')"
+CZ_EXT="${CZ_EXT:-$(SET_X=':' chezmoi source-path "${@}")/.chezmoiexternal.yaml.tmpl}"
+"${VISUAL:-${EDITOR:-vi}}" "${CZ_EXT}"
+
+# vim: set ft=sh sw=4 sts=4 et:
