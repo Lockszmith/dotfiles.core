@@ -9,11 +9,26 @@ get-cz-managed() {
 }
 get-cz-unmanaged() {
 #   cz unmanaged --include=dirs | sed -Ee 's|$|/|;'
-    SET_X=: cz unmanaged --exclude=dirs \
-       | grep -Ev '\.zwc$'
+    SET_X=:
+    comm -3 -1 <(get-cz-externals) <(
+        cz unmanaged --exclude=dirs \
+           | grep -Ev '\.zwc$'
+   )
 }
 get-cz-git() {
     cz git  -- ls-files ${@}
+}
+
+get-cz-externals() {
+    local cache="$HOME/.cache/chezmoi/managed.externals"
+    if [ "${1:-}" = "--force" ] || ! [ -r "$cache" ]; then
+        local tmp="$(mktemp)"
+        printf 'Updating Externals cached list...' >&2
+        env chezmoi managed --include externals > "$tmp" && mv "$tmp" "$cache"
+        printf 'Done\n' >&2
+    fi
+
+    command cat "$cache"
 }
 
 get-group() {
@@ -28,6 +43,7 @@ get-all() {
     while [ -n "${1:-}" ]; do
         case "$1" in
             "all" ) sets=(managed unmanaged) ;;
+            "refresh-cache") get-cz-externals --force ;;
             * )
                     sets+=("$1") ;;
         esac
@@ -35,7 +51,7 @@ get-all() {
     done
 
     local sU=''
-    if [ "${#sets}" -eq 1 ]; then
+    if [ "${#sets[@]}" -eq 1 ]; then
         eval "get-cz-${sets}"
     else
         ( for s in "${sets[@]}"; do

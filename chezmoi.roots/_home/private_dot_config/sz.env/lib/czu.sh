@@ -69,6 +69,7 @@ if [[ $all -eq 1 ]]; then
 
     echo Applying External changes...
     PAGER="$CZ_PAGER" env chezmoi apply --interactive --include externals $verbose $debug
+    cz-get-all-files refresh-cache > /dev/null
 fi
 echo Applying pending changes...
 PAGER="$CZ_PAGER" env chezmoi apply --less-interactive --verbose $verbose $debug
