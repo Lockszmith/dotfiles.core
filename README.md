@@ -8,6 +8,8 @@ This is my chezmoi dotfiles repo
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply https://code.lksz.me/dotfiles/core.git
 ```
 
+* See [Try Me](#try_me) to test in a docker container.
+
 ## Why even bother?
 
 I work on multiple platforms:
@@ -124,3 +126,17 @@ For more information abot each envrionment, see their respective (WIP)
 
 `cz-cd` cd into the chezmoi home dir
 `czgcd` cd into the root of the chezmoi git repo
+
+## Try Me
+
+```
+# Create a temporary home-dir, and start a docker image of your favorite distro
+DISTRO=rockylinux/rockylinux:latest
+TESTDIR="${TESTDIR:-$(mktemp --directory)}"; TE="$TESTDIR/.cache/tmp/etc"; mkdir -p "$TE"; cp /etc/passwd "$TE/p"; cp /etc/group "$TE/g"; docker run --rm --name temp-rocky -u $UID -v "$TE/p:/etc/passwd:ro" -v "$TE/g:/etc/group:ro" -v "$TESTDIR:$HOME" -w "$HOME" -it "$DISTRO" bash
+
+# within the bash repo, intialize the chezmoi environment
+sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply https://code.lksz.me/dotfiles/core.git
+
+# clear the temporary folder
+rm -fR $TESTDIR && unset TESTDIR TE
+```
