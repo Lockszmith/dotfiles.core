@@ -15,9 +15,13 @@ DO_ZELLIJ_AUTO_EXIT="-e ZELLIJ_AUTO_EXIT=true"
 DO_ZELLIJ_AUTO_EXIT=""
 DO_NO_ZELLIJ="-e ZELLIJ_SESSION_NAME=__NO_LOAD__"
 DO_NO_ZELLIJ=""
-SED_SCRIPT="
-    s|--rm|--rm --name $CONTAINER_NAME --hostname $CONTAINER_NAME|;
+
+SED_SCRIPT=""
+[ $# -ge 1 ] || SED_SCRIPT="
     s|/bin/bash -c.*|/bin/bash -li|;
+"
+SED_SCRIPT="$SED_SCRIPT
+    s|--rm|--rm --name $CONTAINER_NAME --hostname $CONTAINER_NAME|;
     s|(-v \\\$HOME:\\\$HOME)|\\1 $DCK_VOLS $DO_ZELLIJ_AUTO_EXIT $DO_NO_ZELLIJ|;
 "
 [[ -z "$DOCKER_USER" ]] || SED_SCRIPT="$SED_SCRIPT "'
@@ -33,4 +37,4 @@ DOCKERSH=cs_dockersh
 [ -r "${SCRIPT_SRC}/${DOCKERSH}" ] || SCRIPT_SRC=/file_server_var2/scripts
 ! [ -r "${SCRIPT_SRC}/${DOCKERSH}" ] && printf "Can't find %s source!\n" "${DOCKERSH}" >&1 && exit 1 || true
 ${SCRIPT_SRC}/login_to_aws_ecr.sh
-exec bash <( sed -Ee "$SED_SCRIPT" "${SCRIPT_SRC}/${DOCKERSH}" ) ${HUBLE:-keep-hubble-latest} ${1:+"${@}"}
+exec bash ${SET_X:-} <( sed -Ee "$SED_SCRIPT" "${SCRIPT_SRC}/${DOCKERSH}" ) ${HUBLE:-keep-hubble-latest} ${1:+"${@}"}
