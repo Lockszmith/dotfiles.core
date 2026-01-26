@@ -271,6 +271,7 @@ do_ssh() {
     SSH_CMD="${*}"
     [ -z "$SSHPASS" ] || SSH_PASS="${SSH_PASS:-$(command -v sshpass) -e}"
     SSH_CLI="ssh ${SSH_ARGS}"
+    [ "${MOSH:-:}" != ":" ] || MOSH=''
     if [ -n "$MOSH" ] && [ ${#CMDs} -eq 0 ]; then
         SSH_CLI="$MOSH --ssh='$SSH_CLI'"
     fi
@@ -279,9 +280,9 @@ do_ssh() {
         KDL_PATH="$HOME/.config/zellij/layouts/ssh_${1}.kdl"
 
         [ -r "$KDL_PATH" ] \
-        && rm  "$KDL_PATH"
+        && rm "$KDL_PATH"
 
-        TAB_NAME="$( echo "${1}" | tr '[:lower:]' '[:upper:]' )"
+        TAB_NAME="$( echo "${1}" | tr '[:lower:]' '[:upper:]' )${MOSH:+[m]}"
         cat "$HOME/.config/zellij/layouts/ssh_tmpl.kdl.tmpl" | \
         SSHPASS="$SSHPASS" SSH_PASS="$SSH_PASS" \
         SSH_CLI="$SSH_CLI" SSH_CMD="$SSH_CMD" \
@@ -307,6 +308,7 @@ do_ssh() {
 
 CS_DBG="${CS_DBG:-var-cs-dbg}"
 do_cs-dbg() {
+    MOSH="${MOSH:-$(command -v mosh || true)}"
     do_ssh ${CS_DBG}
 }
 
