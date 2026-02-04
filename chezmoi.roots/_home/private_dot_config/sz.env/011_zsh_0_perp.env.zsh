@@ -22,7 +22,7 @@ skip_global_compinit=1
 # SZ_TPUT_END=$(tput cup 9999 0)
 # echo $SZ_TPUT_END 
 
-PS1="$(zsh -c '. <([ -n "$(echo /etc/*-release(N))" ] && cat /etc/*-release(N) | uniq -u || NAME="$VENDOR" ); echo "$NAME $VERSION_ID "')| ZSH ${ZSH_VERSION} LOADING >"
+PS1="$(zsh -c '. <([ -n "$(echo /etc/*-release(N))" ] && cat /etc/*-release(N) | grep '=' | uniq -u || NAME="$VENDOR" ); echo "$NAME $VERSION_ID "')| ZSH ${ZSH_VERSION} LOADING >"
 
 #""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 #"""                              Shell Settings                              """
@@ -62,4 +62,3 @@ setopt vi
 [[ -n "${DBG}" ]] && echo "ZSH preped"
 
 # vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
-
