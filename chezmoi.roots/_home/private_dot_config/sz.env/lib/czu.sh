@@ -54,27 +54,32 @@ env chezmoi git -- pull --autostash --rebase \
 && env chezmoi status $verbose $debug
 
 CZ_EXTR_SAVE="$CZ_EXTR"
+CZ_EZA_PREFIX="./"
 unset CZ_EXTR
 if [[ $all -eq 1 ]]; then
     export CZ_EXTR=1 IGNORE_EZA=1
     if [[ $eza -eq 1 ]]; then
         unset IGNORE_EZA
-        export CZ_EXTR=1
-        CZ_EZA_PREFIX="" \
+
+        CZ_EZA_PREFIX=${CZ_EZA_PREFIX} \
         env chezmoi status --include externals $debug $HOME/.local/bin/eza \
-            || (CZ_EZA_PREFIX='./' chezmoi status --include externals $debug $HOME/.local/bin/eza )
+            || unset CZ_EZA_PREFIX
+        [ -n "${CZ_EZA_PREFIX}" ] \
+            || chezmoi status --include externals $debug $HOME/.local/bin/eza
+	export CZ_EZA_PREFIX
     else
         env chezmoi status --include externals $debug
     fi
 
     echo Applying External changes...
+    CZ_EZA_PREFIX=${CZ_EZA_PREFIX} \
     PAGER="$CZ_PAGER" env chezmoi apply --interactive --include externals $verbose $debug
     cz-get-all-files refresh-cache > /dev/null
 fi
-echo Applying pending changes...
-PAGER="$CZ_PAGER" env chezmoi apply --less-interactive --verbose $verbose $debug
-
 export CZ_EXTR="$CZ_EXTR_SAVE"
 unset CZ_EXTR_SAVE
+
+echo Applying pending changes...
+PAGER="$CZ_PAGER" env chezmoi apply --less-interactive --verbose $verbose $debug
 
 [[ $refresh -ne 1 ]] || (printf "restarting shell...\n" >&2 && false ) || exec $SHELL -l

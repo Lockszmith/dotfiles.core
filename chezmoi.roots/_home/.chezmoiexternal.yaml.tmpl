@@ -79,6 +79,28 @@
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
 
+{{- if not (env "IGNORE_EZA") -}}
+{{- $path_prefix = (env "CZ_EZA_PREFIX") -}}
+
+{{- with $app_name := "eza" -}}
+{{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
+{{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/v%s/%s_%s.tar.gz" $repo $version $app_name ($myArch | replace "-musl" "-gnu") )
+        "path" (printf "%s%s" $path_prefix $app_name)
+        "refreshPeriod" $defaultRefresh
+) -}}
+{{-   $_ := set $externals (printf ".cache/zsh/completions/_%s" $app_name) (dict
+        "type" "archive-file"
+        "url" (printf "https://github.com/%s/releases/download/v%s/completions-%s.tar.gz" $repo $version $version)
+        "path" (printf "./target/completions-%s/_%s" $version $app_name)
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
+{{- end -}}
+
 {{- with $app_name := "lsd" -}}
 {{- with $repo := (printf "%s/%s" "lsd-rs" $app_name) -}}
 {{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
@@ -402,33 +424,6 @@
 
 {{/* cargo-binstall besed sources */}}
 {{- if and (lookPath "jq") (lookPath "cargo-binstall") -}}
-{{- if not (env "IGNORE_EZA") -}}
-{{- $path_prefix = (env "CZ_EZA_PREFIX") -}}
-{{- with $app_name := "eza" -}}
-{{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
-{{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
-{{- with $bin_url := (output "sh" "-c" (
-      list
-        "cargo-binstall --log-level debug --dry-run --no-track --no-confirm --json-output"
-        $app_name
-        "| jq \".fields | select ( .message == \\\"Downloading package\\\" )\""
-      | join " ") | fromJson
-    ).url
--}}
-{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
-        "type" "archive-file"
-        "url" $bin_url
-        "path" (printf "%s%s" $path_prefix $app_name)
-        "executable" true
-        "refreshPeriod" $defaultRefresh
-) -}}
-{{-   $_ := set $externals (printf ".cache/zsh/completions/_%s" $app_name) (dict
-        "type" "archive-file"
-        "url" (printf "https://github.com/%s/releases/download/v%s/completions-%s.tar.gz" $repo $version $version)
-        "path" (printf "./target/completions-%s/_%s" $version $app_name)
-        "executable" true
-        "refreshPeriod" $defaultRefresh
-) -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
 
 
 {{- with $app_name := "vivid" -}}
