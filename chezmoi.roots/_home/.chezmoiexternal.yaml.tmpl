@@ -26,6 +26,7 @@
 {{- $archive_type_short := or (get (dict "tar.gz" "tgz") $archive_type) $archive_type -}}
 {{- $path_prefix := "" -}}
 {{- $externals := dict -}}
+{{- $cz := .chezmoi -}}
 
 {{/*
 # valid arch strings:
@@ -85,12 +86,14 @@
 {{- with $app_name := "eza" -}}
 {{- with $repo := (printf "%s/%s" "eza-community" $app_name) -}}
 {{- with $version := trimPrefix "v" (gitHubLatestRelease $repo).GetTagName -}}
+{{- if (ne $cz.os "darwin" ) -}}
 {{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
         "type" "archive-file"
         "url" (printf "https://github.com/%s/releases/download/v%s/%s_%s.tar.gz" $repo $version $app_name ($myArch | replace "-musl" "-gnu") )
         "path" (printf "%s%s" $path_prefix $app_name)
         "refreshPeriod" $defaultRefresh
 ) -}}
+{{- end -}}
 {{-   $_ := set $externals (printf ".cache/zsh/completions/_%s" $app_name) (dict
         "type" "archive-file"
         "url" (printf "https://github.com/%s/releases/download/v%s/completions-%s.tar.gz" $repo $version $version)
@@ -425,6 +428,26 @@
 {{/* cargo-binstall besed sources */}}
 {{- if and (lookPath "jq") (lookPath "cargo-binstall") -}}
 
+{{- if (and (eq .chezmoi.os "darwin" ) (not (env "IGNORE_EZA"))) -}}
+
+{{- with $app_name := "eza" -}}
+{{- with $bin_url := (output "sh" "-c" (
+      list
+        "cargo-binstall --log-level debug --dry-run --no-track --no-confirm --json-output"
+        $app_name
+        "| jq \".fields | select ( .message == \\\"Downloading package\\\" )\""
+      | join " ") | fromJson
+    ).url
+-}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "archive-file"
+        "url" $bin_url
+        "path" $app_name
+        "refreshPeriod" $defaultRefresh
+) -}}
+{{- end -}}{{- end -}}
+
+{{- end -}}
 
 {{- with $app_name := "vivid" -}}
 {{- with $bin_url := (output "sh" "-c" (
