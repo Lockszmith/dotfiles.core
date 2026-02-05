@@ -7,22 +7,12 @@ is_cmd() { type -p -- "${@}" 2> /dev/null 1> /dev/null; }
 all_files="$(SET_X=: cz get-all-files )"
 
 ${SET_X:-:} -x
-# If no args: just fuzzy-pick from all (multi-select)
-if [ "$#" -eq 0 ]; then
-    if ! is_cmd tv >/dev/null 2>&1; then
-        echo "Error: tv not found (needed for interactive fuzzy selection with no args)" >&2
-        exit 2
-    else
-        <<<"${all_files}" tv --preview-command="cz preview '{1}'"
-        exit 0
-    fi
-fi
 
 # Process args
 declare -a singles=()             # resolved to one match or passed as-is when no match
 declare -a multi_candidates=()    # accumulate ambiguous matches to fuzzy-pick from
 
-for arg in "${@}"; do
+for arg in "${@:-}"; do
     # Substring match (literal). Switch grep -F to -E if you want regex patterns.
     matches="$(<<<"$all_files" grep -E -- "^.: (.*/)?${arg}\$" || true)"
     [ -n "$matches" ] || matches="$(<<<"$all_files" grep -E -- "^.: .*${arg}.*\$" || true)"
@@ -53,7 +43,7 @@ if [ "${#multi_candidates[@]}" -gt 0 ]; then
         while read -r _sel; do
             [ -z "$_sel" ] || picked+=("$_sel")
         done <<<"$( <<<"$all_files" \
-            tv --input-prompt="'${arg}'?> " --preview-command="cz preview '{1}'" --input="${arg}" \
+            tv ${arg:+--input-prompt="'${arg}'?> "} --preview-command="cz preview '{1}'" ${arg:+--input="${arg}"} \
             || true )"
     done <<<"$(printf "%s\n" "${multi_candidates[@]}" | uniq )"
 fi
