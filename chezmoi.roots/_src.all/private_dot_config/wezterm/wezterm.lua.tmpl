@@ -638,12 +638,48 @@ config.hide_tab_bar_if_only_one_tab = false
 local ENABLE_NATIVE_SSH_LAUNCHER = true
 
 if ENABLE_NATIVE_SSH_LAUNCHER then
-    -- Determine the native SSH binary based on OS
-    local ssh_binary = "ssh"
-    {{ if eq .chezmoi.os "windows" -}}
-    -- On Windows, use ssh.exe (from OpenSSH or Git)
-    ssh_binary = "ssh.exe"
-    {{- end }}
+    -- Helper function to check if a command exists on PATH (uses wezterm API to avoid visible windows)
+    local function command_exists(cmd)
+        {{ if eq .chezmoi.os "windows" -}}
+        local success, stdout, stderr = wezterm.run_child_process({"cmd.exe", "/c", "where", cmd})
+        {{ else -}}
+        local success, stdout, stderr = wezterm.run_child_process({"sh", "-c", "command -v " .. cmd})
+        {{- end }}
+        return success and stdout and stdout ~= ""
+    end
+
+    -- Helper function to check if a file exists
+    local function file_exists(path)
+        local f = io.open(path, "r")
+        if f then
+            f:close()
+            return true
+        end
+        return false
+    end
+
+    -- Hardcoded paths for SSH wrapper scripts
+    local home = wezterm.home_dir
+    local connect_ssh_path = home .. "/.config/sz.env/pwsh/Scripts/base.win/Connect-SSH.cmd"
+    local safe_ssh_path = home .. "/.config/sz.env/pwsh/Scripts/base/safe-ssh.cmd"
+
+    -- Determine the SSH binary: prefer connect-ssh or safe-ssh if available
+    local ssh_binary
+    if command_exists("connect-ssh") then
+        ssh_binary = "connect-ssh"
+    elseif file_exists(connect_ssh_path) then
+        ssh_binary = connect_ssh_path
+    elseif command_exists("safe-ssh") then
+        ssh_binary = "safe-ssh"
+    elseif file_exists(safe_ssh_path) then
+        ssh_binary = safe_ssh_path
+    else
+        {{ if eq .chezmoi.os "windows" -}}
+        ssh_binary = "ssh.exe"
+        {{ else -}}
+        ssh_binary = "ssh"
+        {{- end }}
+    end
 
     -- Build the launch menu
     config.launch_menu = config.launch_menu or {}
@@ -851,6 +887,9 @@ if ENABLE_NATIVE_SSH_LAUNCHER then
             label = label,
             args = { ssh_binary, entry.host },
             domain = { DomainName = "local" },
+            set_environment_variables = {
+                SSH_HOST = entry.host,
+            },
         })
     end
 
@@ -864,7 +903,48 @@ end
 -- End of Native SSH Launcher Integration
 -- =============================================================================
 
+-- =============================================================================
+-- Custom Tab Title: Show SSH host name instead of process name
+-- =============================================================================
+wezterm.on("format-tab-title", function(tab, tabs, panes, cfg, hover, max_width)
+    local pane = tab.active_pane
+    local title = nil
+
+    -- First, check for SSH_HOST user var (set by Connect-SSH.cmd or safe-ssh via OSC 1337)
+    if pane.user_vars and pane.user_vars.SSH_HOST then
+        title = pane.user_vars.SSH_HOST
+    end
+
+    -- If no user var, try to extract from pane title
+    if not title then
+        local pane_title = pane.title or ""
+        -- Pattern: user@host at start
+        title = pane_title:match("^(%S+@%S+)")
+        -- Pattern: "ssh host" or "Connect-SSH host"
+        title = title or pane_title:match("[/\\]?[Ss][Ss][Hh][%.exemd]*%s+(%S+)$")
+        title = title or pane_title:match("[Cc]onnect%-[Ss][Ss][Hh][%.cmd]*%s+(%S+)")
+        -- Pattern: hostname with dots (no spaces)
+        if not title and not pane_title:match("%s") and pane_title:match("%.") then
+            title = pane_title
+        end
+    end
+
+    -- Fall back to process name
+    if not title or title == "" then
+        local process_name = pane.foreground_process_name or ""
+        title = process_name:match("([^/\\]+)$") or pane.title or "?"
+    end
+
+    -- Truncate if needed
+    if #title > max_width then
+        title = wezterm.truncate_right(title, max_width - 1) .. "…"
+    end
+
+    return title
+end)
+
 -- and finally, return the configuration to wezterm
 return config
 
 -- vim: set ft=lua expandtab tabstop=4 shiftwidth=4:
+
