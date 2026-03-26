@@ -4,5 +4,6 @@ choices:
     - "VAST.personal"
     - "VAST.dockersh"
     - "cz-prefer-delta"
+    - "with-eza"
     - "with-atuin"
     - "withBrowser"
