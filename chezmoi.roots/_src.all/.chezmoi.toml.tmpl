@@ -56,7 +56,10 @@
 
 {{- /* Zellij Leader Modifier */ -}}
 {{- $zellijLeaderModifier := dig "style" "zellij" "leader-modifier" "" . -}}
-{{- $zellijLeaderModifierChoices := list "Alt" "Ctrl" -}}
+{{- $zellijLeaderModifierChoices := (
+        list .chezmoi.sourceDir ".chezmoidata" "zellij.yaml" |
+        join "/" | include | fromYaml
+    ).choices.zellijLeaderModifier -}}
 {{- if or $reconfigStyle (not $zellijLeaderModifier) -}}
 {{-   $zellijLeaderModifierDefault := $zellijLeaderModifier | default "Alt" -}}
 {{-   $zellijLeaderModifierSelected := promptMultichoice "Choose zellij Leader Modifier" $zellijLeaderModifierChoices $zellijLeaderModifierDefault -}}
@@ -77,14 +80,11 @@
 
 {{- /* Zellij Theme */ -}}
 {{- $zellijTheme := dig "style" "zellij" "theme" "" . -}}
-{{- $zellijThemeChoices := list "default"
-        "ansi" "ao" "atelier-sulphurpool" "ayu_mirage" "ayu_dark"
-        "catppuccin-frappe" "catppuccin-macchiato" "cyber-noir" "blade-runner"
-        "retro-wave" "dracula" "everforest-dark" "gruvbox-dark" "iceberg-dark"
-        "kanagawa" "lucario" "menace" "molokai-dark" "night-owl" "nightfox"
-        "nord" "one-half-dark" "onedark" "solarized-dark" "tokyo-night-dark"
-        "tokyo-night-storm" "tokyo-night" "vesper"
--}}
+{{- $zellijThemeChoices := (
+        list .chezmoi.sourceDir ".chezmoidata" "zellij.yaml" |
+        join "/" | include | fromYaml
+    ).choices.zellijTheme -}}
+
 {{- if or $reconfigStyle (not $zellijTheme) -}}
 {{-   $zellijThemeDefault := $zellijTheme | default "default" -}}
 {{-   $zellijThemeSelected := promptMultichoice (list "Choose zellij theme *(only first selection is chosen - default is '" $zellijThemeDefault "')" | join "") $zellijThemeChoices $zellijThemeDefault -}}
