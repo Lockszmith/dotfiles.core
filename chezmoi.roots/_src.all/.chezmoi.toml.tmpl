@@ -1,6 +1,11 @@
 # source by .chezmoi.toml.tmpl, it is recommended to edit with
 #   cz edit-config-template && cz init
 
+{{- /* Reconfig flags - set any of these to force prompting */ -}}
+{{- $reconfigAll   := env "CZ_RECONFIG" -}}
+{{- $reconfigFlags := or $reconfigAll (env "CZ_RECONFIG_FLAGS") -}}
+{{- $reconfigStyle := or $reconfigAll (env "CZ_RECONFIG_STYLE") -}}
+
 {{- $githubToken := get . "githubToken" | default "" -}}
 {{- $githubToken = or (
         env "CZ_GITHUB_ACCESS_TOKEN"
@@ -27,9 +32,7 @@
 {{- $szEnvFlags  = slice $szEnvFlags 0 (sub (len $szEnvFlags) 1) -}}
 
 {{- $hasExistingFlags := ne (dig "sz" "env" "flags" "" .) "" -}}
-{{- $shouldPrompt := or (env "CZ_RECONFIG_FLAGS") (not $hasExistingFlags) -}}
-
-{{- if $shouldPrompt -}}
+{{- if or $reconfigFlags (not $hasExistingFlags) -}}
 {{-   $szEnvFlagsSelected := promptMultichoice "Choose sz.env flags" $szEnvFlagsChoices $szEnvFlags -}}
 {{-   $szEnvFlags = (or $szEnvFlagsSelected $szEnvFlags) | join " " -}}
 {{- else -}}
@@ -51,18 +54,29 @@
     ) ( list .chezmoi.username " (@" $sysname ")" | join ""
     )) -}}
 
-{{- $zellijLeaderModifier := list (dig "style" "zellij" "leader-modifier" "Alt" .) "dummy" | join " " | splitList " " -}}
-{{- $zellijLeaderModifier  = slice $zellijLeaderModifier 0 (sub (len $zellijLeaderModifier) 1) -}}
+{{- /* Zellij Leader Modifier */ -}}
+{{- $zellijLeaderModifier := dig "style" "zellij" "leader-modifier" "" . -}}
 {{- $zellijLeaderModifierChoices := list "Alt" "Ctrl" -}}
-{{- $zellijLeaderModifierSelected := promptMultichoice "Choose zellij Leader Modifyer" $zellijLeaderModifierChoices $zellijLeaderModifier -}}
-{{- $zellijLeaderModifier = $zellijLeaderModifierSelected | join " " -}}
+{{- if or $reconfigStyle (not $zellijLeaderModifier) -}}
+{{-   $zellijLeaderModifierDefault := $zellijLeaderModifier | default "Alt" -}}
+{{-   $zellijLeaderModifierSelected := promptMultichoice "Choose zellij Leader Modifier" $zellijLeaderModifierChoices $zellijLeaderModifierDefault -}}
+{{-   $zellijLeaderModifier = (or $zellijLeaderModifierSelected $zellijLeaderModifierDefault) | join " " -}}
+{{- end -}}
 
-{{- $zellijLeaderKey := promptString "Choose zellij Leader Key" (dig "style" "zellij" "leader-key" "a" .) -}}
+{{- /* Zellij Leader Key */ -}}
+{{- $zellijLeaderKey := dig "style" "zellij" "leader-key" "" . -}}
+{{- if or $reconfigStyle (not $zellijLeaderKey) -}}
+{{-   $zellijLeaderKey = promptString "Choose zellij Leader Key" ($zellijLeaderKey | default "a") -}}
+{{- end -}}
 
-{{- $zellijFrames := dig "style" "zellij" "frames" "y" . -}}
-{{- $zellijFrames  = promptChoice "Should zellij show pane frames? (y/n)" (list "y" "n" ) $zellijFrames -}}
+{{- /* Zellij Frames */ -}}
+{{- $zellijFrames := dig "style" "zellij" "frames" "" . -}}
+{{- if or $reconfigStyle (not $zellijFrames) -}}
+{{-   $zellijFrames = promptChoice "Should zellij show pane frames? (y/n)" (list "y" "n") ($zellijFrames | default "y") -}}
+{{- end -}}
 
-{{- $zellijTheme := dig "style" "zellij" "theme" "default" . -}}
+{{- /* Zellij Theme */ -}}
+{{- $zellijTheme := dig "style" "zellij" "theme" "" . -}}
 {{- $zellijThemeChoices := list "default"
         "ansi" "ao" "atelier-sulphurpool" "ayu_mirage" "ayu_dark"
         "catppuccin-frappe" "catppuccin-macchiato" "cyber-noir" "blade-runner"
@@ -71,13 +85,22 @@
         "nord" "one-half-dark" "onedark" "solarized-dark" "tokyo-night-dark"
         "tokyo-night-storm" "tokyo-night" "vesper"
 -}}
-{{- $zellijThemeSelected := promptMultichoice (list "Choose zellij theme *(only first selection is chose - default is '" $zellijTheme "')" | join "") $zellijThemeChoices $zellijTheme -}}
-{{- $zellijTheme = first $zellijThemeSelected | default $zellijTheme -}}
+{{- if or $reconfigStyle (not $zellijTheme) -}}
+{{-   $zellijThemeDefault := $zellijTheme | default "default" -}}
+{{-   $zellijThemeSelected := promptMultichoice (list "Choose zellij theme *(only first selection is chosen - default is '" $zellijThemeDefault "')" | join "") $zellijThemeChoices $zellijThemeDefault -}}
+{{-   $zellijTheme = first $zellijThemeSelected | default $zellijThemeDefault -}}
+{{- else -}}
+{{-   $zellijTheme = $zellijTheme -}}
+{{- end -}}
 
-{{- $promptStyle := dig "style" "prompt" "cool" . -}}
+{{- /* Prompt Style */ -}}
+{{- $promptStyle := dig "style" "prompt" "" . -}}
 {{- $promptStyleChoices := list "cool" "hot" "lux" -}}
-{{- $promptStyleSelected := promptMultichoice (list "Choose prompt style *(only first selection is chose - default is '" $promptStyle "')" | join "") $promptStyleChoices $promptStyle -}}
-{{- $promptStyle = first $promptStyleSelected | default $promptStyle -}}
+{{- if or $reconfigStyle (not $promptStyle) -}}
+{{-   $promptStyleDefault := $promptStyle | default "cool" -}}
+{{-   $promptStyleSelected := promptMultichoice (list "Choose prompt style *(only first selection is chosen - default is '" $promptStyleDefault "')" | join "") $promptStyleChoices $promptStyleDefault -}}
+{{-   $promptStyle = first $promptStyleSelected | default $promptStyleDefault -}}
+{{- end -}}
 
 {{- $scriptTempDir   := or ( get . "sz.os.scriptTempDir"   ) ( env "CZ_SCRIPT_TEMPDIR"      ) -}}
 {{- $chassisType     := or ( get . "sz.os.chassisType"     ) ( env "CZ_CHASSIS"             ) -}}

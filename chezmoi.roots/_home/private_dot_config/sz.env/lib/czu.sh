@@ -2,13 +2,14 @@
 # shellcheck disable=SC1090
 
 # This entire code is evaluated inside czu() function from ~/.config/sz.env/981_chezmoi.env
-local bin=0 all=0 eza=0 init=1 refresh=1 interact='--less-interactive' verbose='' debug='' prompts='--promptDefaults'
+local bin=0 all=0 eza=0 init=1 refresh=1 interact='--less-interactive' verbose='' debug='' CZ_RECONFIG=''
 while [[ $# -gt 0 ]]; do
     case "$1" in
         '--bin') bin=1 ;;
         '--no-bin') bin=1 ;;
         '--no-init') init=0 ;;
-        '--reinit') prompts='' ;;
+        '--reinit') CZ_RECONFIG_FLAGS=1 ;;
+        '--reinit=all') CZ_RECONFIG=1 ;;
         '--all') all=1; bin=1; eza=1 ;;
         '--eza') eza=1 ;;
         '--no-eza') eza=0 ;;
@@ -22,7 +23,7 @@ while [[ $# -gt 0 ]]; do
             '  czu ' \
             '  czu [--help]' \
             '  czu [--no-init] [[--bin | --all [--no-bin]] [--eza | --no-eza]] ' \
-            '      [--yes] [--reinit] [--no-refresh] [--quiet] [--debug]' \
+            '      [--yes] [--reinit[=all]] [--no-refresh] [--quiet] [--debug]' \
             '' \
             'Description:' \
             #123456789012345678901234567890123456789012345678901234567890123456789012
@@ -50,7 +51,7 @@ if [[ $bin -eq 1 ]]; then
     env chezmoi upgrade
 fi
 env chezmoi git -- pull --autostash --rebase \
-&& env chezmoi init $prompts $verbose $debug \
+&& CZ_RECONFIG="$CZ_RECONFIG" env chezmoi init $verbose $debug \
 && env chezmoi status $verbose $debug
 
 CZ_EXTR_SAVE="$CZ_EXTR"
