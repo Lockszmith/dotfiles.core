@@ -420,11 +420,9 @@
         (env "TELEPORT_MAJOR"))
       | first
 ) -}}
-{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
-        "type" "archive-file"
+{{-   $_ := set $externals ".cache/teleport/package" (dict
+        "type" "archive"
         "url" (printf "https://cdn.teleport.dev/teleport-%s-%s-bin.tar.gz" $version $myArch) 
-        "path" (printf "teleport/%s" $app_name)
-        "executable" true
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end }}{{- end -}}
 

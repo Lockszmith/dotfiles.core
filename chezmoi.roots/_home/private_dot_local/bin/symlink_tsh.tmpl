@@ -1,0 +1,7 @@
+{{- $extPath := (list (env "HOME") ".cache/teleport/package/teleport/tsh.app/Contents/MacOS/tsh" | join "/") }}
+{{- if not (stat $extPath) }}
+{{- $extPath  = (list (env "HOME") ".cache/teleport/package/teleport/tsh" | join "/") }}
+{{- end }}
+{{- if stat $extPath }}
+{{- $extPath }}
+{{- end }}
