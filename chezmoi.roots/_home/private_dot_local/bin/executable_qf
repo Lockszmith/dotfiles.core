@@ -1,4 +1,17 @@
 #! /usr/bin/env bash
 
-find -maxdepth ${DEPTH:-4} -type f -name "${@}"
+DEPTH=${DEPTH:-${D:-4}}
+TYPE=${TYPE:-${T:-f}}
+PRUNE="${PRUNE:-}"
+
+FD="$(command -v fd)"}
+if [[ -z "$FD" || "$FD" = ":" ]]; then
+    FIND='find . --regextype egrep'
+    (find . --version 2>&1 || true) | grep -q 'GNU findutils' || FIND='find -E .'
+
+    [ ${#PRUNE} -gt 0 ] || PRUNE="( -type d -name vapi -or -name traces ) -prune -or"
+    ${FIND} -maxdepth ${DEPTH} ${PRUNE} -type ${TYPE} -iregex "${@:?}" -print
+else
+    fd --type ${TYPE} "${@:?}" .
+fi
 
