@@ -25,8 +25,17 @@
     ).choices.szEnvFlags -}}
 {{- $szEnvFlags := list (dig "sz" "env" "flags" "default" .) "dummy" | join " " | splitList " " -}}
 {{- $szEnvFlags  = slice $szEnvFlags 0 (sub (len $szEnvFlags) 1) -}}
-{{- $szEnvFlagsSelected := promptMultichoice "Choose sz.env flags" $szEnvFlagsChoices $szEnvFlags -}}
-{{- $szEnvFlags = (or $szEnvFlagsSelected $szEnvFlags) | join " " -}}
+
+{{- $hasExistingFlags := ne (dig "sz" "env" "flags" "" .) "" -}}
+{{- $shouldPrompt := or (env "CZ_RECONFIG_FLAGS") (not $hasExistingFlags) -}}
+
+{{- if $shouldPrompt -}}
+{{-   $szEnvFlagsSelected := promptMultichoice "Choose sz.env flags" $szEnvFlagsChoices $szEnvFlags -}}
+{{-   $szEnvFlags = (or $szEnvFlagsSelected $szEnvFlags) | join " " -}}
+{{- else -}}
+{{-   $szEnvFlags = $szEnvFlags | join " " -}}
+{{- end -}}
+
 {{- $sysuser := promptStringOnce . "sysuser" "System user" (or (
         env "CZ_SYSUSER"
     ) ( .chezmoi.username
