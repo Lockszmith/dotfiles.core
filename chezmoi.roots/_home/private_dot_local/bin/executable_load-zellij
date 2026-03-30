@@ -61,7 +61,11 @@ ${SET_X-:} -x
         [ "${TMP_ZELLIJ_EXEC}" = "exec" ] || TMP_ZELLIJ_EXEC=
 
         if [[ $# -eq 0 ]]; then
-            ${TMP_ZELLIJ_EXEC:-} env zellij attach -c "$USER@$( (hostname || uname -n || sysctl -n kernel.hostname) 2>/dev/null || printf '??' )"
+            local SESSION_NAME="$USER@$( (hostname || uname -n || sysctl -n kernel.hostname) 2>/dev/null || printf '??' )"
+            if [ ${#SESSION_NAME} -gt 20 ]; then
+                SESSION_NAME="${SESSION_NAME:0:17}..."
+            fi
+            ${TMP_ZELLIJ_EXEC:-} env zellij attach -c "$SESSION_NAME"
         else
             ${TMP_ZELLIJ_EXEC:-} env zellij "${@}"
         fi
