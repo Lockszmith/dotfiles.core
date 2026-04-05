@@ -4,6 +4,20 @@ set -eo pipefail
 
 PREFIXED=0
 
+get-cz-special() {
+    local dirs=($(cz data | jq -r '.chezmoi.configFile + "\n" + .chezmoi.sourceDir'))
+    local cfg="${dirs[0]}" tmpl="${dirs[1]}"
+    local cfgFile="${cfg#${HOME}/}"
+    cfgFile="${cfgFile##.*/}"
+    tmpl="${tmpl}/.${cfgFile}"
+    tmpl=$(echo "${tmpl}"* 2> /dev/null) || true
+    [[ "$tmpl" =~ \*$ ]] && tmpl="${tmpl}/.${cfgFile}.tmpl" || true
+    printf '%s [%s]\n' $(
+        [ -r "$cfg" ] && printf '%s config' "${cfg#${HOME}/}"
+    ) $(
+        [ -n "$tmpl" ] && printf '%s config-template' "${tmpl#${HOME}/}"
+    )
+}
 get-cz-managed() {
     SET_X=: cz managed --exclude=remove,dirs,externals || true
 }
@@ -43,7 +57,7 @@ get-all() {
     local sets=()
     while [ -n "${1:-}" ]; do
         case "$1" in
-            "all" ) sets=(managed unmanaged) ;;
+            "all" ) sets=(special managed unmanaged) ;;
             "refresh-cache") get-cz-externals --force ;;
             * )
                     sets+=("$1") ;;
@@ -53,7 +67,7 @@ get-all() {
 
     local sU=''
     if [ "${#sets[@]}" -eq 1 ]; then
-        eval "get-cz-${sets}"
+        eval "get-cz-${sets}" | sed -Ee 's|\{home\}/||; s|\{src.home\}/||;'
     else
         ( for s in "${sets[@]}"; do
             sU="$(<<<"${s}?" tr '[:lower:]' '[:upper:]')"

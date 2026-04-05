@@ -50,8 +50,14 @@ fi
 
 # Combine singles + picked, make unique, and output
 printf "%s\n" "${singles[@]}" "${picked[@]}" | uniq | grep -Ev '^$' \
-    | sed -Ee 's|^([UM]: )?|\1~/|; s|~/([~/])|\1|; s|\$|\\$\\|g; s|^([UM]: )?~/|\1$HOME/|' \
-    | envsubst | sed -Ee 's|\\\$\\|$|g'
+    | sed -Ee '
+        s|^(S: )?|\1|;
+        s|^([SUM]: )?|\1~/|;
+        s|~/([~/])|\1|;
+        s|\$|\\$\\|g;
+        s|^([SUM]: )?~/|\1$HOME/|;
+    ' | envsubst \
+    | sed -Ee 's|\\\$\\|$|g'
 # | sed -Ee 's|^([UM]: )?|\1~/|; s|~/([~/])|\1|; s|\$|\\$\\|g; s|^([UM]: )?~/|\1$HOME/|' | envsubst | sed -Ee 's|\\\$\\|$|g'
 
 ${SET_X:-:} +x

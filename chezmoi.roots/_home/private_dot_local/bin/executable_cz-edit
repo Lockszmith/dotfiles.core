@@ -18,6 +18,10 @@ if [ "$#" -eq 1 ] && [ "$1" == "--help" ]; then
         '  targets are matched by fuzzy matching, presenting a fuzzy search UI (via' \
         '  television) unless a single match is found.' \
         '' \
+        '  below are special targets:' \
+        '    config          equivalent to chezmoi edit-config' \
+        '    config-template equivalent to chezmoi edit-config-template' \
+        '' \
         'Usage:' \
         '  chezmoi edit targets...' \
         '' \
