@@ -337,7 +337,7 @@ _do_ssh_with_tunnel() {
 
 _go_launch() {
     local SRCH=() NO_MUX=0 DEST='' ECHO=':' LOGIN='_do_login'
-    local ZELLIJ_DEST=/tmp/vast-teleport/zellij/teleport
+    local ZELLIJ_DEST="${HOME}/.cache/vast-teleport/zellij/teleport"
     local SSHUSER="${SSHUSER:-}"
     [[ -n "$1" ]] || usage-launch
     while [[ -n "$1" ]]; do
