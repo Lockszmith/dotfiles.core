@@ -2,7 +2,7 @@
 # shellcheck disable=SC1090
 
 # This entire code is evaluated inside czu() function from ~/.config/sz.env/981_chezmoi.env
-local bin=0 all=0 init=1 refresh=1 interact='--less-interactive' verbose='' debug='' CZ_RECONFIG=''
+local bin=0 all=0 init=1 refresh=1 interact='--less-interactive' verbose='' debug='' CZ_RECONFIG='' CZ_RECONFIG_FLAGS=''
 while [[ $# -gt 0 ]]; do
     case "$1" in
         '--bin') bin=1 ;;
@@ -48,7 +48,7 @@ if [[ $bin -eq 1 ]]; then
     env chezmoi upgrade
 fi
 env chezmoi git -- pull --autostash --rebase \
-&& CZ_RECONFIG="$CZ_RECONFIG" env chezmoi init $verbose $debug \
+&& CZ_RECONFIG="$CZ_RECONFIG" CZ_RECONFIG_FLAGS="$CZ_RECONFIG_FLAGS" env chezmoi init $verbose $debug \
 && env chezmoi status $verbose $debug
 
 CZ_EXTR_SAVE="$CZ_EXTR"
