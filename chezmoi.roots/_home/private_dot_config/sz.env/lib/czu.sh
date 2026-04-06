@@ -65,6 +65,6 @@ export CZ_EXTR="$CZ_EXTR_SAVE"
 unset CZ_EXTR_SAVE
 
 echo Applying pending changes...
-PAGER="$CZ_PAGER" env chezmoi apply --less-interactive --verbose $verbose $debug
+PAGER="$CZ_PAGER" env chezmoi apply --less-interactive $verbose $debug
 
 [[ $refresh -ne 1 ]] || (printf "restarting shell...\n" >&2 && false ) || exec $SHELL -l
