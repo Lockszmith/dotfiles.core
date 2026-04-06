@@ -4,19 +4,24 @@ set -eo pipefail
 
 PREFIXED=0
 
+get-cz-special-case() {
+    local name="${1:?}" base="${2:?}" default="$2${3:-}" filePath
+    filePath=$(echo "${base}"* 2> /dev/null) || true
+    [[ "$filePath" =~ \*$ ]] && filePath="${default}" || true
+    eval "[ ${TEST:--n} \"$filePath\" ]" && printf '%s {%s}\n' "${filePath#${HOME}/}" "$name" || true
+}
+
 get-cz-special() {
     local dirs=($(cz data | jq -r '.chezmoi.configFile + "\n" + .chezmoi.sourceDir'))
-    local cfg="${dirs[0]}" tmpl="${dirs[1]}"
+    local cfg="${dirs[0]}" srcDir="${dirs[1]}"
     local cfgFile="${cfg#${HOME}/}"
     cfgFile="${cfgFile##.*/}"
-    tmpl="${tmpl}/.${cfgFile}"
-    tmpl=$(echo "${tmpl}"* 2> /dev/null) || true
-    [[ "$tmpl" =~ \*$ ]] && tmpl="${tmpl}/.${cfgFile}.tmpl" || true
-    printf '%s {%s}\n' $(
-        [ -r "$cfg" ] && printf '%s config' "${cfg#${HOME}/}"
-    ) $(
-        [ -n "$tmpl" ] && printf '%s config-template' "${tmpl#${HOME}/}"
-    )
+    local tmpl="${srcDir}/.${cfgFile}" ext="${srcDir}/.chezmoiexternal"
+
+    get-cz-special-case 'config'            "${cfg}"
+    get-cz-special-case 'config-template'   "${tmpl}" ".tmpl"
+    get-cz-special-case 'externals'         "${ext}"
+    get-cz-special-case 'cz.szEnvs'         "${tmpl}"
 }
 get-cz-managed() {
     SET_X=: cz managed --exclude=remove,dirs,externals || true

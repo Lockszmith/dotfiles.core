@@ -34,9 +34,14 @@ if [ "$#" -eq 1 ] && [ "$1" == "--help" ]; then
 fi
 
 FILES="$(SET_X=: cz select-files "${@}")"
-[ -n "$FILES" ] \
-&& ${VISUAL:-${EDITOR:-vi}} $(SET_X=: <<<"$FILES" cz smart-path) \
-&& (${CZA:-env} chezmoi apply --interactive $(<<<"$FILES" sed -Ee 's|^.: ||'))
+if [ -n "$FILES" ]; then
+    ${VISUAL:-${EDITOR:-vi}} $(SET_X=: <<<"$FILES" cz smart-path)
+fi
+
+APPLY="$(<<<"$FILES" grep '^M:' | sed -Ee 's|^.: ||')"
+if [ -n "$APPLY" ]; then
+    ${CZA:-env} chezmoi apply --interactive $APPLY
+fi
 
 ${SET_X:-:} +x
 # vim: set ft=sh sw=4 sts=4 et:
