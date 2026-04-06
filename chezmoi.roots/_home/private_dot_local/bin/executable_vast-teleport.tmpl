@@ -383,12 +383,12 @@ _go() {
     while true; do
         case "$1" in
             --debug) shift; set -x; ;;
-            login)   shift; _do_login "${@}"; break ;;
+            login)   shift; _do_login "${@}";   break ;;
             upgrade) shift; _do_upgrade "${@}"; break ;;
-            get)     shift; _go_get "${@}"; break ;;
-            search)  shift; _do_search "${@}"; break ;;
-            ssh)     shift; _do_ssh "${@}"; break ;;
-            launch)  shift; _go_launch "${@}"; break ;;
+            get)     shift; _go_get "${@}";     break ;;
+            search)  shift; _do_search "${@}";  break ;;
+            ssh)     shift; _do_ssh "${@}";     break ;;
+            launch)  shift; _go_launch "${@}";  break ;;
             *)       usage ;;
         esac
     done
@@ -398,5 +398,5 @@ _go "${@}"
 
 {{ end -}}
 {{/*
-vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+vim: set ft=bash expandtab tabstop=4 shiftwidth=4:
 */}}
