@@ -16,6 +16,7 @@ usage() {
         '  ssh          Connect over ssh (to CS-DBG by default)' \
         "  cs-dbg       Connect to CS-DBG (${CS_DBG}) utilizes 'ssh' command (above)" \
         '  get          various VAST related queries' \
+        '  code         Perform code related maintenance' \
         '' \
         ''
     exit 2
@@ -310,6 +311,64 @@ CS_DBG="${CS_DBG:-var-cs-dbg}"
 do_cs-dbg() {
     MOSH="${MOSH:-$(command -v mosh || true)}"
     do_ssh ${CS_DBG}
+}
+
+usage-code() {
+    printf '%s\n' \
+        'code maintenance actions' \
+        '' \
+        'Usage:' \
+        "  [<ENV VARS>] ${SCRIPT_NAME} code [<code_args>]" \
+        '' \
+        'Arguments:' \
+        '  init-orion' \
+        '' \
+        'The following ENV variables would change the behavior:' \
+        '    CODE_ROOT  location of the code root, default is ~/VAST/code' \
+        '' \
+        'Examples:' \
+        ''
+    exit 2
+}
+
+do_code_prep-orion() {
+    CODE_ROOT=${CODE_ROOT:-~/VAST/code}
+    mkdir -p "${CODE_ROOT}"
+
+    git-sync() {
+        local branch=$(git branch --show-current)
+        if [ -z "$branch" ]; then
+            echo "Detached HEAD – set a branch or run: git checkout <branch>" >&2
+            return 1
+        fi
+        git fetch ${@:---all --force} && git reset --hard "origin/$branch"
+
+    }
+
+    safe_refresh() {
+        [ -d "${CODE_ROOT}/$1" ] || git clone https://git.vastdata.com/dev/$1.git "${CODE_ROOT}/$1" && (cd "${CODE_ROOT}/$1"; git-sync)
+    }
+
+    safe_refresh orion
+    safe_refresh cursorfiles
+    safe_refresh infra
+
+    # Initialize cursorfiles
+    (cd "${CODE_ROOT}/cursorfiles"; ./cursorfiles.py install "${CODE_ROOT}/orion")
+
+    # Start cursor
+    cursor "${CODE_ROOT}/orion"
+}
+
+do_code() {
+    if [[ $# -eq 0 || "$1" == '--help' ]]; then
+        usage-code
+        return $?
+    fi
+
+    case "$1" in
+        init-orion ) do_code_init-orion ;;
+    esac
 }
 
 _main_() {

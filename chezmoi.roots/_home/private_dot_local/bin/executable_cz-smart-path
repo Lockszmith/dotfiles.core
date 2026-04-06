@@ -13,7 +13,7 @@ ${SET_X:-:} -x
 eval "printf '%s\n' $(                          # Build a printf multi-line command so that eval will evaluate managed paths
 sed -Ee '
     s|"|\\"|g;                                  # preserve quotes
-    s|(S: )?([^\[]+) \[[[:alnum:]_ -]+\]|U: \2|;
+    s|(S: )?([^\{]+) \{[[:alnum:]_ -]+\}|U: \2|;
     s|^|U: |; s|^U: ([SMU]: )|\1|;              # Add U: where type is missing
     s|^([SUM]: )([^~/"].*)$|~/"\2"|;            # Add quotes (for printf being eval-ed)
     s|^M: (.*)$|\$(cz source-path "\1")|;       # resolve chezmoi managed path

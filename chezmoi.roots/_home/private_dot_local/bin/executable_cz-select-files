@@ -13,8 +13,9 @@ declare -a singles=()             # resolved to one match or passed as-is when n
 declare -a multi_candidates=()    # accumulate ambiguous matches to fuzzy-pick from
 
 for arg in "${@:-}"; do
-    # Substring match (literal). Switch grep -F to -E if you want regex patterns.
-    matches="$(<<<"$all_files" grep -E -- "^.: (.*/)?${arg}\$" || true)"
+    # Substring match (literal).
+    matches="$(<<<"$all_files" grep -E -- "^S: (.*) \{${arg}\}\$" || true)"
+    [ -n "$matches" ] || matches="$(<<<"$all_files" grep -E -- "^.: (.*/)?${arg}\$" || true)"
     [ -n "$matches" ] || matches="$(<<<"$all_files" grep -E -- "^.: .*${arg}.*\$" || true)"
     if [ -z "$matches" ]; then
         # No match at all: pass arg as-is

@@ -12,7 +12,7 @@ get-cz-special() {
     tmpl="${tmpl}/.${cfgFile}"
     tmpl=$(echo "${tmpl}"* 2> /dev/null) || true
     [[ "$tmpl" =~ \*$ ]] && tmpl="${tmpl}/.${cfgFile}.tmpl" || true
-    printf '%s [%s]\n' $(
+    printf '%s {%s}\n' $(
         [ -r "$cfg" ] && printf '%s config' "${cfg#${HOME}/}"
     ) $(
         [ -n "$tmpl" ] && printf '%s config-template' "${tmpl#${HOME}/}"
