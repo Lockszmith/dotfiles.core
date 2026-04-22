@@ -2,3 +2,5 @@
 # during chezmoi init --apply
 .chezmoiroot
 .specstory
+
+chezmoi.roots/_home/private_dot_config/zellij/config.kdl.tmpl
