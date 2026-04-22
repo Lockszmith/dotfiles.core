@@ -6,14 +6,30 @@ PREFIXED=0
 
 get-cz-special-case() {
     local name="${1:?}" base="${2:?}" default="$2${3:-}" filePath
-    filePath=$(echo "${base}"* 2> /dev/null) || true
+    filePath=$(echo "${base}"* 2> /dev/null | xargs -rn1 2>/dev/null | head -n1 ) || true
     [[ "$filePath" =~ \*$ ]] && filePath="${default}" || true
     eval "[ ${TEST:--n} \"$filePath\" ]" && printf '%s {%s}\n' "${filePath#${HOME}/}" "$name" || true
 }
 
+dirs=()
+get-data() {
+    # cache values from `chezmoi data`
+    if [[ ${#dirs[@]} -eq 0 ]]; then
+        dirs=($(env chezmoi data | jq -r '.chezmoi.configFile + "\n" + .chezmoi.sourceDir + "\n" + .chezmoi.workingTree'))
+        cfg="${dirs[0]}"
+        srcDir="${dirs[1]}"
+        workTree="${dirs[2]}"
+        workTree="${workTree#${HOME}/}"
+        cfgFile="${cfg#${HOME}/}"
+        cfgFile="${cfgFile##.*/}"
+        tmpl="${srcDir}/.${cfgFile}"
+        ext="${srcDir}/.chezmoiexternal"
+    fi
+    eval "echo \${$1}"
+}
+
 get-cz-special() {
-    local dirs=($(cz data | jq -r '.chezmoi.configFile + "\n" + .chezmoi.sourceDir'))
-    local cfg="${dirs[0]}" srcDir="${dirs[1]}"
+    local cfg="$(get-data cfg)" srcDir="$(get-data srcDir)" workTree="$(get-data workTree)"
     local cfgFile="${cfg#${HOME}/}"
     cfgFile="${cfgFile##.*/}"
     local tmpl="${srcDir}/.${cfgFile}" ext="${srcDir}/.chezmoiexternal"
@@ -23,20 +39,26 @@ get-cz-special() {
     get-cz-special-case 'externals'         "${ext}"
     get-cz-special-case 'cz.szEnvs'         "${tmpl}"
 }
+
+get-cz-chezmoi() {
+    local workTree="$(get-data workTree)"
+    while IFS= read -r file; do
+        printf '%s/%s\n' "${workTree}" "${file}"
+    done <<<"$(get-cz-git | grep "${@:-.}" )"
+}
 get-cz-managed() {
-    SET_X=: cz managed --exclude=remove,dirs,externals || true
+    SET_X=: env chezmoi managed --exclude=remove,dirs,externals || true
 }
 get-cz-unmanaged() {
-#   cz unmanaged --include=dirs | sed -Ee 's|$|/|;'
     SET_X=:
     comm -3 -1 <(get-cz-externals) <(
-        cz unmanaged --exclude=dirs \
+        env chezmoi unmanaged --exclude=dirs \
            | grep -Ev '\.zwc$' \
            | sort
    )
 }
 get-cz-git() {
-    cz git  -- ls-files ${@}
+    env chezmoi --use-builtin-git=false git -- ls-files "${@}"
 }
 
 get-cz-externals() {
@@ -62,7 +84,7 @@ get-all() {
     local sets=()
     while [ -n "${1:-}" ]; do
         case "$1" in
-            "all" ) sets=(special managed unmanaged) ;;
+            "all" ) sets=(special managed unmanaged chezmoi) ;;
             "refresh-cache") get-cz-externals --force ;;
             * )
                     sets+=("$1") ;;
@@ -78,12 +100,11 @@ get-all() {
             sU="$(<<<"${s}?" tr '[:lower:]' '[:upper:]')"
             sU=${sU:0:1}
             get-group "get-cz-$s" "${sU}"
-        done ) | sort -Vk'2,2'
+        done ) |  sort --uniq -Vk'2,2'
     fi
-
 }
 
 ${SET_X:-:} -x
-get-all "${@:-all}" | ( [ "$PREFIXED" = 0 ] && cat - || sort -Vk'2,2' )
+get-all "${@:-all}" | ( [ "$PREFIXED" = 0 ] && cat - || sort --uniq -Vk'2,2' )
 ${SET_X:-:} +x
 # vim: set ft=sh sw=4 sts=4 et:

@@ -4,28 +4,60 @@ set -eo pipefail
 
 is_cmd() { type -p -- "${@}" 2> /dev/null 1> /dev/null; }
 
-all_files="$(SET_X=: cz get-all-files )"
+all_files="$(SET_X=: cz get-all-files ${SELECT_SRC:-} )"
 
 ${SET_X:-:} -x
 
 # Process args
 declare -a singles=()             # resolved to one match or passed as-is when no match
 declare -a multi_candidates=()    # accumulate ambiguous matches to fuzzy-pick from
+FUZZY=${FUZZY:-tv}
+
+if [ "${*:-}" == "--help" ]; then
+    printf '%s\n' \
+        "chezmoi select-files sub-command" \
+        "" \
+        "Usage:" \
+        "  cz select-files --help | [pattern1, [pattern2...]]" \
+        "" \
+        "Arguments:" \
+        "  --help              Display this usage output" \
+        "  pattern# [optional] fuzzy matching pattern" \
+        "" \
+        "Behavior: " \
+        "      Present a fuzzy matching selector (default is tv) from the following sources:" \
+        "      S: Special chezmoi specific files in the source repo" \
+        "      M: Managed by chezmoi" \
+        "      U: Unmanaged by chezmoi" \
+        "      C: All files in the source repo" \
+        "" \
+        "      Fuzzy selector will appear when nothing matches or more than one" \
+        "      result comes up when grepping for the pattern." \
+        "      Except, if pattern contain '/' (path separator) and no matches" \
+        "      where the pattern passes 'as-is' (assumes it's a path)" \
+        "" \
+        "      To force fuzzy selector with a pattern (even if single match)" \
+        "      add % to the string" \
+        ""
+    exit 2
+fi
 
 for arg in "${@:-}"; do
     # Substring match (literal).
     matches="$(<<<"$all_files" grep -E -- "^S: (.*) \{${arg}\}\$" || true)"
+    [ -n "$matches" ] || matches="$(<<<"$all_files" grep -E -- "^[^C]: (.*/)?${arg}\$" || true)"
+    [ -n "$matches" ] || matches="$(<<<"$all_files" grep -E -- "^[^C]: .*${arg}.*\$" || true)"
     [ -n "$matches" ] || matches="$(<<<"$all_files" grep -E -- "^.: (.*/)?${arg}\$" || true)"
     [ -n "$matches" ] || matches="$(<<<"$all_files" grep -E -- "^.: .*${arg}.*\$" || true)"
-    if [ -z "$matches" ]; then
+    if [[ -z "$matches" && "${arg}" =~ / && ! ("${arg}" =~ %) ]]; then
         # No match at all: pass arg as-is
         singles+=("${arg}")
     else
         count=$(printf "%s\n" "$matches" | wc -l | tr -d '[:space:]')
-        if [ "$count" -eq 1 ]; then
+        if [[ ${#matches} -gt 0 && "$count" -eq 1 && ! ("${arg}" =~ %) ]]; then
             singles+=("$matches")
         else
-            multi_candidates+=("${arg}")
+            multi_candidates+=("${arg//%/}")
         fi
     fi
 done
@@ -33,8 +65,8 @@ done
 # If there are ambiguous matches, fuzzy-pick from their unique set
 declare -a picked=()
 if [ "${#multi_candidates[@]}" -gt 0 ]; then
-    if ! is_cmd tv >/dev/null 2>&1; then
-        echo "Error: tv not found (needed for disambiguating multiple matches)" >&2
+    if ! is_cmd "${FUZZY}" >/dev/null 2>&1; then
+        echo "Error: ${FUZZY} not found (needed for disambiguating multiple matches)" >&2
         # Still output the resolved singles even if we cannot disambiguate
         printf "%s\n" "${singles[@]}" | uniq
         exit 3
@@ -44,7 +76,7 @@ if [ "${#multi_candidates[@]}" -gt 0 ]; then
         while read -r _sel; do
             [ -z "$_sel" ] || picked+=("$_sel")
         done <<<"$( <<<"$all_files" \
-            tv ${arg:+--input-prompt="'${arg}'?> "} --preview-command="cz preview '{1}'" ${arg:+--input="${arg}"} \
+            ${FUZZY} ${arg:+--input-prompt="'${arg}'?> "} --preview-command="cz preview '{1}'" ${arg:+--input="${arg}"} \
             || true )"
     done <<<"$(printf "%s\n" "${multi_candidates[@]}" | uniq )"
 fi
@@ -52,14 +84,13 @@ fi
 # Combine singles + picked, make unique, and output
 printf "%s\n" "${singles[@]}" "${picked[@]}" | uniq | grep -Ev '^$' \
     | sed -Ee '
-        s|^(S: )?|\1|;
-        s|^([SUM]: )?|\1~/|;
+        s|^([SC]: )?|\1|;
+        s|^([UMSC]: )?|\1~/|;
         s|~/([~/])|\1|;
         s|\$|\\$\\|g;
-        s|^([SUM]: )?~/|\1$HOME/|;
+        s|^([UMSC]: )?~/|\1$HOME/|;
     ' | envsubst \
     | sed -Ee 's|\\\$\\|$|g'
-# | sed -Ee 's|^([UM]: )?|\1~/|; s|~/([~/])|\1|; s|\$|\\$\\|g; s|^([UM]: )?~/|\1$HOME/|' | envsubst | sed -Ee 's|\\\$\\|$|g'
 
 ${SET_X:-:} +x
 # vim: set ft=sh sw=4 sts=4 et:
