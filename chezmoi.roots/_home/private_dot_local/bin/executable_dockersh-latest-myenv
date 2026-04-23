@@ -36,5 +36,6 @@ SCRIPT_SRC=/file_server/scripts
 DOCKERSH=cs_dockersh
 [ -r "${SCRIPT_SRC}/${DOCKERSH}" ] || SCRIPT_SRC=/file_server_var2/scripts
 ! [ -r "${SCRIPT_SRC}/${DOCKERSH}" ] && printf "Can't find %s source!\n" "${DOCKERSH}" >&1 && exit 1 || true
-${SCRIPT_SRC}/login_to_aws_ecr.sh
+echo Loggin in to AWS... >&2
+${SCRIPT_SRC}/login_to_aws_ecr.sh >&2
 exec bash ${SET_X:-} <( sed -Ee "$SED_SCRIPT" "${SCRIPT_SRC}/${DOCKERSH}" ) ${HUBLE:-keep-hubble-latest} ${1:+"${@}"}
