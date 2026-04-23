@@ -4,14 +4,25 @@ DEPTH=${DEPTH:-${D:-4}}
 TYPE=${TYPE:-${T:-f}}
 PRUNE="${PRUNE:-}"
 
+[ ${#PRUNE} -gt 0 ] || PRUNE="( -type d -name vapi -or -name traces ) -prune -or"
+[ "${X:-}" != ":" ] || XB=:
+[ "${X:-}" != ":" ] || XE=:
+XB="${XB:-^.*/}"
+XE="${XE:-.*$}"
+
+[ "${XB:-}" != ":" ] || XB=
+[ "${XE:-}" != ":" ] || XE=
+
+
 FD="$(command -v fd)"}
 if [[ -z "$FD" || "$FD" = ":" ]]; then
     FIND='find . --regextype egrep'
     (find . --version 2>&1 || true) | grep -q 'GNU findutils' || FIND='find -E .'
 
     [ ${#PRUNE} -gt 0 ] || PRUNE="( -type d -name vapi -or -name traces ) -prune -or"
-    ${FIND} -maxdepth ${DEPTH} ${PRUNE} -type ${TYPE} -iregex "${@:?}" -print
+#   ${FIND} -maxdepth ${DEPTH}                  ${PRUNE} -type ${TYPE} -iregex "${@:?}" -print
+    (set -x; ${FIND} -maxdepth ${DEPTH} -regextype egrep ${PRUNE} -type ${TYPE} -iregex "$XB${1:?}$XE" -print)
 else
-    fd --type ${TYPE} "${@:?}" .
+    (set -x; fd --max-depth ${DEPTH} --type ${TYPE} "${@:?}" .)
 fi
-
+echo done.

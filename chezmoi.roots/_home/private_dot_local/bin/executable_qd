@@ -1,4 +1,0 @@
-#! /usr/bin/env bash
-
-find -maxdepth ${DEPTH:-3} -type d -iname "${@}"
-
