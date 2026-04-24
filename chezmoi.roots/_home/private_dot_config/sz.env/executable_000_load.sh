@@ -14,8 +14,10 @@ find_in() {
     local dirs=() head=${HEAD:-${H:-}} exit_code=1
     head=${head:+head -n${head}}
     head=${head:-command cat -}
+    local shellArrayRead=a
+    [ "$BASE_SHELL" != "zsh" ] || shellArrayRead=A
     
-    IFS=: read -rA dirs <<<"$(<<<"${1}:" awk -v RS=: -v ORS=: 'NF && !seen[$0]++')"
+    IFS=: read -r${shellArrayRead} dirs <<<"$(<<<"${1}:" awk -v RS=: -v ORS=: 'NF && !seen[$0]++')"
     for d in "${dirs[@]}"; do
         [ -n "$d" ] || [ -d "$d" ] || continue
         find "$d" -type "${T:-f}" "${@:2}" 2>/dev/null | grep . && exit_code=0
