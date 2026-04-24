@@ -16,7 +16,7 @@ XE="${XE:-.*$}"
 
 FD="$(command -v fd)"}
 if [[ -z "$FD" || "$FD" = ":" ]]; then
-    FIND='find . --regextype egrep'
+    FIND='find . --regextype grep -E'
     (find . --version 2>&1 || true) | grep -q 'GNU findutils' || FIND='find -E .'
 
     [ ${#PRUNE} -gt 0 ] || PRUNE="( -type d -name vapi -or -name traces ) -prune -or"

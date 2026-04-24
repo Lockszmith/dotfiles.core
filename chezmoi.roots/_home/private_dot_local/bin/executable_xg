@@ -3,5 +3,5 @@
 FN="-H"
 [ -z "$NO_FN" ] || FN=""
 
-xargs "${XARGS[@]:--r}" egrep $FN "${@}" || true
+xargs "${XARGS[@]:--r}" grep -E $FN "${@}" || true
 
