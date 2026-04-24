@@ -10,6 +10,19 @@ is_sourced() {
     return 1; # NOT sourced.
 }
 
+find_in() {
+    local dirs=() head=${HEAD:-${H:-}} exit_code=1
+    head=${head:+head -n${head}}
+    head=${head:-command cat -}
+    
+    IFS=: read -rA dirs <<<"$(<<<"${1}:" awk -v RS=: -v ORS=: 'NF && !seen[$0]++')"
+    for d in "${dirs[@]}"; do
+        [ -n "$d" ] || [ -d "$d" ] || continue
+        find "$d" -type "${T:-f}" "${@:2}" 2>/dev/null | grep . && exit_code=0
+    done
+    return $exit_code
+}
+
 BASE_0=${BASE_0:-$0}
 export SHELL="${SHELL:-${shell:+$(command -v ${shell})}}"
 BASE_SHELL=$(basename "$SHELL")
