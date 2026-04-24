@@ -1,0 +1,6 @@
+#! /usr/bin/env sh
+[ -z "${DBG:-}" ] || echo "zellij.shell: ${*}" >&2
+! [ -x /home/linuxbrew/.linuxbrew/bin/zsh ] || SHELL=/home/linuxbrew/.linuxbrew/bin/zsh
+DO_EXEC=exec
+[ ${#@} -eq 0 ] || DO_EXEC=
+SHELL=$SHELL $DO_EXEC $SHELL ${@:--li}
