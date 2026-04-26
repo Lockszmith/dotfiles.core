@@ -1,0 +1,236 @@
+# =============================================================================
+# Ghostty Configuration
+# =============================================================================
+# Mirrors ~/.config/wezterm/wezterm.lua as closely as the Ghostty runtime
+# allows. Inspect every setting with `ghostty +show-config --default --docs`
+# and every keybind action with `ghostty +list-actions`.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Appearance
+# -----------------------------------------------------------------------------
+
+# WezTerm uses the Gogh-flavoured "Pencil Dark". Ghostty ships the same
+# palette bundled as "Pencil Dark" — confirm with `ghostty +list-themes`.
+theme = Pencil Dark
+
+# Translucent window. WezTerm sets both window_background_opacity and
+# text_background_opacity to 0.9; Ghostty exposes a single knob that covers
+# both surfaces.
+background-opacity = 0.9
+# Disabled: on KDE Plasma 6 Wayland with NVIDIA (tested on Bazzite 43 /
+# KWin 6.6.4 / driver 595.x / GTK 4.20), enabling KWin's Blur effect on a
+# Ghostty window produces a fully opaque composite — the shader reblends
+# the framebuffer in a way that drops the surface alpha. Telltale sign:
+# the window is translucent while being dragged (KWin skips blur during
+# interactive move) and opaque when still. Leaving blur off restores the
+# expected translucency from `background-opacity`. Revisit if/when
+# NVIDIA + KWin Blur + GTK4 Wayland alpha handling is fixed upstream.
+background-blur = false
+
+# Primary font plus progressively weaker fallbacks. WezTerm uses
+# wezterm.font_with_fallback({...}); in Ghostty each fallback is an extra
+# `font-family =` line (order = priority).
+font-family = FiraCode Nerd Font Mono
+font-family = FiraCode Nerd Font
+font-family = FiraMono Nerd Font Mono
+font-family = FiraMono Nerd Font
+font-family = DroidSansM Nerd Font
+font-family = DroidSansMono Nerd Font
+font-family = DroidSansMono
+font-family = Consolas
+font-family = Courier New
+font-family = monospace
+
+# Match WezTerm's default cursor shape.
+cursor-style = block
+
+# -----------------------------------------------------------------------------
+# Bell
+# -----------------------------------------------------------------------------
+# WezTerm: audible_bell = "Disabled" plus a tiny visual bell with 50 ms
+# fade-in. Ghostty has no fade-duration knobs, but it can still silence
+# the system sound/audio and show attention + title markers instead.
+bell-features = no-system,no-audio,attention,title,no-border
+
+# -----------------------------------------------------------------------------
+# Window & Tabs
+# -----------------------------------------------------------------------------
+gtk-tabs-location = top
+window-theme = auto
+window-decoration = auto
+
+# WezTerm's prefer_to_spawn_tabs asks new launches to reuse an existing
+# window as a new tab. Ghostty's single-instance mode routes subsequent
+# `ghostty` invocations through the running process, which keeps them in
+# one process tree; it doesn't *force* new launches into tabs the way
+# prefer_to_spawn_tabs does, but it is the closest available toggle.
+gtk-single-instance = true
+
+# Generous scrollback to match WezTerm's defaults.
+scrollback-limit = 10000000
+
+# WezTerm saved/restored window geometry via custom Lua (windows_dim.lua).
+# Ghostty has `window-save-state`, but per the official docs it is currently
+# honoured only on macOS and has no effect on Linux/GTK. Keeping the key
+# set to the default is harmless and documents intent for future portability.
+window-save-state = default
+
+# WezTerm does not pop a confirmation when closing tabs; match that.
+confirm-close-surface = false
+
+# WezTerm: exit_behavior = "Hold" keeps a tab open after SSH exits so the
+# user can read the error. Ghostty has no direct equivalent — the
+# `wait-after-command` knob only affects CLI-launched commands, not the
+# primary shell. Setting it false keeps the standard close-on-exit
+# behaviour; if you want SSH errors to linger, wrap ssh in a shell function
+# that pauses on failure (e.g. connect-ssh / safe-ssh from the wezterm config).
+wait-after-command = false
+
+# Default-on in Ghostty on Linux; kept explicit so mouse-drag selections
+# land in the primary selection the same way WezTerm drags behave.
+copy-on-select = true
+
+# -----------------------------------------------------------------------------
+# Keybindings
+# -----------------------------------------------------------------------------
+# WezTerm sets disable_default_key_bindings = true, so we start from a clean
+# slate to avoid clashing with Ghostty's GTK defaults.
+keybind = clear
+
+# --- Font size ----------------------------------------------------------------
+keybind = ctrl+plus=increase_font_size:1
+keybind = ctrl+shift+plus=increase_font_size:1
+keybind = ctrl+equal=increase_font_size:1
+keybind = ctrl+shift+equal=increase_font_size:1
+keybind = super+equal=increase_font_size:1
+keybind = ctrl+minus=decrease_font_size:1
+keybind = ctrl+shift+minus=decrease_font_size:1
+keybind = super+minus=decrease_font_size:1
+keybind = ctrl+0=reset_font_size
+keybind = ctrl+shift+0=reset_font_size
+keybind = super+0=reset_font_size
+# WezTerm also listed ctrl+_ (shift+-) and ctrl+) (shift+0). Those keysyms
+# aren't named directly in Ghostty; the ctrl+shift+minus / ctrl+shift+0
+# bindings above cover the same physical chords.
+
+# --- Clipboard ---------------------------------------------------------------
+# WezTerm: CopyTo Clipboard on CTRL+C / SHIFT+CTRL+C / SUPER+C, but SUPER+C
+# is later re-bound to SendKey ctrl+c. Match the effective behaviour: SUPER+C
+# sends ^C, plain shift+ctrl+c copies.
+keybind = ctrl+shift+c=copy_to_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
+keybind = super+v=paste_from_clipboard
+# Dedicated Copy / Paste X keys from the keyboard.
+keybind = copy=copy_to_clipboard
+keybind = paste=paste_from_clipboard
+
+# --- Command palette ---------------------------------------------------------
+# WezTerm bound this to F1 and to the `P`/`p` + SHIFT+CTRL combo. The
+# wezterm key entries `{ key = 'P', mods = 'CTRL' }` all imply Shift
+# because 'P' is already capitalised — so the only physical chord is
+# Ctrl+Shift+P. Don't bind plain ctrl+p (that would steal readline's
+# previous-history shortcut from every shell).
+keybind = f1=toggle_command_palette
+keybind = ctrl+shift+p=toggle_command_palette
+
+# --- Launcher / new tab ------------------------------------------------------
+# Ghostty has no launcher UI; the closest behaviour is simply opening a new
+# tab. WezTerm bound ShowLauncher to SHIFT+CTRL+T and SHIFT+SUPER+T.
+keybind = ctrl+shift+t=new_tab
+keybind = super+shift+t=new_tab
+
+# --- Debug / inspector overlay ----------------------------------------------
+# WezTerm bound ShowDebugOverlay to `{ key = 'L', mods = 'CTRL' }` which,
+# like the command-palette binding above, means Ctrl+Shift+L — NOT plain
+# ctrl+l (which would clobber ^L clear-screen in every shell).
+keybind = ctrl+shift+l=inspector:toggle
+
+# --- Hide window -------------------------------------------------------------
+# WezTerm Hide on SUPER+M.
+keybind = super+m=toggle_visibility
+
+# --- Tab navigation ----------------------------------------------------------
+# WezTerm PageUp/PageDown under SUPER for prev/next tab.
+keybind = super+page_up=previous_tab
+keybind = super+page_down=next_tab
+
+# --- SUPER -> CTRL passthroughs ---------------------------------------------
+# WezTerm translated SUPER+c / SUPER+d / SUPER+r into physical CTRL+c/d/r so
+# macOS-style muscle memory still reaches the running shell. Ghostty has no
+# "send key combo" action, so we emit the raw control bytes directly.
+#   \x03 = ^C, \x04 = ^D, \x12 = ^R
+keybind = super+c=text:\x03
+keybind = super+d=text:\x04
+keybind = super+r=text:\x12
+
+# --- Leader key (ctrl+tab) sequences ----------------------------------------
+# WezTerm leader = { key = 'Tab', mods = 'CTRL', timeout_milliseconds = 1000 }.
+# Ghostty expresses key sequences inline using `>`; the first chord becomes
+# the prefix and waits for the next press.
+keybind = ctrl+tab>t=new_tab
+keybind = ctrl+tab>shift+t=new_tab
+keybind = ctrl+tab>left=previous_tab
+keybind = ctrl+tab>right=next_tab
+keybind = ctrl+tab>alt+left=move_tab:-1
+keybind = ctrl+tab>alt+right=move_tab:1
+
+# Because ctrl+tab is now a leader, it no longer plain-switches tabs. Use
+# super+page_up/down, the leader arrows, or uncomment the pair below to
+# restore the old direct next/prev-tab behaviour (losing the leader):
+# keybind = ctrl+tab=next_tab
+# keybind = ctrl+shift+tab=previous_tab
+
+# =============================================================================
+# NOT PORTED: features the WezTerm config implements via Lua callbacks
+# =============================================================================
+# Ghostty's config language has no scripting hooks, so the following WezTerm
+# behaviours have no direct equivalent. They are catalogued here so the
+# feature-parity story is honest.
+#
+#  * SSH launcher tree
+#      WezTerm builds a rich SSH launch menu from ~/.ssh/config with a visual
+#      tree, aligned columns, and feature symbols (L/D/J/R). Ghostty has no
+#      configurable launcher. Workarounds:
+#        1. Keep invoking `connect-ssh` / `safe-ssh` as plain shell commands.
+#        2. Use an interactive picker in your prompt, e.g.:
+#             alias sshm='ssh $(awk "/^Host / && \$2 !~ /\*/ {print \$2}" \
+#                             ~/.ssh/config | fzf)'
+#        3. Ghostty 1.2+ supports
+#             shell-integration-features = ssh-env,ssh-terminfo
+#           which transparently forwards shell integration to remote hosts.
+#           It is a UX *assist*, not a host picker.
+#
+#  * format-tab-title callback
+#      WezTerm extracts an SSH host name from pane.user_vars.SSH_HOST or
+#      regex-parses the pane title. Ghostty tab titles follow the OSC 2
+#      title your shell/SSH session emits — configure your shell prompt or
+#      ssh wrapper to send the desired title (e.g. via
+#      `printf '\033]2;%s\a' "$host"`).
+#
+#  * augment-command-palette + window-config-reloaded (save/restore window
+#    size via ~/.config/wezterm/windows_dim.lua)
+#      Ghostty has `window-save-state = default`, which persists size/pos
+#      between launches automatically; there's no user-callable "save now".
+#
+#  * new-tab-button-click -> ShowLauncher
+#      Ghostty's + button always opens a plain new tab; not hookable.
+#
+#  * key_tables.copy_mode / search_mode (vi-style scrollback nav, jump by
+#    word, selection modes)
+#      Ghostty's scrollback/selection has no per-key remappable mode.
+#      Closest built-ins: start_search, navigate_search, scroll_page_up/down,
+#      scroll_to_top/bottom — many already bound by Ghostty defaults
+#      (shift+pageup/down, ctrl+shift+f).
+#
+#  * CharSelect popup (wezterm SHIFT+CTRL+U)
+#      No Ghostty action for an interactive character picker.
+#
+#  * visual_bell fade durations
+#      Ghostty bell is on/off per feature; no fade-in-ms / fade-out-ms knobs.
+#
+#  * hide_tab_bar_if_only_one_tab / use_fancy_tab_bar
+#      GTK draws its own tab strip; the appearance isn't further configurable.
+# =============================================================================
+
+# vim: set ft=conf:
