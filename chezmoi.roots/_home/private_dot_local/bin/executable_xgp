@@ -13,14 +13,6 @@ GREP="${GREP:-grep -E}"
 GREP_ARG="${1:+$(printf '"%s" ' "${@}" )}"
 GREP_ARG="${GREP_ARG:-\"\"}"
 
-<<<<<<< Updated upstream
 echo \-I {} "${XARGS:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} ${GREP} --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} >&2 || true
 xargs -I {} "${XARGS[@]:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} ${GREP} --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} || true
-||||||| Stash base
-echo \-I {} "${XARGS:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} egrep --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} >&2 || true
-xargs -I {} "${XARGS[@]:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} egrep --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} || true
-=======
-echo \-I {} "${XARGS:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} grep -E --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} >&2 || true
-xargs -I {} "${XARGS[@]:--r}" sh -c "${PRE:-<} \"\$1\" ${PRE:+|} grep -E --label=\"\$1\" $FN ${GREP_ARG} ${POST:+| $POST}" -- {} || true
->>>>>>> Stashed changes
 
