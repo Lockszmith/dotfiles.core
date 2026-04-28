@@ -25,4 +25,4 @@ if [[ -z "$FD" || "$FD" = ":" ]]; then
 else
     (set -x; fd --max-depth ${DEPTH} --type ${TYPE} "${@:?}" .)
 fi
-echo done.
+echo ${0##*/} done. >&2
