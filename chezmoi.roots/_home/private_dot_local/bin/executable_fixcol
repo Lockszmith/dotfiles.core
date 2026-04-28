@@ -1,61 +1,235 @@
-#! /usr/bin/env bash
+#!/usr/bin/env python3
+"""Normalize log lines into fixed output columns."""
 
-#tail -n+60 | \
-#    grep -Ev 'Scheduler: Sending|GET \{\{FILE' | \
-perl -pe'
-    # Mark path and add ts placeholder
-    s/^([^:]+):/:|$1##path##:|##ts##:|/;
+from __future__ import annotations
 
-    # break up path to mark node IP
-    s/^(.+)-([[:digit:]\.]{8,15})(.*#path##)?\//$1:|$2$3:|/;
+import argparse
+import re
+import sys
+from dataclasses import dataclass
 
-    # Timestamp definition and normalization
-    s/(##ts##:\|)\[?(202[[:digit:]\-]{7})[ T]([[:digit:]\:\.,]{3,16}[[:digit:]])(\+00:00)?[ :]*/$2 $3$1/;
 
-    # lvl definition (potentially after src)
-    #s/(##:\|)[ {]*([A-Z]{3,})[ }]*/$1$2##lvl##:|##src##:|/;
-    s/(##:\|)[ \]{]*(ALERT|PANIC|ALLOK|INFO|WARNING|ERROR|ERR|DEBUG|NOTE)[\[ }:\/]/$1$2##lvl##:|/;
+# Celery worker log: [YYYY-MM-DD HH:MM:SS,mmm: LEVEL/worker] [optional-request-id] message
+CELERY_HEADER_RE = re.compile(
+    r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}):\s*"
+    r"([A-Za-z]+)/([^\]]+)\]\s*"
+    r"(?:\[([^\]]*)\]\s*)?"
+)
 
-    # modify field order, so that level will always be before SRC
-    s/(##ts##(?::\|){1,2})([^\|]+##src##:\|)([^\|]+##lvl##:\|)?(?:##src##:\|)/$1$3$2/;
-    s/(##ts##:\|)([^\|]+##src##:\|)/$1##lvl##:|$2/;
+TIMESTAMP_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}(?:[ T])\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)(?:\s+|$)"
+)
+# Path prefix for logfile: allow optional ':' before '[' (e.g. management-logs/workers.log:[2026-...)
+PATH_RE = re.compile(r"^((?:/|\.{1,2}/|~?/)?[^\s]*\/[^\s:]+)(?::)?(?=\s|\[|$)")
+LEVEL_RE = re.compile(
+    r"^(?:\[?(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL)\]?)(?:\s+|$)",
+    re.IGNORECASE,
+)
+LOCATION_RE = re.compile(r"^([A-Za-z0-9_./-]+:\d+)(?:\s+|$)")
 
-    # Make sure all fields exist
-    s/(##path##:\|)(#?[^#]+)$/$1##ts##:|$2/;
-      s/(##ts##:\|)(#?[^#]+)$/$1##lvl##:|$2/;
+# Inner of [module.py:line/pid] from vms_monitor / collector lines
+FILE_LINE_PID_RE = re.compile(r"^(.+):(\d+)/(\d+)$")
 
-    # src definition P####
-    s/(##lvl##:\|)((:?[^] ]+))[\] ]/$1$2##src##:|/;
-#   s/(##lvl##:\|)[\[\(]?((:?[PES]?[[:digit:]]+[ :]|F[[:digit:]a-f]|[[:digit:]a-f\-]){2,}|[^\]]+)[ \)\]]*/$1$2##src##:|/;
+# [YYYY-MM-DD HH:MM:SS,mmm] LEVEL [uuid] [module.py:line/pid] message (vms_monitor / collector style)
+BRACKET_TS_LINE_RE = re.compile(
+    r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})\]\s+"
+    r"([A-Za-z]+)\s+"
+    r"(?:\[([^\]]*)\]\s+)?"
+    r"\[([^\]]+)\]\s*"
+    r"(.*)$"
+)
 
-    # Cleanup of leading whitespace
-#   s/(##:\|)[[:space:]:]+/$1/g;
+# Django / console handler lines after a path prefix: ``INFO:vms:message`` or ``WARNING:xmlschema:...``
+DJANGO_CONSOLE_LEVEL_RE = re.compile(
+    r"^(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL):(.+)$",
+    re.IGNORECASE,
+)
 
-    # Clear ANSI color codes
-    s/#[[:digit:]\];]+@//;
-    s/(##lvl##:\|)(#?[^#]+)$/$1##src##:|$2/;
-    # Idenitify additional src
-#   s/(:\|)(##src##:\|)\[?([^\]]+)\]/$1$3$2/;
-#   s/(:\|)(##src##:\|)((?:[^: ]+ *){1,3}): ?/$1$3$2/;
 
-    # Cleanup trailing whitespace
-    s/[[:space:]]+(##[a-z]+##:\|)/$1/g;
-    # Cleanup of leading whitespace (again)
-    s/(##:\|)[[:space:]:]+/$1/g;
+@dataclass
+class ParseState:
+    logfile: str = ""
+    timestamp: str = ""
+    level: str = ""
+    loc_prefix: str = ""
+    loc_pid: str = ""
+    loc_extra: str = ""
+    line_number: int = 0
 
-    # allow filtering on `grep "__sz"`
- #  s/^/__sz/;
-   #s/^(.*(?:[A-Z]{3,}).*)$/__sz$1/;
-   #s|.*smb_logs/.*||;
 
-    # Debugging: truncate fields longer than 40 chars to 25...
- #  s/([^#|\n]{35})[^#|\n]{15}[^#|\n]+/$1.../g;
-    # Debugging: truncate output before ##path##
-    s/^__sz.*##path##/__sz/;
+def take_match(pattern: re.Pattern[str], message: str, *, lstrip_remainder: bool = True) -> tuple[str, str]:
+    match = pattern.match(message)
+    if not match:
+        return "", message
+    token = match.group(1)
+    remainder = message[match.end() :]
+    if lstrip_remainder:
+        remainder = remainder.lstrip()
+    return token, remainder
 
-    # Remove field ##labels##
-    s/##[a-z]+##:\|/:|/g;
 
-'
+def split_worker_slash_pid(worker: str) -> tuple[str, str]:
+    """Split ForkPoolWorker-332/465638 or MainProcess/1976 -> (name, pid)."""
+    m = re.match(r"^(.+)/(\d+)$", worker)
+    if m:
+        return m.group(1), m.group(2)
+    return worker, ""
 
-# vim: set ft=sh expandtab tabstop=4 shiftwidth=4:
+
+def parse_file_line_pid_inner(inner: str) -> tuple[str, str]:
+    """Parse collector.py:180/505267 -> (collector.py:180, 505267)."""
+    m = FILE_LINE_PID_RE.match(inner.strip())
+    if m:
+        return f"{m.group(1)}:{m.group(2)}", m.group(3)
+    return inner.strip(), ""
+
+
+def take_celery_header(message: str) -> tuple[str, str, str, str, str, str] | None:
+    """Celery header -> (ts, level, loc_prefix, loc_pid, loc_extra, remainder)."""
+    match = CELERY_HEADER_RE.match(message)
+    if not match:
+        return None
+    ts = match.group(1)
+    level = match.group(2).upper()
+    worker = match.group(3)
+    req_raw = match.group(4)
+    req_id = (req_raw or "").strip()
+    loc_prefix, loc_pid = split_worker_slash_pid(worker)
+    remainder = message[match.end() :].lstrip("\n").lstrip()
+    return ts, level, loc_prefix, loc_pid, req_id, remainder
+
+
+def take_django_console_level_colon(message: str) -> tuple[str, str] | None:
+    """``LEVEL:logger:message`` -> (LEVEL upper, ``logger:message``)."""
+    match = DJANGO_CONSOLE_LEVEL_RE.match(message)
+    if not match:
+        return None
+    return match.group(1).upper(), match.group(2)
+
+
+def take_bracket_ts_header(message: str) -> tuple[str, str, str, str, str, str] | None:
+    """[ts] LEVEL [uuid] [file:line/pid] rest -> (ts, level, loc_prefix, loc_pid, loc_extra, rest)."""
+    match = BRACKET_TS_LINE_RE.match(message)
+    if not match:
+        return None
+    ts = match.group(1)
+    level = match.group(2).upper()
+    uuid_inner = (match.group(3) or "").strip()
+    file_inner = match.group(4).strip()
+    rest = match.group(5).lstrip()
+    loc_prefix, loc_pid = parse_file_line_pid_inner(file_inner)
+    return ts, level, loc_prefix, loc_pid, uuid_inner, rest
+
+
+def format_line(raw_line: str, state: ParseState, delimiter: str) -> str:
+    message = raw_line.rstrip("\n")
+
+    logfile, message = take_match(PATH_RE, message, lstrip_remainder=False)
+    if logfile:
+        state.logfile = logfile
+        # Strip leading whitespace after ``logfile:`` only when the line starts a new log record
+        # (timestamp ``YYYY-`` or bracket ``[YYYY-``). Otherwise keep indentation (e.g. ``:  warn``).
+        if message and re.match(r"^\s*(\[\d{4}|\d{4}-\d{2})", message):
+            message = message.lstrip()
+    elif state.logfile:
+        # PATH_RE requires ``:`` before message to be followed by space, ``[``, or EOL — so lines like
+        # ``workers.log.1:INFO:vms:...`` do not match. Strip a repeated ``<logfile>:`` prefix instead.
+        prefix = f"{state.logfile}:"
+        if message.startswith(prefix):
+            message = message[len(prefix) :]
+
+    celery = take_celery_header(message)
+    if celery is not None:
+        ts, level, loc_prefix, loc_pid, loc_extra, message = celery
+        state.timestamp = ts
+        state.level = level
+        state.loc_prefix = loc_prefix
+        state.loc_pid = loc_pid
+        state.loc_extra = loc_extra
+        state.line_number = 1
+    else:
+        bracket = take_bracket_ts_header(message)
+        if bracket is not None:
+            ts, level, loc_prefix, loc_pid, loc_extra, message = bracket
+            state.timestamp = ts
+            state.level = level
+            state.loc_prefix = loc_prefix
+            state.loc_pid = loc_pid
+            state.loc_extra = loc_extra
+            state.line_number = 1
+        else:
+            timestamp, message = take_match(TIMESTAMP_RE, message)
+            if timestamp:
+                state.timestamp = timestamp
+                state.level = ""
+                state.loc_prefix = ""
+                state.loc_pid = ""
+                state.loc_extra = ""
+                state.line_number = 1
+
+                level, message = take_match(LEVEL_RE, message)
+                if level:
+                    state.level = level.upper()
+
+                location, message = take_match(LOCATION_RE, message)
+                if location:
+                    state.loc_prefix = location
+            else:
+                django = take_django_console_level_colon(message)
+                if django is not None:
+                    state.level, message = django
+                    state.line_number += 1
+                else:
+                    # Continuation: keep last timestamp/level/location slots; increment sub-line only.
+                    state.line_number += 1
+                    # Lines like ``logfile:rest`` (no space after ``:``) are not matched by PATH_RE; strip
+                    # the repeated log path prefix so the message column matches real continuations.
+                    if state.logfile:
+                        prefix = f"{state.logfile}:"
+                        if message.startswith(prefix):
+                            message = message[len(prefix) :]
+
+    line_no = f"{state.line_number:02d}"
+    fields = [
+        state.logfile,
+        state.timestamp,
+        state.level,
+        state.loc_prefix,
+        state.loc_pid,
+        state.loc_extra,
+        line_no,
+        message,
+    ]
+    return delimiter.join(fields)
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Normalize logs into fixed delimiter columns.")
+    parser.add_argument("input", nargs="?", help="Input text (multi-line allowed). If omitted, read stdin.")
+    parser.add_argument(
+        "--delimiter",
+        default=":|",
+        help="Output field delimiter string (default: ':|').",
+    )
+    return parser.parse_args(argv)
+
+
+def iter_input_lines(args: argparse.Namespace) -> list[str]:
+    if args.input is not None:
+        return args.input.splitlines()
+    return sys.stdin.read().splitlines()
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    state = ParseState()
+
+    for raw_line in iter_input_lines(args):
+        print(format_line(raw_line, state, args.delimiter))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+# vim: set ft=python expandtab tabstop=4 shiftwidth=4:
