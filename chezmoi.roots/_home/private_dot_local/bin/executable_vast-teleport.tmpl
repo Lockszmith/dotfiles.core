@@ -1,23 +1,6 @@
 {{/* # */}}{{- if has "VAST.personal" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
 #!/usr/bin/env bash
 
-# Usage: ./vast-teleport get version [auto|major|<vMajor>]
-# Example: ./latest_teleport_version.sh get major
-
-set -e
-
-ts() { date +%F\ %T.%3N; }
-f_ts() { date +%F_%2H%2M%2S.%3N; }
-
-SCRIPT_NAME="${0##*/}"
-TSH_LOG="$HOME/.local/log/tsh.log"
-[ -d "${TSH_LOG%/*}" ] || unset TSH_LOG
-CLI_ARGS="${CLI_ARGS:-$0 $*}"
-
-TSH_PATH="${TSH_PATH:-$(command -v tsh || true)}"
-TSH_PATH="${TSH_PATH:-~/.local/bin/tsh}"
-TSH_PATH="$TSH_PATH '$(readlink -f "$TSH_PATH")'"
-
 usage() {
     printf '%s\n' \
         'Utility script for connecting and managing teleport client for VAST CS' \
@@ -36,6 +19,26 @@ usage() {
     exit 2
 }
 
+########################################################################
+# Script initialization
+########################################################################
+set -e
+
+ts() { date +%F\ %T.%3N; }
+f_ts() { date +%F_%2H%2M%2S.%3N; }
+
+SCRIPT_NAME="${0##*/}"
+TSH_LOG="$HOME/.local/log/tsh.log"
+[ -d "${TSH_LOG%/*}" ] || unset TSH_LOG
+CLI_ARGS="${CLI_ARGS:-$0 $*}"
+
+TSH_PATH="${TSH_PATH:-$(command -v tsh || true)}"
+TSH_PATH="${TSH_PATH:-~/.local/bin/tsh}"
+TSH_PATH="$TSH_PATH '$(readlink -f "$TSH_PATH")'"
+
+########################################################################
+# Additional Usage output
+########################################################################
 usage-ssh() {
     printf '%s\n' \
 	'SSH using Teleport with interactive selection and VAST-reasnoble defaults' \
@@ -119,6 +122,9 @@ usage-launch() {
     exit 2
 }
 
+########################################################################
+# Actual code starts here
+########################################################################
 do_tsh() {
     ${TSH_PATH} "${@}"
 }
@@ -286,7 +292,7 @@ _do_ssh() {
 
     local RUN="${RUN:-}"
     if [[ -z "$RUN" && "$MUX_THIS" != "0" ]]; then
-        local MUX_NAME="${TUNNEL:+${TUNNEL}>}${TARGET}|${SEARCH}|${SCRIPT_NAME}"
+        local MUX_NAME="${TUNNEL:+${TUNNEL#-}>}${TARGET}|${SEARCH}|${SCRIPT_NAME}"
         if [[ "$MUX_THIS" == "1" ]]; then
             if [[ -n "$(command -v zellij)" ]]; then
                 MUX_THIS="zellij run --floating --pinned 'true' --name '\${MUX_NAME}' --"
@@ -299,7 +305,6 @@ _do_ssh() {
         fi
         eval "RUN=\"${MUX_THIS}\""
     fi
-    local TUNNEL="${TUNNEL:+-L ${TUNNEL}}"
 
     local MSG="Connecting to ${TARGET}"
     [ -z "${TUNNEL}" ] || MSG="${MSG}, with tunnel (${TUNNEL})"
@@ -322,23 +327,35 @@ _do_ssh_with_tunnel() {
     local LOCAL_PORT="${LOCAL_PORT:-8443}"
     local TARGET_PORT="${TARGET_PORT:-443}"
 
-    local VMS="${VMS:-"$( #
-        ECHO="${ECHO}" SSHUSER="${SSHUSER}" SSH_OPTS="${SSH_OPTS}" TARGET="${TARGET}" TUNNEL="" MUX_THIS=0 RUN='' _do_ssh '' '' -- cat /vast/vman/mgmt-vip
-        )"}"
-    local TUNNEL="${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+    local TUNNEL="${TUNNEL:-}"
+    if [[ -z "$TUNNEL" && -z "$VMS" ]]; then
+        local VMS="${VMS:-"$( #
+            ECHO="${ECHO}" SSHUSER="${SSHUSER}" SSH_OPTS="" TARGET="${TARGET}" TUNNEL="" MUX_THIS=0 RUN='' _do_ssh '' '' -- cat /vast/vman/mgmt-vip
+            )"}"
+        TUNNEL="${LOCAL_PORT}:${VMS}:${TARGET_PORT}"
+    fi
+    [[ -n "$TUNNEL" && "$TUNNEL" =~ ^- ]] || TUNNEL="-L ${TUNNEL} -D 1080"
 
     local MUX_THIS="${MUX_THIS:-0}"
     local RUN="${RUN:-}"
 
-    [[ $# -gt 1 ]] || SSH_OPTS="${SSH_OPTS:--N}"
-
-    ECHO="${ECHO}" SSHUSER="${SSHUSER}" SSH_OPTS="${SSH_OPTS}" TARGET="${TARGET}" TUNNEL="${TUNNEL}" MUX_THIS="${MUX_THIS}" RUN="${RUN}" _do_ssh "$@"
+    ECHO="${ECHO}" \
+    SSHUSER="${SSHUSER}" SSH_OPTS="${SSH_OPTS}" \
+    TARGET="${TARGET}" \
+    TUNNEL="${TUNNEL}" LOCAL_PORT="${LOCAL_PORT}" VMS="${VMS}" TARGET_PORT="${TARGET_PORT}" \
+    MUX_THIS="${MUX_THIS}" RUN="${RUN}" \
+    _do_ssh "$@"
+    
 }
 
 _go_launch() {
-    local SRCH=() NO_MUX=0 DEST='' ECHO=':' LOGIN='_do_login'
+    local LOCAL_PORT="${LOCAL_PORT:-8443}"
+    local TARGET_PORT="${TARGET_PORT:-443}"
+
+    local SRCH=() NO_MUX=${NO_MUX:-0} DEST='' ECHO=':' LOGIN='_do_login'
     local ZELLIJ_DEST="${HOME}/.cache/vast-teleport/zellij/teleport"
     local SSHUSER="${SSHUSER:-}"
+    local SSH_OPTS="${SSH_OPTS:-}"
     [[ -n "$1" ]] || usage-launch
     while [[ -n "$1" ]]; do
         case $1 in
@@ -356,7 +373,10 @@ _go_launch() {
         LOGIN=:; NO_MUX=1;
         [ -r "$ZELLIJ_DEST" ] \
         || DEST="." \
-        && DEST="$(env cat "$ZELLIJ_DEST")"
+        && DEST="$(env cat "$ZELLIJ_DEST")" \
+        && . "$ZELLIJ_DEST".env
+
+        ${DBG:-set} -x && ${DBG:-grep} -H "" "$ZELLIJ_DEST"*
     fi
 
     $LOGIN
@@ -368,13 +388,29 @@ _go_launch() {
     if [[ $NO_MUX != 1 ]] && is_cmd zellij; then
         mkdir -p "${ZELLIJ_DEST%/*}"
         printf '%s' "$DEST" > "${ZELLIJ_DEST}"
+        printf '%s="%s"\n' \
+            'DBG' "${DBG}" \
+            'SSHUSER' "${SSHUSER}" \
+            'SSH_OPTS' "${SSH_OPTS}" \
+            'VMS' "${VMS}" \
+            'LOCAL_PORT' "${LOCAL_PORT}" \
+            'TARGET_PORT' "${TARGET_PORT}" \
+            'TUNNEL' "${TUNNEL}" \
+            > "$ZELLIJ_DEST".env
+        ${DBG:-grep} -H "" "$ZELLIJ_DEST"*
         zellij action new-tab --layout=teleport
     else
+        local SSH_FUNC='_do_ssh_with_tunnel'
+
         if [[ "$FROM_ZELLIJ" -eq 1 ]]; then
-            TARGET="${DEST}" MUX_THIS=1 _do_ssh_with_tunnel
+            local TMP_SSH_OPTS="${SSH_OPT:-}"
+            [ -n "${TMP_SSH_OPTS}" ] || TMP_SSH_OPTS=-N
+            TARGET="${DEST}" TARGET_PORT="${TARGET_PORT}" LOCAL_PORT="${LOCAL_PORT}" VMS="${VMS}" MUX_THIS=1 SSH_OPTS="${TMP_SSH_OPTS}" _do_ssh_with_tunnel
+            SSH_FUNC='_do_ssh'
         fi
 
-        TARGET="${DEST}" _do_ssh
+        TARGET="${DEST}" TARGET_PORT="${TARGET_PORT}" LOCAL_PORT="${LOCAL_PORT}" SSH_OPTS="${SSH_OPTS}" ECHO="${ECHO}" SSHUSER="${SSHUSER}" SSH_OPTS="${SSH_OPTS}" TUNNEL="${TUNNEL}" MUX_THIS="${MUX_THIS}" RUN="${RUN}" ${SSH_FUNC}
+
         ! [ -r "$ZELLIJ_DEST" ] || rm "$ZELLIJ_DEST"
     fi
 }
@@ -382,7 +418,7 @@ _go_launch() {
 _go() {
     while true; do
         case "$1" in
-            --debug) shift; set -x; ;;
+            --debug) shift; set -x; DBG= ;;
             login)   shift; _do_login "${@}";   break ;;
             upgrade) shift; _do_upgrade "${@}"; break ;;
             get)     shift; _go_get "${@}";     break ;;
@@ -394,9 +430,15 @@ _go() {
     done
 }
 
+DBG="${DBG:-:}"
+[ "$DBG" = "1" ] && DBG= && set -xv
 _go "${@}"
 
 {{ end -}}
 {{/*
+NOTE: chezmoi will not render this part
+go/text (chezmoi templating) comment with modeline
+for vim as well as ctlajoie/vscode-modelines for vscode:
+
 vim: set ft=bash expandtab tabstop=4 shiftwidth=4:
 */}}
