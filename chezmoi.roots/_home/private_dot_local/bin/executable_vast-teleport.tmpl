@@ -290,12 +290,13 @@ _do_ssh() {
     [[ "$TARGET" =~ @ ]] || TARGET="${SSHUSER:+${SSHUSER}@}${TARGET}"
     local MUX_THIS="${MUX_THIS:-0}"
 
-    local RUN="${RUN:-}"
+    local RUN="${RUN:-}" local RUN2="${RUN2:-}"
     if [[ -z "$RUN" && "$MUX_THIS" != "0" ]]; then
         local MUX_NAME="${TUNNEL:+${TUNNEL#-}>}${TARGET}|${SEARCH}|${SCRIPT_NAME}"
         if [[ "$MUX_THIS" == "1" ]]; then
             if [[ -n "$(command -v zellij)" ]]; then
                 MUX_THIS="zellij run --floating --height=3 --width=30% --x=70% --y=2 --pinned 'true' --name '\${MUX_NAME}' --"
+                RUN2="zellij action focus-pane-id "${ZELLIJ_PANE_ID}" 2> /dev/null"
             elif [[ -n "$(command -v tmux)" ]]; then
                 # TODO: Define tmux muxing cli
                 MUX_THIS=""
@@ -316,6 +317,7 @@ _do_ssh() {
     [ -z "$TSH_LOG" ] || printf '%s |: tsh %s\n' "$(ts)" "$TSH_CLI" >> $TSH_LOG
     ${ECHO} "Executing: ${RUN} tsh $TSH_CLI" >&2
     eval "${RUN} $(command -v tsh) $TSH_CLI" 
+    [ -z "${RUN2:-}" ] || eval "${RUN2}"
 }
 
 _do_ssh_with_tunnel() {
