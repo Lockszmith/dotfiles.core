@@ -74,10 +74,11 @@ usage-search() {
     printf '%s\n' \
         "Search VAST's teleport connections" \
         '' \
-        "  [SILENT=1] [BATCH=1] [QUERY='query syntax'] ${SCRIPT_NAME} search [<options>] <search string>" \
+        "  [SILENT=1] [BATCH=1|2] [QUERY='query syntax'] ${SCRIPT_NAME} search [<options>] <search string>" \
         '' \
         'Usage:' \
-        '  BATCH=1  env/prefix - skip fuzzy search (tv/fzf) UX' \
+        '  BATCH=1  env/prefix - skip fuzzy search (tv/fzf) UX only output unique identifeir' \
+        '  BATCH=2  env/prefix - skip fuzzy search (tv/fzf) UX and display full search results' \
         '  SILENT=1 env/prefix - supress teleport prompts' \
         '  QUERY    env/prefix - tsh query syntax' \
         '  <search string>     - tsh --search syntax' \
@@ -90,12 +91,20 @@ usage-search() {
         '  Can also be used to just generate lists using the BATCH=1 environment variable' \
         '' \
         'Examples:' \
-        "  \$ BATCH=1 ${SCRIPT_NAME} search tesla # show all matches for tesla, without fuzzy search UI" \
-        '  cluster_psnt=VAST-TESLA-AUS-1,hostname=aus08p1vstfs01-cn1-DO-NOT-LOGIN' \
-        '  cluster_psnt=VA22374479,hostname=c-0-1' \
-        '  cluster_psnt=VA22465472,hostname=c-0-1' \
+        "  \$ BATCH=1 ${SCRIPT_NAME} search acme # show all matches for ACME, without fuzzy search UI" \
+        '  0af0bce0-4236-4850-8752-60b077b505d7' \
+        '  a0cf2fa9-5369-4b45-88ea-6e2277793167' \
+        '  17fa56b3-da66-42e1-b55b-cb66e87620e0' \
         '' \
-        "  ${SCRIPT_NAME} search tesla,472 # will connect to cluster_psnt=VA22465472,hostname=c-0-1" \
+        "  \$ BATCH=2 ${SCRIPT_NAME} search acme # show all matches for ACME, without full output" \
+        '  customer_name=ACME,cluster_psnt=VAST-ACME-AUS-1,hostname=vastacmeaus1-cn1,teleport.internal/resource-id=0d356c22-9990-4df9-8537-55ce491e581b,name=0af0bce0-4236-4850-8752-60b077b505d7' \
+        '  customer_name=ACME,cluster_psnt=VA22465472,hostname=c-0-1,teleport.internal/resource-id=e759b08c-2e61-4470-8b39-4bdb5f0f054f,name=a0cf2fa9-5369-4b45-88ea-6e2277793167' \
+        '  customer_name=ACME,cluster_psnt=VAST-ACME-USA-01,hostname=vastacmeusa01-cn1,teleport.internal/resource-id=48ed98e8-dd0e-4d5c-8749-d4a07f06b926,name=17fa56b3-da66-42e1-b55b-cb66e87620e0' \
+        '  0af0bce0-4236-4850-8752-60b077b505d7' \
+        '  a0cf2fa9-5369-4b45-88ea-6e2277793167' \
+        '  17fa56b3-da66-42e1-b55b-cb66e87620e0' \
+        '' \
+        "  ${SCRIPT_NAME} search acme,472 # will connect to cluster_psnt=VA22465472,hostname=c-0-1" \
         '' \
         "  ${SCRIPT_NAME} search . # Will present complete list in fuzzy search UI" \
         ''
@@ -216,8 +225,8 @@ _do_search() {
         usage-search
     fi
 
-    local FZF="tv --no-preview"
-    local BATCH="${BATCH:-}"
+    local FZF="${FZF:-tv --no-preview}"
+    local BATCH="${BATCH:-0}"
     if ! is_cmd tv; then
         if is_cmd fzf; then
             FZF="fzf --no-preview"
@@ -248,23 +257,25 @@ _do_search() {
         '
     )"
 
-    if [[ -z "$BATCH" && "${OPTIONS}" == *$'\n'* ]]; then
+    if [[ "$BATCH" = 0 && "${OPTIONS}" = *$'\n'* ]]; then
         SELECTED_RAW="$( $FZF <<<"$OPTIONS" )"
     else
         SELECTED_RAW="$OPTIONS"
     fi
 
-    if [[ -z "$SELECTED_RAW" ]]; then
+    if [[ "${#SELECTED_RAW}" -eq 0 ]]; then
         ${SILENT:+:} printf 'Aborted (empty response)\n' >&2
         exit 2
+    elif [[ "$BATCH" = 2 ]]; then
+        SELECTED="${SELECTED_RAW}"
     else
         TESTED=0
         SELECTED="$(<<<"$SELECTED_RAW" sed -Ee 's/^.*name=([^=]+).*$/\1/' )"
 
         [ -z "$SSHUSER" ] || \
         if ! _test_target "$SSHUSER"@"${SELECTED}"; then
-            _test_target "$SSHUSER"@"${RAW_SELECTED}" \
-            && SELECTED="${RAW_SELECTED}" \
+            _test_target "$SSHUSER"@"${SELECTED_RAW}" \
+            && SELECTED="${SELECTED_RAW}" \
             && TESTED=1
         else
             TESTED=1
