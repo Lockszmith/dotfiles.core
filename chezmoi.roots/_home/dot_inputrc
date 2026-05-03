@@ -1,0 +1,8 @@
+# Home/End variants (add your exact sequences from `cat`)
+"\e[H": beginning-of-line
+"\e[F": end-of-line
+"\e[1~": beginning-of-line
+"\e[4~": end-of-line
+"\eOH": beginning-of-line
+"\eOF": end-of-line
+
