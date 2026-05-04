@@ -7,3 +7,4 @@ choices:
     - "with-eza"
     - "with-atuin"
     - "withBrowser"
+    - "nvim.AppImage"
