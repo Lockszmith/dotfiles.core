@@ -14,14 +14,14 @@ XE="${XE:-.*$}"
 [ "${XE:-}" != ":" ] || XE=
 
 
-FD="$(command -v fd)"}
+FD="$(command -v fd)"
 if [[ -z "$FD" || "$FD" = ":" ]]; then
-    FIND='find . --regextype grep -E'
+    FIND='find . -regextype egrep'
     (find . --version 2>&1 || true) | grep -q 'GNU findutils' || FIND='find -E .'
 
     [ ${#PRUNE} -gt 0 ] || PRUNE="( -type d -name vapi -or -name traces ) -prune -or"
 #   ${FIND} -maxdepth ${DEPTH}                  ${PRUNE} -type ${TYPE} -iregex "${@:?}" -print
-    (set -x; ${FIND} -maxdepth ${DEPTH} -regextype egrep ${PRUNE} -type ${TYPE} -iregex "$XB${1:?}$XE" -print)
+    (set -x; ${FIND} -maxdepth ${DEPTH} ${PRUNE} -type ${TYPE} -iregex "$XB${1:?}$XE" -print)
 else
     (set -x; fd --max-depth ${DEPTH} --type ${TYPE} "${@:?}" .)
 fi
