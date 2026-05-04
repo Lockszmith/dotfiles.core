@@ -36,7 +36,7 @@ get-cz-special() {
 
     get-cz-special-case 'config'            "${cfg}"
     get-cz-special-case 'config-template'   "${tmpl}" ".tmpl"
-    get-cz-special-case 'externals'         "${ext}"
+    get-cz-special-case 'external'          "${ext}"
     get-cz-special-case 'cz.szEnvs'         "${tmpl}"
 }
 
