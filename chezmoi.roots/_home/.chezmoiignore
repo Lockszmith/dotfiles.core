@@ -7,3 +7,8 @@
 !.config/raycast/extensions/*/package.json
 .config/raycast/extensions/*/*/**
 
+{{ if not (stat (joinPath .chezmoi.homeDir "VAST/dockersh.home" )) -}}
+VAST/
+VAST/dockersh.home/
+VAST/dockersh.home/**
+{{ end -}}
