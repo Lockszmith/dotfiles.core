@@ -59,6 +59,10 @@ bell-features = no-system,no-audio,attention,title,no-border
 gtk-tabs-location = top
 window-theme = auto
 window-decoration = auto
+window-save-state = always
+
+window-height = 37
+window-width = 173
 
 # WezTerm's prefer_to_spawn_tabs asks new launches to reuse an existing
 # window as a new tab. Ghostty's single-instance mode routes subsequent
@@ -97,6 +101,8 @@ copy-on-select = true
 # WezTerm sets disable_default_key_bindings = true, so we start from a clean
 # slate to avoid clashing with Ghostty's GTK defaults.
 keybind = clear
+
+keybind = ctrl+shift+,=reload_config
 
 # --- Font size ----------------------------------------------------------------
 keybind = ctrl+plus=increase_font_size:1
@@ -180,6 +186,8 @@ keybind = ctrl+tab>alt+right=move_tab:1
 # restore the old direct next/prev-tab behaviour (losing the leader):
 # keybind = ctrl+tab=next_tab
 # keybind = ctrl+shift+tab=previous_tab
+
+shell-integration-features = ssh-env,ssh-terminfo
 
 # =============================================================================
 # NOT PORTED: features the WezTerm config implements via Lua callbacks
