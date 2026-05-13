@@ -34,7 +34,7 @@ CLI_ARGS="${CLI_ARGS:-$0 $*}"
 
 TSH_PATH="${TSH_PATH:-$(command -v tsh || true)}"
 TSH_PATH="${TSH_PATH:-~/.local/bin/tsh}"
-TSH_PATH="$TSH_PATH '$(readlink -f "$TSH_PATH")'"
+TSH_PATH="$TSH_PATH '$(readlink -f "$TSH_PATH" || true)'"
 
 ########################################################################
 # Additional Usage output
