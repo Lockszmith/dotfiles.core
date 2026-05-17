@@ -202,8 +202,10 @@ _do_upgrade() {
         printf '\nExtracting . . .'
         mkdir -p "${dl_path}" && rm -r "${dl_path}" && mkdir -p "${dl_path}"
         tar xzf "${dl_path}.tgz" -C "${dl_path}"
+        local FIND_EXEC='-executable'
+        [ "$OS" = "linux" ] || FIND_EXEC=''
 
-        find "${dl_path}" -executable -type f -name 'tsh' -exec ln -fs {} $HOME/.local/bin/ \;
+        find "${dl_path}" $FIND_EXEC -type f -name 'tsh' -exec ln -fs {} $HOME/.local/bin/ \;
         printf '\nSetup complete; tsh version output: '
         tsh version
     fi
