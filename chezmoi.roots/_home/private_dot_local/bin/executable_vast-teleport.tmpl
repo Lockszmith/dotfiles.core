@@ -161,16 +161,53 @@ get_latest_version_by_major() {
     | tail -n 1
 }
 
+OS=''
+ARCH=''
+
+_detect_OS_and_ARCH() {
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+
+    case "$ARCH" in
+        x86_64)        ARCH=amd64 ;;
+        aarch64|arm64) ARCH=arm64 ;;
+        i386|i686)     ARCH=386 ;;
+    esac
+}
+
+_get_teleport_dl_URL() {
+    local version="$1"
+    _detect_OS_and_ARCH
+    local myArch="${OS}-${ARCH}"
+    printf "https://cdn.teleport.dev/teleport-%s-%s-bin.tar.gz" $version $myArch
+}
+
 _do_upgrade() {
-    CZ_PATH="${CZ_PATH:-$(command -v chezmoi || true)}"
-    CZ_PATH="${CZ_PATH:-$(command -v ~/bin/chezmoi || true)}"
     local TELEPORT_MAJOR=${1:-${TELEPORT_MAJOR:-$(_go_get_version_server_major)}}
 
-    if [ -n "$CZ_PATH" ]; then
-        eval "TELEPORT_MAJOR=$TELEPORT_MAJOR CZ_EXTR=1 "$CZ_PATH" apply --verbose --no-pager --less-interactive --include externals ${TSH_PATH}"
+    local version="$(_go_get_version_client ${TELEPORT_MAJOR})"
+    local teleport_dl_url="$(_get_teleport_dl_URL $version)"
+
+    local dl_path="$HOME/.cache/teleport/package"
+
+    printf 'Downloading from %s . . .' "$teleport_dl_url" \
+    && curl -so "${dl_path}.tgz" "$teleport_dl_url" \
+    && printf '\nTesting . . .'
+
+    if [ -r "${dl_path}.tgz.md5" ] && md5sum --status --check "${dl_path}.tgz.md5"; then
+        printf '\nNo changes detected, all done.'
     else
-        echo chezmoi is required to perform upgrade
+        md5sum "${dl_path}.tgz" > "${dl_path}.tgz.md5"
+
+        printf '\nExtracting . . .'
+        mkdir -p "${dl_path}" && rm -r "${dl_path}" && mkdir -p "${dl_path}"
+        tar xzf "${dl_path}.tgz" -C "${dl_path}"
+
+        find "${dl_path}" -executable -type f -name 'tsh' -exec ln -fs {} $HOME/.local/bin/ \;
+        printf '\nSetup complete; tsh version output: '
+        tsh version
     fi
+    printf '\n'
 }
 
 _go_get() {
