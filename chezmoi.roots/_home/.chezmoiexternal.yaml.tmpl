@@ -28,6 +28,11 @@
 {{- $externals := dict -}}
 {{- $cz := .chezmoi -}}
 
+{{- $fileExt := "" -}}
+{{- if (eq .chezmoi.os "windows") -}}
+{{- $fileExt = ".exe" -}}
+{{- end -}}
+
 {{/*
 # valid arch strings:
 # aarch64-apple-darwin
@@ -246,6 +251,16 @@
         "type" "archive-file"
         "url" (printf "https://github.com/%s/releases/download/v%s/%s_%s_%s.tar.gz" $repo $version $app_name $version $myArch)
         "path" $app_name
+        "executable" true
+        "refreshPeriod" $defaultRefresh
+) -}}{{- end -}}{{- end -}}{{- end -}}
+
+{{- with $app_name := "fx" -}}
+{{- with $repo := (printf "%s/%s" "antonmedv" $app_name) -}}
+{{- with $version := (gitHubLatestRelease $repo).GetTagName -}}
+{{-   $_ := set $externals (printf ".local/bin/%s" $app_name) (dict
+        "type" "file"
+        "url" (printf "https://github.com/%s/releases/download/%s/%s_%s%s" $repo $version $app_name $myArch $fileExt)
         "executable" true
         "refreshPeriod" $defaultRefresh
 ) -}}{{- end -}}{{- end -}}{{- end -}}
