@@ -4,7 +4,7 @@ layout {
             plugin location="zellij:tab-bar"
         }
         pane command="sh" size="55%" {
-            args "-ic" "SSHPASS=${SSHPASS} ${SSH_PASS} ${SSH_CLI} ${SSH_CMD}"
+            args "-ic" "TERM=${TERM} SSHPASS=${SSHPASS} ${SSH_PASS} ${SSH_CLI} ${SSH_CMD}"
             start_suspended false
         }
         pane size=1 borderless=true {
