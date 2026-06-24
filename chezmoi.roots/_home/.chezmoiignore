@@ -1,6 +1,7 @@
 /**/.git
 /**/.git/**
 *.zwc
+nvim.log
 
 .config/vim/autoload
 .config/raycast/node_modules
