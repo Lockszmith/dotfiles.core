@@ -13,7 +13,6 @@ while [[ $# -gt 0 ]]; do
         '--all') all=1; bin=1 ;;
         '--no-refresh') refresh=0 ;;
         '--yes') interact='' ;;
-        '--quiet') verbose='' ;;
         '--verbose') verbose='--verbose' ;;
         '--debug') debug='--debug' ;;
         '--help') printf '%s\n' \
@@ -21,7 +20,7 @@ while [[ $# -gt 0 ]]; do
             '  czu ' \
             '  czu [--help]' \
             '  czu [--no-init] [[--bin | --all [--no-bin]]] ' \
-            '      [--yes] [--reinit[=all]] [--no-refresh] [--quiet] [--debug]' \
+            '      [--yes] [--reinit[=all]] [--no-refresh] [--verbose] [--debug]' \
             '' \
             'Description:' \
             #123456789012345678901234567890123456789012345678901234567890123456789012
@@ -35,8 +34,8 @@ while [[ $# -gt 0 ]]; do
             '' \
             'More arguments:' \
             '  --yes' \
-            '  --quiet' \
             '  --debug' \
+            '  --verbose' \
             '  --help' \
             ''
             return 1
