@@ -8,3 +8,4 @@ choices:
     - "with-atuin"
     - "withBrowser"
     - "nvim.AppImage"
+    - "with-nix-hm"

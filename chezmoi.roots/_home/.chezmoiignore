@@ -10,7 +10,8 @@ nvim.log
 !.config/raycast/extensions/*/package.json
 .config/raycast/extensions/*/*/**
 
-{{ if not (stat (joinPath .chezmoi.homeDir ".config/home-manager" )) -}}
+{{ $withNixHm := has "with-nix-hm" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
+{{ if and (not $withNixHm) (not (stat (joinPath .chezmoi.homeDir ".config/home-manager" ))) -}}
 .config/home-manager/
 .config/home-manager/**
 {{ end -}}

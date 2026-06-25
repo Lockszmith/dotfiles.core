@@ -1,0 +1,43 @@
+{{- if has "with-nix-hm" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
+{ ... }:
+
+{
+  imports = [ ./default.nix ];
+
+  sz.platform.genericLinux.enable = true;
+  sz.platform.nvidia.enable = true;
+  sz.platform.fedoraDesktop.enable = true;
+
+  sz.activations.setDefaultShell.enable = true;
+
+  sz.desktop.plasmaKeyboard.enable = true;
+  sz.desktop.hyprland.enable = true;
+
+  services.gearlever.enable = true;
+  services.gearlever.apps.beeper.enable = true;
+  services.browsers.enable = true;
+  services.vicinae = {
+    enable = true;
+    systemd = {
+      enable = true;
+      autoStart = true;
+    };
+  };
+
+  sz.packages.common.enable = true;
+  sz.packages.zen-browser.enable = true;
+  sz.packages.doublecmd.enable = true;
+  sz.packages.zoom.enable = true;
+  sz.packages.gimp.enable = true;
+  sz.packages.gmic-qt.enable = true;
+  sz.packages.rembg.enable = true;
+  sz.packages.pinta.enable = true;
+  sz.packages.ghostty.enable = true;
+  sz.packages.nix-software-center.enable = true;
+  sz.packages.winboat.enable = true;
+  sz.packages.digikam.enable = true;
+{{- if has "VAST.personal" (splitList " " (dig "sz" "env" "flags" "" .)) }}
+  sz.packages.rustdesk.enable = true;
+{{- end }}
+}
+{{- end -}}
