@@ -1,0 +1,4 @@
+choices:
+  nixHomeManagerFlags:
+    - "default"
+    - "zoom"

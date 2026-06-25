@@ -39,6 +39,25 @@
 {{-   $szEnvFlags = $szEnvFlags | join " " -}}
 {{- end -}}
 
+{{- $nixHomeManagerFlags := "" }}
+{{ $withNixHm := has "with-nix-hm" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
+{{- if $withNixHm }}
+{{- $nixHomeManagerFlagsChoices := (
+        list .chezmoi.sourceDir ".chezmoidata" "szEnv.nix-hm.yaml" |
+        join "/" | include | fromYaml
+    ).choices.nixHomeManagerFlags -}}
+{{- $nixHomeManagerFlags = list (dig "sz" "home-manager" "flags" "default" .) "dummy" | join " " | splitList " " -}}
+{{- $nixHomeManagerFlags = slice $nixHomeManagerFlags 0 (sub (len $nixHomeManagerFlags) 1) -}}
+
+{{- $hasExistingFlags := ne (dig "sz" "home-manager" "flags" "" .) "" -}}
+{{- if or $reconfigFlags (not $hasExistingFlags) -}}
+{{-   $nixHomeManagerFlagsSelected := promptMultichoice "Choose home-manager flags" $nixHomeManagerFlagsChoices $nixHomeManagerFlags -}}
+{{-   $nixHomeManagerFlags = (or $nixHomeManagerFlagsSelected $nixHomeManagerFlags) | join " " -}}
+{{- else -}}
+{{-   $nixHomeManagerFlags = $nixHomeManagerFlags | join " " -}}
+{{- end -}}
+{{- end -}}
+
 {{- $sysuser := promptStringOnce . "sysuser" "System user" (or (
         env "CZ_SYSUSER"
     ) ( .chezmoi.username
@@ -125,6 +144,13 @@ scriptTempDir={{ $scriptTempDir | quote }}
 [data.sz.env]
 {{- if ($szEnvFlags) }}
    flags={{- $szEnvFlags | quote }}
+{{- end }}
+
+{{- if $withNixHm }}
+[data.sz.home-manager]
+{{- if ($nixHomeManagerFlags) }}
+   flags={{- $nixHomeManagerFlags | quote }}
+{{- end }}
 {{- end }}
 
 [data.sz.os]
