@@ -49,6 +49,10 @@ get-cz-chezmoi() {
 get-cz-managed() {
     SET_X=: env chezmoi managed --exclude=remove,dirs,externals || true
 }
+get-cz-dual-managed() {
+    return
+    SET_X=: env chezmoi managed --include=modify,create || true
+}
 get-cz-unmanaged() {
     SET_X=:
     comm -3 -1 <(get-cz-externals) <(
@@ -84,7 +88,7 @@ get-all() {
     local sets=()
     while [ -n "${1:-}" ]; do
         case "$1" in
-            "all" ) sets=(special managed unmanaged chezmoi) ;;
+            "all" ) sets=(special managed dual-managed unmanaged chezmoi) ;;
             "refresh-cache") get-cz-externals --force ;;
             * )
                     sets+=("$1") ;;

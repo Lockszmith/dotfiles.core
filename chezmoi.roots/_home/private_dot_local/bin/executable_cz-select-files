@@ -85,10 +85,10 @@ fi
 printf "%s\n" "${singles[@]}" "${picked[@]}" | uniq | grep -Ev '^$' \
     | sed -Ee '
         s|^([SC]: )?|\1|;
-        s|^([UMSC]: )?|\1~/|;
+        s|^([UDMSC]: )?|\1~/|;
         s|~/([~/])|\1|;
         s|\$|\\$\\|g;
-        s|^([UMSC]: )?~/|\1$HOME/|;
+        s|^([UDMSC]: )?~/|\1$HOME/|;
     ' | envsubst \
     | sed -Ee 's|\\\$\\|$|g'
 
