@@ -15,6 +15,7 @@ nvim.log
 .config/home-manager/
 .config/home-manager/**
 {{ end -}}
+.config/home-manager/result
 
 {{ if not (stat (joinPath .chezmoi.homeDir "VAST/dockersh.home" )) -}}
 VAST/
