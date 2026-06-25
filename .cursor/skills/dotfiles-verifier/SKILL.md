@@ -28,6 +28,7 @@ For **agent-logic** tasks (changes to `AGENTS.md`, `docs/agents/`, `.cursor/skil
 
 ### Home-manager (if applicable)
 - [ ] Module imported + enabled as needed
+- [ ] New module: flag in `szEnv.nix-hm.yaml` at correct sort position + enable line in `hosts/sz.nix.tmpl` in matching order (see yaml notes)
 - [ ] `sz.*` namespace for custom options
 - [ ] Run `nix build .#homeConfigurations.sz.activationPackage` when possible
 

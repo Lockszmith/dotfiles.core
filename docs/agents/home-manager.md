@@ -22,6 +22,35 @@ flake.nix
 
 Custom options namespace: `sz.*` (`sz.platform`, `sz.desktop`, `sz.packages`, `sz.activations`).
 
+## Module flags (szEnv.nix-hm)
+
+HM modules are toggled per-machine via chezmoi multichoice flags — not hard-coded in the host file.
+
+**Flow:**
+
+1. `chezmoi.roots/_home/.chezmoidata/szEnv.nix-hm.yaml` — `choices.nixHomeManagerFlags` lists valid flags
+2. `.chezmoi.toml.tmpl` — `promptMultichoice` when `with-nix-hm` is set → writes `[data.sz.home-manager] flags`
+3. `hosts/sz.nix.tmpl` — `has "<flag>"` against `sz.home-manager.flags` gates each `sz.*.enable`
+
+**Rule:** every new module gets its own flag and is **optional by default**. Do not add new flags to the `default` bundle unless explicitly requested.
+
+**Flag order:** `szEnv.nix-hm.yaml` defines sort order (groups: default, sys, sys-desktop, svc, app; alphabetical within group; `# pin-order N` for priority). `hosts/sz.nix.tmpl` enable lines **must follow the same order** as `nixHomeManagerFlags` (excluding `default`). See notes at bottom of the yaml file.
+
+At top of `hosts/sz.nix.tmpl` (inside the `with-nix-hm` guard):
+
+```go
+{{- $hm := splitList " " (dig "sz" "home-manager" "flags" "default" .) -}}
+{{- $def := has "default" $hm -}}
+```
+
+Inline flag check on each enable line (renders `true`/`false`):
+
+```nix
+  sz.packages.mymodule.enable = {{ has "app-mymodule" $hm }};
+```
+
+Legacy baseline: `{{ or $def (has "<flag>" $hm) }}`. New modules: `{{ has "app-<name>" $hm }}` only.
+
 ## Adding a package module
 
 1. Create `modules/packages/<name>.nix`:
@@ -38,8 +67,9 @@ in {
 ```
 
 2. Import in `modules/default.nix`.
-3. Enable in `hosts/sz.nix.tmpl`: `sz.packages.<name>.enable = true;`
-4. Validate and switch (see below).
+3. Add flag to `chezmoi.roots/_home/.chezmoidata/szEnv.nix-hm.yaml` under `choices.nixHomeManagerFlags` (e.g. `app-<name>`) — respect group sort order and pin-order comments.
+4. Add matching enable line in `hosts/sz.nix.tmpl` **at the same position** as the yaml entry (see Module flags order rule).
+5. Validate and switch (see below).
 
 ## Adding a flake input
 
@@ -74,6 +104,7 @@ nix build .#homeConfigurations.sz.activationPackage
 ## Chezmoi integration
 
 - `hosts/sz.nix.tmpl` wrapped in `with-nix-hm` flag — empty host file when flag off.
+- Per-module enables gated by `sz.home-manager.flags` (from `szEnv.nix-hm.yaml` multichoice).
 - `flake.lock` ignored by chezmoi — regenerate locally.
 - `result` symlink points to store generation — do not commit.
 

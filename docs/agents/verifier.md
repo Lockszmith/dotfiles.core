@@ -42,7 +42,8 @@ PASS | FAIL
 
 - [ ] Edits in `private_dot_config/private_home-manager/` (HM source)
 - [ ] New modules imported in `modules/default.nix`
-- [ ] Enables added to `hosts/sz.nix.tmpl` when needed
+- [ ] New module: flag added to `chezmoi.roots/_home/.chezmoidata/szEnv.nix-hm.yaml` (`choices.nixHomeManagerFlags`) at correct sort position
+- [ ] Matching enable line in `hosts/sz.nix.tmpl` at same order as yaml (sub-lines for one flag, e.g. vicinae systemd, stay adjacent)
 - [ ] `sz.*` option namespace used for custom toggles
 - [ ] `nix build .#homeConfigurations.sz.activationPackage` succeeds (run when possible)
 

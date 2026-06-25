@@ -9,8 +9,8 @@ alwaysApply: false
 This tree is **HM source**. Chezmoi deploys it to **HM target** `~/.config/home-manager/`.
 
 - Custom options: `sz.*` namespace
-- New package: `modules/packages/<name>.nix` → import in `modules/default.nix` → enable in `hosts/sz.nix.tmpl`
-- Host file gated by `with-nix-hm` flag
+- New package: `modules/packages/<name>.nix` → import → flag in `szEnv.nix-hm.yaml` (sorted per yaml notes) → matching-order line in `hosts/sz.nix.tmpl`
+- Host file gated by `with-nix-hm` flag; per-module enables gated by `sz.home-manager.flags`
 - Do not commit `flake.lock` or `result`
 - Procedures: `docs/agents/home-manager.md`
 - After edits: `chezmoi apply` → `home-manager switch --flake .#sz`
