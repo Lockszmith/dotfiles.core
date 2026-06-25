@@ -4,16 +4,18 @@ let
   cfg = config.sz.packages.ungoogled-chromium;
 
   chromium = pkgs.ungoogled-chromium;
-  # Chromium lowercases profile directory names; display name stays Slack@VASTSupport.
-  profileDir = "slack@vastsupport";
+  # Chromium lowercases profile directory names with _. prefix; display name: Slack@VASTSupport.
+  profileDir = "_.slack@vastsupport";
   profileName = "Slack@VASTSupport";
   slackUrl = "https://app.slack.com/client/";
   vastSupportIcon =
     "${config.home.homeDirectory}/.local/share/chezmoi/docs/resources/icons/VASTSupport.png";
 
   chromiumConfigDir = "${config.home.homeDirectory}/.config/chromium";
-  chromiumIconSrc = "${chromium}/share/icons/hicolor/256x256/apps/chromium.png";
-  chromiumIconLocal = "${config.home.homeDirectory}/.local/share/pixmaps/chromium.png";
+  ungoogledIconSrc =
+    "${config.home.homeDirectory}/.local/share/chezmoi/docs/resources/icons/ungoogled-chromium-p.png";
+  ungoogledIconLocal =
+    "${config.home.homeDirectory}/.local/share/pixmaps/ungoogled-chromium.png";
 
   chromium-bin-only = pkgs.buildEnv {
     name = "ungoogled-chromium-bin-only";
@@ -21,17 +23,8 @@ let
     pathsToLink = [ "/bin" ];
   };
 
-  chromium-share = pkgs.buildEnv {
-    name = "ungoogled-chromium-share";
-    paths = [ chromium ];
-    pathsToLink = [
-      "/share/pixmaps"
-      "/share/icons"
-    ];
-  };
-
   ungoogled-chromium-bin = pkgs.writeShellScriptBin "ungoogled-chromium" ''
-    exec ${chromium-bin-only}/bin/chromium --profile-picker "$@"
+    exec ${chromium-bin-only}/bin/chromium "$@"
   '';
 
   ungoogled-chromium-desktop = pkgs.makeDesktopItem {
@@ -41,7 +34,7 @@ let
     comment = "Access the Internet (profile picker)";
     exec = "${ungoogled-chromium-bin}/bin/ungoogled-chromium %U";
     tryExec = "${ungoogled-chromium-bin}/bin/ungoogled-chromium";
-    icon = chromiumIconLocal;
+    icon = ungoogledIconLocal;
     categories = [ "Network" "WebBrowser" ];
     mimeTypes = [
       "application/pdf"
@@ -64,6 +57,27 @@ let
     startupWMClass = "chromium-browser";
   };
 
+  initProfilePickerScript = pkgs.writeShellScript "ungoogled-chromium-init-profile-picker" ''
+    set -euo pipefail
+
+    config_dir="${chromiumConfigDir}"
+    local_state="$config_dir/Local State"
+    mkdir -p "$config_dir"
+
+    if [ ! -f "$local_state" ]; then
+      ${pkgs.jq}/bin/jq -n '{
+        profile: { picker_availability_on_startup: 2 }
+      }' > "$local_state"
+    else
+      tmp=$(mktemp)
+      ${pkgs.jq}/bin/jq '
+        .profile //= {} |
+        .profile.picker_availability_on_startup = 2
+      ' "$local_state" > "$tmp"
+      mv "$tmp" "$local_state"
+    fi
+  '';
+
   initSlackProfileScript = pkgs.writeShellScript "ungoogled-chromium-init-slack-vast-support-profile" ''
     set -euo pipefail
 
@@ -72,11 +86,6 @@ let
     profile_name="${profileName}"
     local_state="$config_dir/Local State"
     profile_path="$config_dir/$profile_dir"
-    stale_profile_path="$config_dir/$stale_profile_dir"
-
-    if [ -d "$stale_profile_path" ] && [ ! -d "$profile_path" ]; then
-      mv "$stale_profile_path" "$profile_path"
-    fi
 
     mkdir -p "$profile_path"
 
@@ -105,14 +114,16 @@ let
     if [ ! -f "$local_state" ]; then
       ${pkgs.jq}/bin/jq -n --arg dir "$profile_dir" --argjson entry "$profile_entry" '{
         profile: {
+          picker_availability_on_startup: 2,
           info_cache: { ($dir): $entry },
           profiles_order: [$dir]
         }
       }' > "$local_state"
     else
       tmp=$(mktemp)
-      ${pkgs.jq}/bin/jq --arg dir "$profile_dir" --arg stale "$stale_profile_dir" --argjson entry "$profile_entry" '
+      ${pkgs.jq}/bin/jq --arg dir "$profile_dir" --argjson entry "$profile_entry" '
         .profile //= {} |
+        .profile.picker_availability_on_startup = 2 |
         .profile.info_cache //= {} |
         .profile.info_cache[$dir] = (
           (.profile.info_cache[$dir] // {}) * $entry |
@@ -121,10 +132,12 @@ let
           .is_using_default_name = false
         ) |
         .profile.profiles_order = (
-          (.profile.profiles_order // [] | map(select(. != $stale))) as $order |
-          if ($order | index($dir)) then $order else $order + [$dir] end
-        ) |
-        del(.profile.info_cache[$stale])
+          if (.profile.profiles_order // [] | index($dir)) then
+            .profile.profiles_order
+          else
+            (.profile.profiles_order // []) + [$dir]
+          end
+        )
       ' "$local_state" > "$tmp"
       mv "$tmp" "$local_state"
     fi
@@ -165,28 +178,28 @@ let
   '';
 
   iconInstallScript = pkgs.writeShellScript "ungoogled-chromium-icon-install" ''
-    pixmapdir="$HOME/.local/share/pixmaps"
-    icondir="$HOME/.local/share/icons"
-    mkdir -p "$pixmapdir" "$icondir/hicolor/256x256/apps"
-    cp -Lf "${chromiumIconSrc}" "$pixmapdir/chromium.png"
-    chmod a+r "$pixmapdir/chromium.png"
-    for size in 16x16 24x24 48x48 64x64 128x128 256x256; do
-      src="${chromium}/share/icons/hicolor/$size/apps/chromium.png"
-      if [ -f "$src" ]; then
-        mkdir -p "$icondir/hicolor/$size/apps"
-        cp -Lf "$src" "$icondir/hicolor/$size/apps/chromium.png"
-        chmod a+r "$icondir/hicolor/$size/apps/chromium.png"
-      fi
-    done
-    if [ -d "$icondir/hicolor" ] && command -v gtk-update-icon-cache >/dev/null; then
-      chmod -R u+w "$icondir" 2>/dev/null || true
-      gtk-update-icon-cache -f -t "$icondir/hicolor" 2>/dev/null || true
+    set -euo pipefail
+    src="${ungoogledIconSrc}"
+    pixmap="$HOME/.local/share/pixmaps/ungoogled-chromium.png"
+    icondir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    mkdir -p "$(dirname "$pixmap")" "$icondir"
+    if [ ! -f "$src" ]; then
+      echo "ungoogled-chromium icon missing at $src" >&2
+      exit 1
+    fi
+    cp -Lf "$src" "$pixmap"
+    chmod a+r "$pixmap"
+    cp -Lf "$src" "$icondir/ungoogled-chromium.png"
+    chmod a+r "$icondir/ungoogled-chromium.png"
+    if command -v gtk-update-icon-cache >/dev/null; then
+      chmod -R u+w "$HOME/.local/share/icons" 2>/dev/null || true
+      gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
     fi
   '';
 
   patchDesktopScript = pkgs.writeShellScript "ungoogled-chromium-patch-desktop" ''
     desktop="$HOME/.local/share/applications/ungoogled-chromium.desktop"
-    icon="${chromiumIconLocal}"
+    icon="${ungoogledIconLocal}"
     if [ -f "$desktop" ]; then
       ${pkgs.gnused}/bin/sed -i "s|^Icon=.*|Icon=$icon|" "$desktop"
     fi
@@ -202,7 +215,6 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [
       chromium-bin-only
-      chromium-share
       ungoogled-chromium-bin
       ungoogled-chromium-desktop
     ]
@@ -215,6 +227,10 @@ in
       $DRY_RUN_CMD ${iconInstallScript}
     '';
 
+    home.activation.ungoogledChromiumProfilePicker = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      $DRY_RUN_CMD ${initProfilePickerScript}
+    '';
+
     home.activation.ungoogledChromiumDesktopCleanup = lib.hm.dag.entryAfter desktopCleanupAfter ''
       $DRY_RUN_CMD ${desktopCleanupScript}
     '';
@@ -224,7 +240,7 @@ in
     '';
 
     home.activation.ungoogledChromiumSlackVastSupportProfile = lib.mkIf cfg.slackPwaVastSupport.enable (
-      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      lib.hm.dag.entryAfter [ "ungoogledChromiumProfilePicker" ] ''
         $DRY_RUN_CMD ${initSlackProfileScript}
       ''
     );
