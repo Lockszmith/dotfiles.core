@@ -82,8 +82,8 @@ if [ "${#multi_candidates[@]}" -gt 0 ]; then
 fi
 
 # Combine singles + picked, make unique, and output
-printf "%s\n" "${singles[@]}" "${picked[@]}" | uniq | grep -Ev '^$' \
-    | sed -Ee '
+printf "%s\n" "${singles[@]}" "${picked[@]}" | uniq | grep -Ev '^$' $(
+    ) | sed -Ee '
         s|^([SC]: )?|\1|;
         s|^([UDMSC]: )?|\1~/|;
         s|~/([~/])|\1|;

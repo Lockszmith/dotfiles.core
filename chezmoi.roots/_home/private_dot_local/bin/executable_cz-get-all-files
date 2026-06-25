@@ -109,6 +109,10 @@ get-all() {
 }
 
 ${SET_X:-:} -x
-get-all "${@:-all}" | ( [ "$PREFIXED" = 0 ] && cat - || sort --uniq -Vk'2,2' )
+get-all "${@:-all}" $(
+    ) | (
+        [ "$PREFIXED" = 0 ] $(
+            ) & cat - || sort --uniq -Vk'2,2'
+    )
 ${SET_X:-:} +x
 # vim: set ft=sh sw=4 sts=4 et:
