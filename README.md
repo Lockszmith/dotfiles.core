@@ -145,7 +145,7 @@ on the repo.
 | `.vscode/chezmoi.code-workspace`  | Multi-root workspace (chezmoi repo + live `~/.config/home-manager`)                                      |
 
 See `docs/agents/` for source vs target terminology and the
-specialist → verifier workflow used on non-trivial changes.
+every-prompt orchestration (specialist → verifier) workflow when sub-agents are available.
 
 ## Try Me
 

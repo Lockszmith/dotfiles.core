@@ -28,7 +28,7 @@ Use these terms consistently. Full definitions: [docs/agents/terminology.md](doc
 
 ## Sub-agent orchestration (required workflow)
 
-Every non-trivial task uses three roles. In tools with sub-agents/tasks, launch them explicitly and **in parallel** when work is independent. In tools without, execute the same sequence in order.
+**Every user prompt** uses three roles when sub-agents or equivalent Task tools are available — including trivial edits and pure Q&A. Launch specialists explicitly and **in parallel** when work is independent. In tools without sub-agents, execute the same sequence in order.
 
 ```
 User prompt
@@ -73,7 +73,7 @@ Read [docs/agents/verifier.md](docs/agents/verifier.md).
 
 ## Sub-agent parallelism (mandatory)
 
-All implementation by sub-agents — the orchestrator never edits source files or runs domain commands itself.
+When sub-agents are available: **every prompt** — all implementation by sub-agents; the orchestrator never edits source files or runs domain commands itself.
 
 - **Maximize parallel launches** — independent specialists in one turn (e.g. chezmoi + HM; unrelated file groups)
 - **Master minimizes context** — orchestrator reads only what routing requires; specialists own investigation and edits

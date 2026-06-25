@@ -16,13 +16,15 @@ Repo: chezmoi dotfiles + Nix home-manager. Read `AGENTS.md` and `docs/agents/`.
 
 ## Required workflow
 
+**Every user prompt** when `Task`/sub-agents are available:
+
 1. **Orchestrate** — classify task; use skill `dotfiles-orchestrator`
 2. **Specialist** — delegate to sub-agents; launch independent specialists **in parallel**
-6. **Verify** — run matching verifier(s) last; loop until PASS:
+3. **Verify** — run matching verifier(s) last; loop until PASS:
    - `dotfiles-verifier` — chezmoi / HM
    - `agent-logic-verifier` — agent scaffolding
 
-Never mark a non-trivial task complete without verifier PASS.
+Never mark complete without verifier PASS.
 
 ## Sub-agent delegation (mandatory)
 

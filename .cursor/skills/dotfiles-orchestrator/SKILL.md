@@ -1,9 +1,11 @@
 ---
 name: dotfiles-orchestrator
-description: Routes dotfile and agent-logic tasks to parallel specialists and mandates verifier follow-up. Use for any chezmoi, home-manager, dotfiles, agent scaffolding, or home directory configuration request in this repo.
+description: Routes every dotfile and agent-logic prompt to parallel specialists and mandates verifier follow-up when Task/sub-agents are available. Use for any chezmoi, home-manager, dotfiles, agent scaffolding, or home directory configuration request in this repo.
 ---
 
 # Dotfiles orchestrator
+
+**Mandatory for every user prompt** when `Task`/sub-agents are available — orchestrator routes only; never implements.
 
 ## Steps
 

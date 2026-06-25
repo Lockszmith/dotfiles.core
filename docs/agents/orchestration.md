@@ -10,6 +10,8 @@
 
 ## Flow
 
+When sub-agents (or equivalent Task tools) are available, **every user prompt** follows this flow — no trivial-task exemptions. Tools without sub-agents execute the same roles in order in a single session.
+
 ```mermaid
 flowchart TD
   U[User prompt] --> O[Orchestrator]
@@ -91,11 +93,8 @@ Changes to agent workflow itself (`AGENTS.md`, `docs/agents/`, `.cursor/skills/`
 | Claude Code    | Main thread plans                             | Subagent or sequential role    | Separate verification pass                          |
 | Codex / others | Follow AGENTS.md manually                     | Read `docs/agents/<domain>.md` | Read `docs/agents/verifier.md`                      |
 
-**Invariant:** Verifier always runs after specialist. Never skip verification on non-trivial tasks.
+**Invariant:** Verifier always runs after specialist on every prompt — never skip verification.
 
-## Trivial tasks (orchestrator may skip formal sub-agents)
+## Tools without sub-agents
 
-- Single-file doc typo
-- Pure Q&A with no edits
-
-Still use correct source/target terminology.
+Execute orchestrator → specialist → verifier roles in order within one session. Still use correct source/target terminology.

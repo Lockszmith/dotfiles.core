@@ -47,7 +47,7 @@ Lives under `.cursor/`.
 2. **Edit portable first** — add or change canonical content in `docs/agents/` (or `AGENTS.md` for top-level routing).
 3. **Sync tool layer** — update matching skill/rule to reference the portable doc; trim copied prose.
 4. **Update indexes** — add row to `docs/agents/README.md`; extend `AGENTS.md` routing if a new specialist exists.
-5. **Orchestration** — if roles or handoffs change, update [orchestration.md](orchestration.md) and the orchestrator skill/rule routing tables.
+5. **Orchestration** — if roles or handoffs change, update [orchestration.md](orchestration.md) and the orchestrator skill/rule routing tables. Portable docs state **every user prompt** delegates when sub-agents are available; tool layer adds `Task`/sub-agent mechanics only.
 6. **Verify** — run `agent-logic-verifier` (or [verifier.md](verifier.md) Agent-logic checks); use `dotfiles-verifier` only if dotfile/HM instructions changed.
 
 ### Adding a new specialist
