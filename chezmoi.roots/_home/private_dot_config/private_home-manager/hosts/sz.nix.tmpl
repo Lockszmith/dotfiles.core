@@ -8,20 +8,35 @@
 
   # Enable order matches .chezmoidata/szEnv.nix-hm.yaml (see notes there).
   sz.platform.genericLinux.enable = {{ or $def (has "sys-generic-linux" $hm) }};
+  sz.platform.fedoraDesktop.enable = {{ has "sys-fedora-desktop" $hm }};
+  sz.platform.nvidia.enable = {{ has "sys-nvidia" $hm }};
+  sz.activations.setUserShell.enable = {{ has "sys-set-user-shell" $hm }};
   sz.activations.setNixTrustedUser.enable = {{ has "sys-set-user-trusted" $hm }};
+  sz.activations.setRootShell.enable = {{ has "sys-set-root-shell" $hm }};
+  sz.desktop.hyprland.enable = {{ has "sys-desktop-hyprland" $hm }};
+  sz.desktop.plasmaKeyboard.enable = {{ has "sys-desktop-plasma-keyboard" $hm }};
 
-  services.browsers.enable = {{ or $def (has "svc-browsers" $hm) }};
-  services.gearlever.enable = {{ or $def (has "svc-gearlever" $hm) }};
-  services.gearlever.apps.beeper.enable = {{ or $def (has "svc-gearlever" $hm) }};
-  services.vicinae.enable = {{ or $def (has "svc-vicinae" $hm) }};
-  services.vicinae.systemd.enable = {{ or $def (has "svc-vicinae" $hm) }};
-  services.vicinae.systemd.autoStart = {{ or $def (has "svc-vicinae" $hm) }};
+  services.browsers.enable = {{ has "svc-browsers" $hm }};
+  services.gearlever.enable = {{ has "svc-gearlever" $hm }};
+  services.gearlever.apps.beeper.enable = {{ has "svc-gearlever" $hm }};
+  services.vicinae.enable = {{ has "svc-vicinae" $hm }};
+  services.vicinae.systemd.enable = {{ has "svc-vicinae" $hm }};
+  services.vicinae.systemd.autoStart = {{ has "svc-vicinae" $hm }};
 
+  sz.packages.common.enable = {{ has "app-common" $hm }};
+  sz.packages.digikam.enable = {{ has "app-digikam" $hm }};
+  sz.packages.doublecmd.enable = {{ has "app-doublecmd" $hm }};
+  sz.packages.ghostty.enable = {{ has "app-ghostty" $hm }};
+  sz.packages.gimp.enable = {{ has "app-gimp" $hm }};
+  sz.packages.gmic-qt.enable = {{ has "app-gmic-qt" $hm }};
+  sz.packages.nix-software-center.enable = {{ has "app-nix-software-center" $hm }};
   sz.packages.ungoogled-chromium.enable = {{ or (has "app-ungoogled-chromium" $hm) (has "app-ungoogled-chromium-slack-pwa" $hm) }};
   sz.packages.ungoogled-chromium.slackPwa.enable = {{ has "app-ungoogled-chromium-slack-pwa" $hm }};
+  sz.packages.pinta.enable = {{ has "app-pinta" $hm }};
+  sz.packages.rembg.enable = {{ has "app-rembg" $hm }};
   sz.packages.rustdesk.enable = {{ has "app-rustdesk" $hm }};
-  sz.packages.winboat.enable = {{ or $def (has "app-winboat" $hm) }};
-  sz.packages.zen-browser.enable = {{ or $def (has "app-zen-browser" $hm) }};
+  sz.packages.winboat.enable = {{ has "app-winboat" $hm }};
+  sz.packages.zen-browser.enable = {{ has "app-zen-browser" $hm }};
   sz.packages.zoom.enable = {{ has "app-zoom" $hm }};
 }
 {{- end -}}
