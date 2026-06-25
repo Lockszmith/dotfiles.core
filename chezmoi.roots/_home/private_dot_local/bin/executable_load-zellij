@@ -15,6 +15,7 @@ BASE_SHELL="${BASE_SHELL:-$(basename "$SHELL")}"
 
 if is_sourced; then
     zellij-cleanup() {
+        killall -9 zellij 2>/dev/null || true
         env which zellij > /dev/null && command -v zellij | grep -E "^$HOME" | ${SUDO:-} xargs -tr rm
         local _cache_dirs=("$HOME/.cache" "$HOME/Library/Caches/" "${TMPDIR}" "/tmp")
         for cache_dir in "${_cache_dirs[@]}"; do
