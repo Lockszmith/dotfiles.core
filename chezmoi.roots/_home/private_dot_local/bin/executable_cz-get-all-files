@@ -110,6 +110,8 @@ get-all() {
 
 ${SET_X:-:} -x
 get-all "${@:-all}" $(
+    # Temporary, mark anything *.local.* as D:
+    ) | sed -Ee 's%^M: (.+\.local\..+)$%D: \1%' $(
     ) | (
         [ "$PREFIXED" = 0 ] $(
             ) & cat - || sort --uniq -Vk'2,2'
