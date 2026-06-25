@@ -127,6 +127,26 @@ For more information abot each envrionment, see their respective (WIP)
 `cz-cd` cd into the chezmoi home dir
 `czgcd` cd into the root of the chezmoi git repo
 
+## Agent and IDE tooling
+
+Besides bootstrap files and `chezmoi.roots/`, the repo root also holds
+documentation and config for AI-assisted editing. These are **not**
+applied to `$HOME` by chezmoi — they orient humans and agents working
+on the repo.
+
+| Entry                             | Purpose                                                                                 |
+| --------------------------------- | --------------------------------------------------------------------------------------- |
+| `AGENTS.md`                       | Universal agent entry point (orchestration, terminology, links)                         |
+| `CLAUDE.md`                       | Pointer to `AGENTS.md` for Claude Code                                                  |
+| `.github/copilot-instructions.md` | Pointer to `AGENTS.md` for GitHub Copilot                                               |
+| `docs/agents/`                    | Portable reference: chezmoi vs target paths, home-manager procedures, verifier workflow |
+| `.cursor/rules/`                  | Cursor rules (chezmoi source, home-manager source, orchestration)                       |
+| `.cursor/skills/`                 | Cursor skills: orchestrator, chezmoi, home-manager, verifier sub-agents                 |
+| `.vscode/chezmoi.code-workspace`  | Multi-root workspace (chezmoi repo + live `~/.config/home-manager`)                     |
+
+See `docs/agents/` for source vs target terminology and the
+specialist → verifier workflow used on non-trivial changes.
+
 ## Try Me
 
 ```

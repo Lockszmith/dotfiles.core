@@ -1,0 +1,17 @@
+---
+description: Chezmoi source conventions — prefixes, templates, apply workflow
+globs: chezmoi.roots/**/*
+alwaysApply: false
+---
+
+# Chezmoi source
+
+Files here are **chezmoi source** → applied to **chezmoi target** (`$HOME`).
+
+- Prefixes: `dot_`, `private_`, `executable_`, `modify_`, `symlink_`, `remove_`
+- Templates: `*.tmpl` + `.chezmoidata/`
+- Shared files: `_src.all/` symlinked into `_home/`
+- Procedures: `docs/agents/chezmoi.md`
+- After edits: `chezmoi diff` then `chezmoi apply`
+
+Do not confuse with HM source under `private_dot_config/private_home-manager/`.

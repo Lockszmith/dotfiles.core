@@ -1,0 +1,32 @@
+---
+description: Dotfiles orchestration — route chezmoi/HM specialists then verifier
+alwaysApply: true
+---
+
+# Dotfiles orchestration
+
+Repo: chezmoi dotfiles + Nix home-manager. Read `AGENTS.md` and `docs/agents/`.
+
+## Terminology
+
+- **chezmoi source**: `chezmoi.roots/_home/` (active root) — edit for persistence
+- **chezmoi target**: `$HOME` — output of `chezmoi apply`; do not edit for persistence
+- **HM source**: `chezmoi.roots/_home/private_dot_config/private_home-manager/`
+- **HM target**: `~/.config/home-manager/`
+
+## Required workflow
+
+1. **Orchestrate** — classify task; use skill `dotfiles-orchestrator`
+2. **Specialist** — `chezmoi-dotfiles` OR `home-manager-config` (or both, chezmoi first)
+3. **Verify** — always run `dotfiles-verifier` sub-agent/skill last; loop until PASS
+
+Never mark a non-trivial task complete without verifier PASS.
+
+## Routing
+
+| Intent                                      | Specialist          |
+| ------------------------------------------- | ------------------- |
+| Dotfiles, templates, sz.env, externals      | chezmoi-dotfiles    |
+| Nix packages, services, flake, sz.* options | home-manager-config |
+
+Workspace folder "home-manager" is **target** — edit HM **source** in chezmoi tree.

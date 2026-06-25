@@ -1,0 +1,16 @@
+---
+description: Home-manager source — Nix modules, flake, sz.* options
+globs: chezmoi.roots/_home/private_dot_config/private_home-manager/**/*
+alwaysApply: false
+---
+
+# Home-manager source
+
+This tree is **HM source**. Chezmoi deploys it to **HM target** `~/.config/home-manager/`.
+
+- Custom options: `sz.*` namespace
+- New package: `modules/packages/<name>.nix` → import in `modules/default.nix` → enable in `hosts/sz.nix.tmpl`
+- Host file gated by `with-nix-hm` flag
+- Do not commit `flake.lock` or `result`
+- Procedures: `docs/agents/home-manager.md`
+- After edits: `chezmoi apply` → `home-manager switch --flake .#sz`
