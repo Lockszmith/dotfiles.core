@@ -17,15 +17,8 @@
   services.vicinae.systemd.enable = {{ or $def (has "svc-vicinae" $hm) }};
   services.vicinae.systemd.autoStart = {{ or $def (has "svc-vicinae" $hm) }};
 
-  sz.packages.common.enable = {{ or $def (has "app-common" $hm) }};
-  sz.packages.digikam.enable = {{ or $def (has "app-digikam" $hm) }};
-  sz.packages.doublecmd.enable = {{ or $def (has "app-doublecmd" $hm) }};
-  sz.packages.ghostty.enable = {{ or $def (has "app-ghostty" $hm) }};
-  sz.packages.gimp.enable = {{ or $def (has "app-gimp" $hm) }};
-  sz.packages.gmic-qt.enable = {{ or $def (has "app-gmic-qt" $hm) }};
-  sz.packages.nix-software-center.enable = {{ or $def (has "app-nix-software-center" $hm) }};
-  sz.packages.pinta.enable = {{ or $def (has "app-pinta" $hm) }};
-  sz.packages.rembg.enable = {{ or $def (has "app-rembg" $hm) }};
+  sz.packages.ungoogled-chromium.enable = {{ or (has "app-ungoogled-chromium" $hm) (has "app-ungoogled-chromium-slack-pwa" $hm) }};
+  sz.packages.ungoogled-chromium.slackPwa.enable = {{ has "app-ungoogled-chromium-slack-pwa" $hm }};
   sz.packages.rustdesk.enable = {{ has "app-rustdesk" $hm }};
   sz.packages.winboat.enable = {{ or $def (has "app-winboat" $hm) }};
   sz.packages.zen-browser.enable = {{ or $def (has "app-zen-browser" $hm) }};

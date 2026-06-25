@@ -34,6 +34,7 @@
     ./packages/pinta.nix
     ./packages/ghostty.nix
     ./packages/nix-software-center.nix
+    ./packages/ungoogled-chromium.nix
     ./packages/winboat.nix
     ./packages/digikam.nix
   ];

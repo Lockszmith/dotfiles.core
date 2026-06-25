@@ -19,6 +19,8 @@ choices:
     - "app-gimp"
     - "app-gmic-qt"
     - "app-nix-software-center"
+    - "app-ungoogled-chromium"
+    - "app-ungoogled-chromium-slack-pwa"
     - "app-pinta"
     - "app-rembg"
     - "app-rustdesk"
