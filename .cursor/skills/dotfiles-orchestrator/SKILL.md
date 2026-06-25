@@ -1,6 +1,6 @@
 ---
 name: dotfiles-orchestrator
-description: Routes dotfile tasks to chezmoi or home-manager specialists and mandates verifier follow-up. Use for any chezmoi, home-manager, dotfiles, or home directory configuration request in this repo.
+description: Routes dotfile and agent-logic tasks to parallel specialists and mandates verifier follow-up. Use for any chezmoi, home-manager, dotfiles, agent scaffolding, or home directory configuration request in this repo.
 ---
 
 # Dotfiles orchestrator
@@ -11,12 +11,22 @@ description: Routes dotfile tasks to chezmoi or home-manager specialists and man
 2. Classify:
    - **chezmoi** — paths under `chezmoi.roots/`, templates, `sz.env`, externals, apply/diff
    - **home-manager** — Nix modules, flake, `sz.*` options, switch/build
-   - **both** — chezmoi first (HM is chezmoi-deployed), then HM
-3. List **source** paths to edit (see `docs/agents/terminology.md`).
-4. Produce handoff brief (template in `docs/agents/orchestration.md`).
-5. Delegate to specialist skill/sub-agent — do not implement in orchestrator pass.
-6. After specialist completes, **always** invoke `dotfiles-verifier`.
-7. On verifier FAIL → send gaps to specialist → re-verify until PASS.
+   - **agent-logic** — `AGENTS.md`, `docs/agents/`, `.cursor/skills/`, `.cursor/rules/`
+   - **both / multiple** — decompose; launch independent specialists in parallel
+3. Decompose into parallel sub-tasks where domains or file groups are independent.
+4. List **source** paths per sub-task (see `docs/agents/terminology.md`).
+5. Produce handoff brief(s) (template in `docs/agents/orchestration.md`).
+6. **Launch independent specialists concurrently** in one turn — never implement in orchestrator.
+7. Collect specialist results; invoke verifier(s) last:
+   - `dotfiles-verifier` — chezmoi / HM work
+   - `agent-logic-verifier` — agent scaffolding work
+8. On verifier FAIL → send gaps to relevant specialist → re-verify until PASS.
+
+## Parallelism rules
+
+- chezmoi + HM simultaneously when edits do not depend on each other
+- Multiple unrelated file groups → separate parallel sub-agents
+- Orchestrator minimizes its own reads/edits — routing and briefs only
 
 ## Handoff
 

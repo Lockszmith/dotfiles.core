@@ -1,0 +1,17 @@
+---
+description: Agent scaffolding — portable docs vs Cursor skills/rules; use agent-logic skill
+globs: AGENTS.md, CLAUDE.md, docs/agents/**, .cursor/**, .github/copilot-instructions.md
+alwaysApply: false
+---
+
+# Agent logic
+
+Editing agent instructions, skills, rules, or pointer files in this repo.
+
+- **Portable**: `AGENTS.md`, `docs/agents/` — agent-agnostic; no Cursor-only concepts
+- **Tool-specific**: `.cursor/skills/`, `.cursor/rules/` — mirror portable docs; add tool mechanics only
+- **Pointers**: `CLAUDE.md`, `.github/copilot-instructions.md` — link to AGENTS.md; do not duplicate
+
+Use skill `agent-logic`. Full guide: `docs/agents/agent-logic.md`.
+
+Cross-reference portable docs; keep skills under 500 lines.

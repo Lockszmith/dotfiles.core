@@ -53,6 +53,20 @@ When HM source changed via chezmoi:
 - [ ] `chezmoi apply` would sync HM source → HM target
 - [ ] Rebuild command documented or run
 
+## Agent-logic checks
+
+For changes to `AGENTS.md`, `docs/agents/`, `.cursor/skills/`, or `.cursor/rules/`:
+
+- [ ] Outcome matches **original user request**; minimal diff
+- [ ] Portable content in `docs/agents/` and `AGENTS.md`; Cursor-specific in `.cursor/` only
+- [ ] No Cursor-only deps (Task subagent, skill paths) in portable docs
+- [ ] `CLAUDE.md` and `.github/copilot-instructions.md` still point to `AGENTS.md`
+- [ ] Skills have valid frontmatter (`name`, `description` — third person, WHAT+WHEN)
+- [ ] Orchestration/verifier references consistent (`orchestration.md`, `AGENTS.md`, skills)
+- [ ] `docs/agents/README.md` updated when new agent docs or skills are added
+
+Cursor skill: `.cursor/skills/agent-logic-verifier/SKILL.md`
+
 ## On FAIL
 
 1. List specific gaps (not "looks wrong").

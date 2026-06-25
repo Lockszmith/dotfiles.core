@@ -7,7 +7,9 @@ description: Validates chezmoi and home-manager work matches the user request, e
 
 ## When
 
-Always run **after** specialist completes. Loop: FAIL → specialist fixes → re-verify.
+Always run **after** chezmoi-dotfiles or home-manager-config specialist completes. Loop: FAIL → specialist fixes → re-verify.
+
+For **agent-logic** tasks (changes to `AGENTS.md`, `docs/agents/`, `.cursor/skills/`, `.cursor/rules/`), use `agent-logic-verifier` instead (or in addition for mixed tasks).
 
 ## Checklist
 

@@ -9,5 +9,6 @@ Portable reference for any LLM environment. Cursor-specific skills mirror this c
 | [home-manager.md](home-manager.md)   | Flake, modules, switch workflow               |
 | [orchestration.md](orchestration.md) | Sub-agent roles and handoffs                  |
 | [verifier.md](verifier.md)           | Post-task validation checklist                |
+| [agent-logic.md](agent-logic.md)     | Editing agent scaffolding (portable vs tool)  |
 
 Entry point: [AGENTS.md](../../AGENTS.md)

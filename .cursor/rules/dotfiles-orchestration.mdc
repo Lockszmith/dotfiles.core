@@ -17,10 +17,23 @@ Repo: chezmoi dotfiles + Nix home-manager. Read `AGENTS.md` and `docs/agents/`.
 ## Required workflow
 
 1. **Orchestrate** — classify task; use skill `dotfiles-orchestrator`
-2. **Specialist** — `chezmoi-dotfiles` OR `home-manager-config` (or both, chezmoi first)
-3. **Verify** — always run `dotfiles-verifier` sub-agent/skill last; loop until PASS
+2. **Specialist** — delegate to sub-agents; launch independent specialists **in parallel**
+6. **Verify** — run matching verifier(s) last; loop until PASS:
+   - `dotfiles-verifier` — chezmoi / HM
+   - `agent-logic-verifier` — agent scaffolding
 
 Never mark a non-trivial task complete without verifier PASS.
+
+## Sub-agent delegation (mandatory)
+
+**Every prompt → sub-agents do the work.** The master/orchestrator ONLY:
+
+- Plans and routes
+- Launches parallel specialists
+- Collects results
+- Launches verifiers
+
+**Never implement in master** when sub-agents are available. Split independent work across parallel sub-agents (e.g. chezmoi + HM simultaneously; multiple unrelated files). Master stays minimal context — no file reads or edits except routing briefs.
 
 ## Routing
 
@@ -28,5 +41,6 @@ Never mark a non-trivial task complete without verifier PASS.
 | ------------------------------------------- | ------------------- |
 | Dotfiles, templates, sz.env, externals      | chezmoi-dotfiles    |
 | Nix packages, services, flake, sz.* options | home-manager-config |
+| AGENTS.md, docs/agents/, skills, rules      | agent-logic         |
 
 Workspace folder "home-manager" is **target** — edit HM **source** in chezmoi tree.
