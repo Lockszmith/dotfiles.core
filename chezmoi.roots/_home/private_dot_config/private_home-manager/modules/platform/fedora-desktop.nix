@@ -17,6 +17,9 @@ in
       for desktop in "$HOME/.nix-profile/share/applications/"*.desktop; do
         [ -f "$desktop" ] || continue
         base=$(basename "$desktop")
+        case "$base" in
+          chromium-browser.desktop|chromium.desktop) continue ;;
+        esac
         cp -Lf "$desktop" "$appdir/$base"
         chmod a+r "$appdir/$base"
       done
@@ -33,10 +36,14 @@ in
         chmod -R u+w "$icondir" 2>/dev/null || true
         gtk-update-icon-cache -f -t "$icondir/hicolor" 2>/dev/null || true
       fi
-      rm -f "$HOME"/.cache/ksycoca6_*
-      if command -v kbuildsycoca6 >/dev/null; then
-        kbuildsycoca6 --noincremental || true
-      fi
+      case "''${XDG_CURRENT_DESKTOP:-}''${DESKTOP_SESSION:+:}''$DESKTOP_SESSION" in
+        *KDE*|*kde*)
+          rm -f "$HOME"/.cache/ksycoca6_*
+          if command -v kbuildsycoca6 >/dev/null; then
+            kbuildsycoca6 --noincremental || true
+          fi
+          ;;
+      esac
     '';
   };
 }
