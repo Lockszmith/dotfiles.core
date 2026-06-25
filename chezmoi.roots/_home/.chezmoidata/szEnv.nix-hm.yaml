@@ -20,7 +20,7 @@ choices:
     - "app-gmic-qt"
     - "app-nix-software-center"
     - "app-ungoogled-chromium"
-    - "app-ungoogled-chromium-slack-pwa"
+    - "app-ungoogled-chromium-slack-pwa-vast-support"
     - "app-pinta"
     - "app-rembg"
     - "app-rustdesk"

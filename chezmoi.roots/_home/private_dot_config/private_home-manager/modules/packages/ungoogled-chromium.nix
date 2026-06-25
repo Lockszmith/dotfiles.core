@@ -4,13 +4,15 @@ let
   cfg = config.sz.packages.ungoogled-chromium;
 
   chromium = pkgs.ungoogled-chromium;
-  profileDir = "Slack@vastsupport";
-  profileName = "Slack@vastsupport";
+  profileDir = "Slack@VASTSupport";
+  profileName = "Slack@VASTSupport";
   slackUrl = "https://app.slack.com/client/";
+  vastSupportIcon =
+    "${config.home.homeDirectory}/.local/share/chezmoi/docs/resources/icons/VASTSupport.png";
 
   chromiumConfigDir = "${config.home.homeDirectory}/.config/chromium";
 
-  initSlackProfileScript = pkgs.writeShellScript "ungoogled-chromium-init-slack-profile" ''
+  initSlackProfileScript = pkgs.writeShellScript "ungoogled-chromium-init-slack-vast-support-profile" ''
     set -euo pipefail
 
     config_dir="${chromiumConfigDir}"
@@ -61,18 +63,18 @@ let
     fi
   '';
 
-  slack-pwa-launcher = pkgs.writeShellScriptBin "slack-vastsupport-pwa" ''
+  slack-pwa-vast-support-launcher = pkgs.writeShellScriptBin "slack-vast-support-pwa" ''
     exec ${chromium}/bin/chromium --profile-directory='${profileDir}' --app='${slackUrl}' "$@"
   '';
 
-  slack-pwa = pkgs.makeDesktopItem {
-    name = "slack-vastsupport-pwa";
-    desktopName = "Slack (PWA)";
-    genericName = "Chat (PWA)";
-    comment = "Slack web app on Slack@vastsupport profile";
-    exec = "${slack-pwa-launcher}/bin/slack-vastsupport-pwa";
-    tryExec = "${slack-pwa-launcher}/bin/slack-vastsupport-pwa";
-    icon = "slack";
+  slack-pwa-vast-support = pkgs.makeDesktopItem {
+    name = "slack-vast-support-pwa";
+    desktopName = "Slack@VASTSupport";
+    genericName = "Chat";
+    comment = "Slack web app for VAST Support on Slack@VASTSupport profile";
+    exec = "${slack-pwa-vast-support-launcher}/bin/slack-vast-support-pwa";
+    tryExec = "${slack-pwa-vast-support-launcher}/bin/slack-vast-support-pwa";
+    icon = vastSupportIcon;
     categories = [ "Network" "Chat" ];
     terminal = false;
     startupNotify = true;
@@ -83,17 +85,17 @@ in
   options.sz.packages.ungoogled-chromium = {
     enable = lib.mkEnableOption "Ungoogled Chromium";
 
-    slackPwa.enable = lib.mkEnableOption "Slack PWA on Slack@vastsupport profile";
+    slackPwaVastSupport.enable = lib.mkEnableOption "Slack PWA for VAST Support on Slack@VASTSupport profile";
   };
 
   config = lib.mkIf cfg.enable {
     home.packages = [ chromium ]
-      ++ lib.optionals cfg.slackPwa.enable [
-        slack-pwa-launcher
-        slack-pwa
+      ++ lib.optionals cfg.slackPwaVastSupport.enable [
+        slack-pwa-vast-support-launcher
+        slack-pwa-vast-support
       ];
 
-    home.activation.ungoogledChromiumSlackProfile = lib.mkIf cfg.slackPwa.enable (
+    home.activation.ungoogledChromiumSlackVastSupportProfile = lib.mkIf cfg.slackPwaVastSupport.enable (
       lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         $DRY_RUN_CMD ${initSlackProfileScript}
       ''
