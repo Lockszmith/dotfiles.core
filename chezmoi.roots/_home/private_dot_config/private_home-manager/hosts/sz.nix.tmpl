@@ -8,12 +8,7 @@
 
   # Enable order matches .chezmoidata/szEnv.nix-hm.yaml (see notes there).
   sz.platform.genericLinux.enable = {{ or $def (has "sys-generic-linux" $hm) }};
-  sz.platform.fedoraDesktop.enable = {{ or $def (has "sys-fedora-desktop" $hm) }};
-  sz.platform.nvidia.enable = {{ or $def (has "sys-nvidia" $hm) }};
-  sz.activations.setUserShell.enable = {{ or $def (has "sys-set-user-shell" $hm) }};
-  sz.activations.setRootShell.enable = {{ or $def (has "sys-set-root-shell" $hm) }};
-  sz.desktop.hyprland.enable = {{ or $def (has "sys-desktop-hyprland" $hm) }};
-  sz.desktop.plasmaKeyboard.enable = {{ or $def (has "sys-desktop-plasma-keyboard" $hm) }};
+  sz.activations.setNixTrustedUser.enable = {{ has "sys-set-user-trusted" $hm }};
 
   services.browsers.enable = {{ or $def (has "svc-browsers" $hm) }};
   services.gearlever.enable = {{ or $def (has "svc-gearlever" $hm) }};

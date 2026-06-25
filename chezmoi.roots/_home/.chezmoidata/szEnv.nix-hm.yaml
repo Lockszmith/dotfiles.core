@@ -5,6 +5,7 @@ choices:
     - "sys-fedora-desktop"
     - "sys-nvidia"
     - "sys-set-user-shell"           # pin-order 10
+    - "sys-set-user-trusted"         # pin-order 10
     - "sys-set-root-shell"
     - "sys-desktop-hyprland"
     - "sys-desktop-plasma-keyboard"

@@ -13,6 +13,7 @@
     ./platform/fedora-desktop.nix
 
     ./activations/set-login-shells.nix
+    ./activations/set-nix-trusted-user.nix
     ./activations/patch-desktops.nix
 
     ./desktop/hyprland.nix
