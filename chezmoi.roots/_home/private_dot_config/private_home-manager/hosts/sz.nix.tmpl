@@ -1,43 +1,39 @@
 {{- if has "with-nix-hm" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
+{{- $hm := splitList " " (dig "sz" "home-manager" "flags" "default" .) -}}
+{{- $def := has "default" $hm -}}
 { ... }:
 
 {
   imports = [ ./default.nix ];
 
-  sz.platform.genericLinux.enable = true;
-  sz.platform.nvidia.enable = true;
-  sz.platform.fedoraDesktop.enable = true;
+  # Enable order matches .chezmoidata/szEnv.nix-hm.yaml (see notes there).
+  sz.platform.genericLinux.enable = {{ or $def (has "sys-generic-linux" $hm) }};
+  sz.platform.fedoraDesktop.enable = {{ or $def (has "sys-fedora-desktop" $hm) }};
+  sz.platform.nvidia.enable = {{ or $def (has "sys-nvidia" $hm) }};
+  sz.activations.setUserShell.enable = {{ or $def (has "sys-set-user-shell" $hm) }};
+  sz.activations.setRootShell.enable = {{ or $def (has "sys-set-root-shell" $hm) }};
+  sz.desktop.hyprland.enable = {{ or $def (has "sys-desktop-hyprland" $hm) }};
+  sz.desktop.plasmaKeyboard.enable = {{ or $def (has "sys-desktop-plasma-keyboard" $hm) }};
 
-  sz.activations.setDefaultShell.enable = true;
+  services.browsers.enable = {{ or $def (has "svc-browsers" $hm) }};
+  services.gearlever.enable = {{ or $def (has "svc-gearlever" $hm) }};
+  services.gearlever.apps.beeper.enable = {{ or $def (has "svc-gearlever" $hm) }};
+  services.vicinae.enable = {{ or $def (has "svc-vicinae" $hm) }};
+  services.vicinae.systemd.enable = {{ or $def (has "svc-vicinae" $hm) }};
+  services.vicinae.systemd.autoStart = {{ or $def (has "svc-vicinae" $hm) }};
 
-  sz.desktop.plasmaKeyboard.enable = true;
-  sz.desktop.hyprland.enable = true;
-
-  services.gearlever.enable = true;
-  services.gearlever.apps.beeper.enable = true;
-  services.browsers.enable = true;
-  services.vicinae = {
-    enable = true;
-    systemd = {
-      enable = true;
-      autoStart = true;
-    };
-  };
-
-  sz.packages.common.enable = true;
-  sz.packages.zen-browser.enable = true;
-  sz.packages.doublecmd.enable = true;
-  sz.packages.zoom.enable = true;
-  sz.packages.gimp.enable = true;
-  sz.packages.gmic-qt.enable = true;
-  sz.packages.rembg.enable = true;
-  sz.packages.pinta.enable = true;
-  sz.packages.ghostty.enable = true;
-  sz.packages.nix-software-center.enable = true;
-  sz.packages.winboat.enable = true;
-  sz.packages.digikam.enable = true;
-{{- if has "VAST.personal" (splitList " " (dig "sz" "env" "flags" "" .)) }}
-  sz.packages.rustdesk.enable = true;
-{{- end }}
+  sz.packages.common.enable = {{ or $def (has "app-common" $hm) }};
+  sz.packages.digikam.enable = {{ or $def (has "app-digikam" $hm) }};
+  sz.packages.doublecmd.enable = {{ or $def (has "app-doublecmd" $hm) }};
+  sz.packages.ghostty.enable = {{ or $def (has "app-ghostty" $hm) }};
+  sz.packages.gimp.enable = {{ or $def (has "app-gimp" $hm) }};
+  sz.packages.gmic-qt.enable = {{ or $def (has "app-gmic-qt" $hm) }};
+  sz.packages.nix-software-center.enable = {{ or $def (has "app-nix-software-center" $hm) }};
+  sz.packages.pinta.enable = {{ or $def (has "app-pinta" $hm) }};
+  sz.packages.rembg.enable = {{ or $def (has "app-rembg" $hm) }};
+  sz.packages.rustdesk.enable = {{ has "app-rustdesk" $hm }};
+  sz.packages.winboat.enable = {{ or $def (has "app-winboat" $hm) }};
+  sz.packages.zen-browser.enable = {{ or $def (has "app-zen-browser" $hm) }};
+  sz.packages.zoom.enable = {{ has "app-zoom" $hm }};
 }
 {{- end -}}

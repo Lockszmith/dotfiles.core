@@ -1,4 +1,34 @@
 choices:
   nixHomeManagerFlags:
     - "default"
-    - "zoom"
+    - "sys-generic-linux"            # pin-order 10
+    - "sys-fedora-desktop"
+    - "sys-nvidia"
+    - "sys-set-user-shell"           # pin-order 10
+    - "sys-set-root-shell"
+    - "sys-desktop-hyprland"
+    - "sys-desktop-plasma-keyboard"
+    - "svc-browsers"
+    - "svc-gearlever"
+    - "svc-vicinae"
+    - "app-common"                   # pin-order 10
+    - "app-digikam"
+    - "app-doublecmd"
+    - "app-ghostty"
+    - "app-gimp"
+    - "app-gmic-qt"
+    - "app-nix-software-center"
+    - "app-pinta"
+    - "app-rembg"
+    - "app-rustdesk"
+    - "app-winboat"
+    - "app-zen-browser"
+    - "app-zoom"
+
+# A note on the order of the flags:
+# sort by groups, order: default, sys, sys-desktop, svc, app;
+# within the groups order alphabetically unless line has # pin-order <number>
+# without <number> all entries are considered "20", the lower the number the
+# higher the position, within the same number, order alphabetically
+
+# This order will be preserved in the .nix file controlled by these flags.

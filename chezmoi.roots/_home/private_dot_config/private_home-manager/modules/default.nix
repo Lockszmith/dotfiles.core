@@ -12,7 +12,7 @@
     ./platform/nvidia.nix
     ./platform/fedora-desktop.nix
 
-    ./activations/set-default-shell.nix
+    ./activations/set-login-shells.nix
     ./activations/patch-desktops.nix
 
     ./desktop/hyprland.nix
