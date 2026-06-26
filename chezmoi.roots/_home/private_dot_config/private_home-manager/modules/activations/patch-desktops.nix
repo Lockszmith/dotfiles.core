@@ -1,5 +1,5 @@
 # Activation DAG (after installPackages):
-#   syncNixDesktopEntries -> patchPinta -> patchGimp -> patchDoublecmd -> patchVicinae
+#   syncNixDesktopEntries -> patchPinta -> patchGimp -> patchDoublecmd -> patchVicinae -> patchLibreOfficeStartcenter
 # gearleverApps hooks into syncNixDesktopEntries (see services/gearlever.nix)
 
 { config, pkgs, lib, ... }:
@@ -49,6 +49,29 @@ in
           ${pkgs.gnused}/bin/sed -i "s|^TryExec=.*|TryExec=$vicinae_bin|" "$vicinae_desktop"
         fi
       fi
+    '';
+
+    # libreoffice-startcenter Desktop Actions duplicate Writer/Calc/Impress alongside
+    # libreoffice-{writer,calc,impress}.desktop in GNOME/vicinae.
+    home.activation.patchLibreOfficeStartcenterDesktop = lib.hm.dag.entryAfter [ "patchVicinaeDesktop" ] ''
+      src="/usr/share/applications/libreoffice-startcenter.desktop"
+      dst="$HOME/.local/share/applications/libreoffice-startcenter.desktop"
+      if [ ! -f "$src" ]; then
+        exit 0
+      fi
+      ${pkgs.gawk}/bin/gawk '
+        BEGIN { skip = 0 }
+        /^\[Desktop Action Writer\]/ { skip = 1; next }
+        /^\[Desktop Action Calc\]/ { skip = 1; next }
+        /^\[Desktop Action Impress\]/ { skip = 1; next }
+        /^\[Desktop Action Draw\]/ { skip = 0 }
+        /^\[Desktop Action Base\]/ { skip = 0 }
+        /^\[Desktop Action Math\]/ { skip = 0 }
+        skip { next }
+        /^Actions=/ { sub(/^Actions=.*/, "Actions=Draw;Base;Math;"); print; next }
+        { print }
+      ' "$src" > "$dst"
+      chmod a+r "$dst"
     '';
   };
 }
