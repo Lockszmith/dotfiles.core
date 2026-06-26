@@ -15,13 +15,16 @@
     ./activations/set-login-shells.nix
     ./activations/set-nix-trusted-user.nix
     ./activations/patch-desktops.nix
+    ./activations/desktop-dedup.nix
 
     ./desktop/hyprland.nix
     ./desktop/plasma-keyboard.nix
+    ./desktop/gnome-tray.nix
 
     ./services/gearlever.nix
     ./services/browsers.nix
     ./services/vicinae.nix
+    ./services/autostart.nix
 
     ./packages/common.nix
     ./packages/zen-browser.nix

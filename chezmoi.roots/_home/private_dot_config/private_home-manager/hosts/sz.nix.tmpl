@@ -15,6 +15,7 @@
   sz.activations.setRootShell.enable = {{ has "sys-set-root-shell" $hm }};
   sz.desktop.hyprland.enable = {{ has "sys-desktop-hyprland" $hm }};
   sz.desktop.plasmaKeyboard.enable = {{ has "sys-desktop-plasma-keyboard" $hm }};
+  sz.desktop.gnomeTray.enable = {{ has "sys-desktop-gnome-tray" $hm }};
 
   services.browsers.enable = {{ has "svc-browsers" $hm }};
   services.gearlever.enable = {{ has "svc-gearlever" $hm }};
@@ -22,6 +23,12 @@
   services.vicinae.enable = {{ has "svc-vicinae" $hm }};
   services.vicinae.systemd.enable = {{ has "svc-vicinae" $hm }};
   services.vicinae.systemd.autoStart = {{ has "svc-vicinae" $hm }};
+
+  sz.autostart.beeper.enable = {{ has "svc-autostart-beeper" $hm }};
+  sz.autostart.slack.enable = {{ has "svc-autostart-slack" $hm }};
+  sz.autostart.slackPwaVastSupport.enable = {{ has "svc-autostart-slack-pwa-vast-support" $hm }};
+  sz.autostart.zen.enable = {{ has "svc-autostart-zen" $hm }};
+  sz.autostart.ghostty.enable = {{ has "svc-autostart-ghostty" $hm }};
 
   sz.packages.common.enable = {{ has "app-common" $hm }};
   sz.packages.digikam.enable = {{ has "app-digikam" $hm }};
