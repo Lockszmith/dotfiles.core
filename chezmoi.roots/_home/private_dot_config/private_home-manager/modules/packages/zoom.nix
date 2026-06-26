@@ -8,14 +8,26 @@ let
     targetPkgsFixed = with pkgs; [
       gsettings-desktop-schemas
       gnome-settings-daemon
+      xdg-utils
     ];
   };
+
+  browserBin = "$HOME/.nix-profile/bin/zen-browser";
+  fallbackBrowserBin = "$HOME/.nix-profile/bin/ungoogled-chromium";
 
   zoom = pkgs.writeShellScriptBin "zoom" ''
     # GNOME/vicinae launchers may omit DISPLAY; zoom-us bwrap needs it for XWayland.
     export DISPLAY="''${DISPLAY:-:0}"
     export QT_QPA_PLATFORM=xcb
     export GDK_BACKEND=x11
+    export PATH="$HOME/.nix-profile/bin:/usr/bin:/bin:$PATH"
+    if [ -z "''${BROWSER:-}" ]; then
+      if [ -x ${browserBin} ]; then
+        export BROWSER=${browserBin}
+      elif [ -x ${fallbackBrowserBin} ]; then
+        export BROWSER=${fallbackBrowserBin}
+      fi
+    fi
     exec ${zoomUs}/bin/zoom "$@"
   '';
 
@@ -60,6 +72,30 @@ in
       zoom
       zoom-desktop
       zoom-share
+      pkgs.xdg-utils
     ];
+
+    home.activation.zoomMimeHandlers = lib.hm.dag.entryAfter [
+      "syncNixDesktopEntries"
+      "dedupDesktopEntries"
+    ] ''
+      desktop="$HOME/.local/share/applications/zoom.desktop"
+      if [ ! -f "$desktop" ]; then
+        exit 0
+      fi
+      if command -v xdg-mime >/dev/null; then
+        for mime in \
+          x-scheme-handler/zoommtg \
+          x-scheme-handler/zoomus \
+          x-scheme-handler/tel \
+          x-scheme-handler/callto \
+          x-scheme-handler/zoomphonecall \
+          x-scheme-handler/zoomphonesms \
+          x-scheme-handler/zoomcontactcentercall \
+          application/x-zoom; do
+          xdg-mime default zoom.desktop "$mime" 2>/dev/null || true
+        done
+      fi
+    '';
   };
 }
