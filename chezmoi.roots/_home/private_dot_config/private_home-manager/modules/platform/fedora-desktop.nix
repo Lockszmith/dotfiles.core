@@ -17,11 +17,15 @@ in
       for desktop in "$HOME/.nix-profile/share/applications/"*.desktop; do
         [ -f "$desktop" ] || continue
         base=$(basename "$desktop")
+        dest="$base"
         case "$base" in
-          chromium-browser.desktop|chromium.desktop) continue ;;
+          chromium-browser.desktop|chromium.desktop|Zoom.desktop) continue ;;
+          calc.desktop) dest="libreoffice-calc.desktop" ;;
+          writer.desktop) dest="libreoffice-writer.desktop" ;;
+          impress.desktop) dest="libreoffice-impress.desktop" ;;
         esac
-        cp -Lf "$desktop" "$appdir/$base"
-        chmod a+r "$appdir/$base"
+        cp -Lf "$desktop" "$appdir/$dest"
+        chmod a+r "$appdir/$dest"
       done
       if [ -d "$HOME/.nix-profile/share/icons" ]; then
         cp -rL "$HOME/.nix-profile/share/icons/." "$icondir/" 2>/dev/null || true
@@ -29,6 +33,7 @@ in
       if [ -d "$HOME/.nix-profile/share/pixmaps" ]; then
         cp -rL "$HOME/.nix-profile/share/pixmaps/." "$pixmapdir/" 2>/dev/null || true
       fi
+      rm -f "$appdir/Zoom.desktop"
       if command -v update-desktop-database >/dev/null; then
         update-desktop-database "$appdir" 2>/dev/null || true
       fi

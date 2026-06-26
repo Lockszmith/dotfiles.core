@@ -34,20 +34,8 @@ let
     fi
 
     "$gearlever" --set-update-url "$beeper" --url "$update_url"
+    rm -f "$HOME/.local/share/applications/beeper.desktop"
   '';
-
-  beeperDesktop = pkgs.makeDesktopItem {
-    name = "beeper";
-    desktopName = "Beeper";
-    genericName = "Chat";
-    comment = "Universal chat app";
-    exec = "${cfg.appImagesDir}/${cfg.apps.beeper.fileName}";
-    tryExec = "${cfg.appImagesDir}/${cfg.apps.beeper.fileName}";
-    icon = "beepertexts";
-    categories = [ "Network" "Chat" ];
-    terminal = false;
-    startupNotify = true;
-  };
 
   beeperIconScript = pkgs.writeShellScript "gearlever-beeper-icon" ''
     set -euo pipefail
@@ -117,8 +105,7 @@ in
     home.packages = [
       (lib.lowPrio pkgs.gearlever)
       gearlever
-    ]
-    ++ lib.optional cfg.apps.beeper.enable beeperDesktop;
+    ];
 
     home.activation.gearleverApps = lib.mkIf cfg.apps.beeper.enable (lib.hm.dag.entryAfter [ "syncNixDesktopEntries" ] ''
       $DRY_RUN_CMD ${beeperInstallScript}
