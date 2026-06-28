@@ -1,11 +1,11 @@
 choices:
   nixHomeManagerFlags:
     - "default"
-    - "sys-generic-linux"            # pin-order 10
+    - "sys-generic-linux"                                # pin-order 10
     - "sys-fedora-desktop"
     - "sys-nvidia"
-    - "sys-set-user-shell"           # pin-order 10
-    - "sys-set-user-trusted"         # pin-order 10
+    - "sys-set-user-shell"                               # pin-order 10
+    - "sys-set-user-trusted"                             # pin-order 10
     - "sys-set-root-shell"
     - "sys-desktop-hyprland"
     - "sys-desktop-plasma-keyboard"
@@ -13,12 +13,12 @@ choices:
     - "svc-browsers"
     - "svc-gearlever"
     - "svc-vicinae"
-    - "svc-autostart-beeper"
-    - "svc-autostart-slack"
-    - "svc-autostart-slack-pwa-vast-support"
-    - "svc-autostart-zen"
-    - "svc-autostart-ghostty"
-    - "app-common"                   # pin-order 10
+    - "svc-autostart-beeper"                             # pin-order 90
+    - "svc-autostart-ghostty"                            # pin-order 90
+    - "svc-autostart-slack"                              # pin-order 90
+    - "svc-autostart-slack-pwa-vast-support"             # pin-order 90
+    - "svc-autostart-zen"                                # pin-order 90
+    - "app-common"                                       # pin-order 10
     - "app-digikam"
     - "app-doublecmd"
     - "app-ghostty"
