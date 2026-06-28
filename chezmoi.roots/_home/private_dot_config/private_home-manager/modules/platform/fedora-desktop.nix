@@ -22,6 +22,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    home.packages = [ pkgs.gnome-browser-connector ];
+
     sz.platform.fedoraDesktop.packageDesktopStrips = lib.mkDefault {
       libreoffice = [
         "calc.desktop"
