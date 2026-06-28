@@ -5,7 +5,7 @@ let
   cfgRoot = config.sz.activations.setRootShell;
   cfg = cfgUser.enable || cfgRoot.enable;
 
-  sudoHint = "Re-run with: SUDO=sudo home-manager switch --flake .#sz";
+  sudoHint = "Re-run with: ~/bin/hm-setup-system";
 
   userShellScript =
     let
@@ -13,16 +13,28 @@ let
     in
     ''
       user_shell=$("$getent" passwd "${username}" | cut -d: -f7)
-      if [ "$user_shell" != "$zsh_bin" ] && [ -x "$zsh_bin" ]; then
-        if ! grep -Fxq "$zsh_bin" /etc/shells 2>/dev/null; then
+      user_shell_ok=false
+      case "$user_shell" in
+        */bin/zsh) user_shell_ok=true ;;
+      esac
+
+      if [ "$user_shell_ok" = false ] && [ -x "$zsh_bin" ]; then
+        zsh_in_shells=false
+        if grep -E '/bin/zsh$' /etc/shells 2>/dev/null | grep -q .; then
+          zsh_in_shells=true
+        fi
+
+        if [ "$zsh_in_shells" = false ]; then
           if [ -z "''${SUDO:-}" ]; then
             echo "user login shell needs updating (${username} -> zsh)."
             echo "${sudoHint}"
           else
             echo "$zsh_bin" | $DRY_RUN_CMD "$SUDO" tee -a /etc/shells >/dev/null
+            zsh_in_shells=true
           fi
         fi
-        if grep -Fxq "$zsh_bin" /etc/shells 2>/dev/null; then
+
+        if [ "$zsh_in_shells" = true ]; then
           $DRY_RUN_CMD "$chsh" -s "$zsh_bin" "${username}" </dev/null 2>/dev/null || true
         fi
       fi

@@ -2,11 +2,13 @@
 
 {
   home.file = {
-    "bin/hm-setup-shells".text = ''
+    "bin/hm-setup-system".text = ''
       #!${pkgs.bash}/bin/bash
-      exec env SUDO=sudo home-manager switch --flake ${config.home.homeDirectory}/.config/home-manager#${config.home.username}
+      # One-time privileged HM switch (login shells, nix trusted-user, vendor RPMs).
+      # Routine rebuilds: use hms / home-manager switch — no SUDO.
+      exec env SUDO=$(command -pv sudo) home-manager switch --flake ${config.home.homeDirectory}/.config/home-manager#${config.home.username}
     '';
-    "bin/hm-setup-shells".executable = true;
+    "bin/hm-setup-system".executable = true;
   };
 
   home.sessionPath = [
