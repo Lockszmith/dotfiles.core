@@ -80,21 +80,20 @@ in
       "dedupDesktopEntries"
     ] ''
       desktop="$HOME/.local/share/applications/zoom.desktop"
-      if [ ! -f "$desktop" ]; then
-        exit 0
-      fi
-      if command -v xdg-mime >/dev/null; then
-        for mime in \
-          x-scheme-handler/zoommtg \
-          x-scheme-handler/zoomus \
-          x-scheme-handler/tel \
-          x-scheme-handler/callto \
-          x-scheme-handler/zoomphonecall \
-          x-scheme-handler/zoomphonesms \
-          x-scheme-handler/zoomcontactcentercall \
-          application/x-zoom; do
-          xdg-mime default zoom.desktop "$mime" 2>/dev/null || true
-        done
+      if [ -f "$desktop" ]; then
+        if command -v xdg-mime >/dev/null; then
+          for mime in \
+            x-scheme-handler/zoommtg \
+            x-scheme-handler/zoomus \
+            x-scheme-handler/tel \
+            x-scheme-handler/callto \
+            x-scheme-handler/zoomphonecall \
+            x-scheme-handler/zoomphonesms \
+            x-scheme-handler/zoomcontactcentercall \
+            application/x-zoom; do
+            xdg-mime default zoom.desktop "$mime" 2>/dev/null || true
+          done
+        fi
       fi
     '';
   };
