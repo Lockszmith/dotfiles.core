@@ -44,6 +44,9 @@ let
     extraConfig = autostartExtra;
   };
 
+  # makeDesktopItem is a store directory; xdg.autostart needs the .desktop file path.
+  desktopEntry = name: item: "${item}/share/applications/${name}.desktop";
+
   anyEnabled =
     cfg.beeper.enable
     || cfg.slack.enable
@@ -68,11 +71,13 @@ in
     xdg.autostart = {
       enable = true;
       entries =
-        lib.optional cfg.beeper.enable beeperAutostart
+        lib.optional cfg.beeper.enable (desktopEntry "beeper-autostart" beeperAutostart)
         ++ lib.optional cfg.slack.enable "${pkgs.slack}/share/applications/slack.desktop"
-        ++ lib.optional cfg.slackPwaVastSupport.enable slackPwaAutostart
-        ++ lib.optional cfg.zen.enable zenAutostart
-        ++ lib.optional cfg.ghostty.enable ghosttyAutostart;
+        ++ lib.optional cfg.slackPwaVastSupport.enable (
+          desktopEntry "slack-pwa-vast-support-autostart" slackPwaAutostart
+        )
+        ++ lib.optional cfg.zen.enable (desktopEntry "zen-autostart" zenAutostart)
+        ++ lib.optional cfg.ghostty.enable (desktopEntry "ghostty-autostart" ghosttyAutostart);
     };
   };
 }

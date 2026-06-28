@@ -16,6 +16,12 @@ in
       rm -f "$appdir/Zoom.desktop"
       # LibreOffice nix entries are synced as libreoffice-*.desktop; drop legacy names.
       rm -f "$appdir/calc.desktop" "$appdir/writer.desktop" "$appdir/impress.desktop"
+      # Fedora ships libreoffice-{writer,impress,calc}.desktop system-wide; drop nix-synced copies.
+      for comp in writer impress calc; do
+        if [ -f "/usr/share/applications/libreoffice-$comp.desktop" ]; then
+          rm -f "$appdir/libreoffice-$comp.desktop"
+        fi
+      done
       # gearlever --integrate creates Beeper.desktop; drop HM beeper.desktop if both exist.
       if [ -f "$appdir/Beeper.desktop" ]; then
         rm -f "$appdir/beeper.desktop"

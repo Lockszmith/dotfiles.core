@@ -2,6 +2,26 @@
 
 let
   cfg = config.services.vicinae;
+
+  vicinaeGnomeShortcutsScript = pkgs.writeShellScript "vicinae-gnome-shortcuts" ''
+    set -euo pipefail
+    case "''${XDG_CURRENT_DESKTOP:-}" in
+      *GNOME*|*gnome*) ;;
+      *) exit 0 ;;
+    esac
+    command -v dconf >/dev/null || exit 0
+    export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
+    vicinae_bin="${config.home.homeDirectory}/.nix-profile/bin/vicinae"
+    [ -x "$vicinae_bin" ] || exit 0
+    dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings \
+      "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/']"
+    dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/name "'Vicinae'"
+    dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/command "'$vicinae_bin toggle'"
+    dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/binding "'<Super><Alt>space'"
+    dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/name "'Vicinae Clipboard History'"
+    dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/command "'$vicinae_bin vicinae://launch/clipboard/history?toggle=true'"
+    dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/binding "'<Super><Alt>v'"
+  '';
 in
 {
   config = lib.mkIf cfg.enable {
@@ -27,19 +47,23 @@ in
     };
 
     home.activation.vicinaeGnomeShortcuts = lib.hm.dag.entryAfter [ "patchVicinaeDesktop" ] ''
-      if command -v dconf >/dev/null; then
-        export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
-        vicinae_bin="${config.services.vicinae.package}/bin/vicinae"
-        dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings \
-          "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/']"
-        dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/name "'Vicinae'"
-        dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/command "'$vicinae_bin toggle'"
-        dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/binding "'<Super><Alt>space'"
-        dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/name "'Vicinae Clipboard History'"
-        dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/command "'$vicinae_bin vicinae://launch/clipboard/history?toggle=true'"
-        dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/binding "'<Super><Alt>v'"
-      fi
+      $DRY_RUN_CMD ${vicinaeGnomeShortcutsScript}
     '';
+
+    systemd.user.services.vicinae-gnome-shortcuts = {
+      Unit = {
+        Description = "Configure Vicinae GNOME keyboard shortcuts (toggle on Meta+Alt+Space)";
+        After = [ "graphical-session.target" ];
+        PartOf = [ "graphical-session.target" ];
+      };
+      Service = {
+        Type = "oneshot";
+        ExecStart = vicinaeGnomeShortcutsScript;
+      };
+      Install = {
+        WantedBy = [ "graphical-session.target" ];
+      };
+    };
 
     home.activation.vicinaePlasmaShortcut = lib.hm.dag.entryAfter [ "vicinaeGnomeShortcuts" ] ''
       if command -v kwriteconfig6 >/dev/null; then
