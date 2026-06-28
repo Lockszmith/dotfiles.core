@@ -11,13 +11,45 @@ let
   beeperUpdateUrl =
     "https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop";
 
+  beeperFileName = cfg.apps.beeper.fileName;
+
+  # Shared shell: set needs_update_url=false when apps.json already has the desired URL.
+  needsUpdateUrlCheck = ''
+    needs_update_url=true
+    apps_json="$HOME/.config/apps.json"
+    if [ -f "$apps_json" ]; then
+      jq=${pkgs.jq}/bin/jq
+      b64=$(printf '%s' "$(basename "$beeper" .appimage)" | base64 -w0 2>/dev/null || printf '%s' "$(basename "$beeper" .appimage)" | base64)
+      current=$("$jq" -r --arg k "$b64" '.[$k].update_url // empty' "$apps_json" 2>/dev/null)
+      manager=$("$jq" -r --arg k "$b64" '.[$k].update_url_manager // empty' "$apps_json" 2>/dev/null)
+      if [ "$current" = "$update_url" ] && [ "$manager" = "StaticFileUpdater" ]; then
+        needs_update_url=false
+      elif "$jq" -e --arg url "$update_url" '
+        [.[] | select((.name // "" | ascii_downcase) == "beeper")
+          | select(.update_url == $url and .update_url_manager == "StaticFileUpdater")] | length > 0
+      ' "$apps_json" >/dev/null 2>&1; then
+        needs_update_url=false
+      fi
+    fi
+  '';
+
+  beeperIntegratedCheck = ''
+    integrated=false
+    if "$gearlever" --list-installed 2>/dev/null | grep -Fq "$(basename "$beeper")"; then
+      integrated=true
+    elif [ -f "$HOME/.local/share/applications/Beeper.desktop" ] \
+      || [ -f "$HOME/.local/share/applications/beeper.desktop" ]; then
+      integrated=true
+    fi
+  '';
+
   beeperInstallScript = pkgs.writeShellScript "gearlever-beeper-install" ''
     set -euo pipefail
 
     gearlever="${gearlever}/bin/gearlever"
     curl=${pkgs.curl}/bin/curl
     appimages="${cfg.appImagesDir}"
-    beeper="$appimages/${cfg.apps.beeper.fileName}"
+    beeper="$appimages/${beeperFileName}"
     update_url="${cfg.apps.beeper.updateUrl}"
 
     mkdir -p "$appimages"
@@ -29,11 +61,15 @@ let
       mv "$tmp" "$beeper"
     fi
 
-    if ! "$gearlever" --list-installed 2>/dev/null | grep -Fq "$beeper"; then
-      "$gearlever" --integrate -y --replace "$beeper"
+    ${beeperIntegratedCheck}
+    if [ "$integrated" = false ]; then
+      "$gearlever" --integrate -y --replace "$beeper" 2>/dev/null
     fi
 
-    "$gearlever" --set-update-url "$beeper" --url "$update_url"
+    ${needsUpdateUrlCheck}
+    if [ "$needs_update_url" = true ]; then
+      "$gearlever" --set-update-url "$beeper" --url "$update_url" 2>/dev/null
+    fi
     rm -f "$HOME/.local/share/applications/beeper.desktop"
   '';
 
@@ -63,15 +99,18 @@ let
 
     gearlever="${gearlever}/bin/gearlever"
     appimages="${cfg.appImagesDir}"
-    beeper="$appimages/${cfg.apps.beeper.fileName}"
+    beeper="$appimages/${beeperFileName}"
     update_url="${cfg.apps.beeper.updateUrl}"
 
     [ -f "$beeper" ] || exit 0
 
-    "$gearlever" --set-update-url "$beeper" --url "$update_url"
+    ${needsUpdateUrlCheck}
+    if [ "$needs_update_url" = true ]; then
+      "$gearlever" --set-update-url "$beeper" --url "$update_url" 2>/dev/null
+    fi
 
     if "$gearlever" --list-updates 2>/dev/null | grep -Fq "$beeper"; then
-      "$gearlever" --update -y "$beeper"
+      "$gearlever" --update -y "$beeper" 2>/dev/null
     fi
   '';
 in
