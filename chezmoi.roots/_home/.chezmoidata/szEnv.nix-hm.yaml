@@ -19,6 +19,7 @@ choices:
     - "svc-autostart-slack-pwa-vast-support"             # pin-order 90
     - "svc-autostart-zen"                                # pin-order 90
     - "app-common"                                       # pin-order 10
+    - "app-cato-vpn"
     - "app-digikam"
     - "app-doublecmd"
     - "app-ghostty"

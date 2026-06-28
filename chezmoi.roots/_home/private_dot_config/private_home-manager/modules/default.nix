@@ -26,6 +26,7 @@
     ./services/vicinae.nix
     ./services/autostart.nix
 
+    ./packages/cato-vpn.nix
     ./packages/common.nix
     ./packages/zen-browser.nix
     ./packages/doublecmd.nix
