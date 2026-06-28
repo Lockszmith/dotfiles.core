@@ -2,6 +2,9 @@
 
 let
   cfg = config.sz.packages.common;
+  inherit (import ../lib/desktop-package.nix { inherit lib; }) stripPackageDesktopEntries;
+  packageDesktopStrips = config.sz.platform.fedoraDesktop.packageDesktopStrips or { };
+  stripOrKeep = name: pkg: stripPackageDesktopEntries pkg (packageDesktopStrips.${name} or [ ]);
 in
 {
   options.sz.packages.common.enable = lib.mkEnableOption "common CLI and desktop packages";
@@ -19,7 +22,7 @@ in
       slack
       code-cursor
       wl-clipboard
-      libreoffice
+      (stripOrKeep "libreoffice" libreoffice)
       xournalpp
       kdePackages.okular
       scantailor-advanced
