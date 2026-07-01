@@ -2,12 +2,14 @@
 # shellcheck disable=SC1090
 
 # This entire code is evaluated inside czu() function from ~/.config/sz.env/981_chezmoi.env
-local bin=0 all=0 init=1 refresh=1 interact='--less-interactive' verbose='' debug='' CZ_RECONFIG='' CZ_RECONFIG_FLAGS=''
+local bin=0 all=0 init=1 refresh=1 readd=0 interact='--less-interactive' verbose='' debug='' CZ_RECONFIG='' CZ_RECONFIG_FLAGS=''
 while [[ $# -gt 0 ]]; do
     case "$1" in
         '--bin') bin=1 ;;
         '--no-bin') bin=1 ;;
         '--no-init') init=0 ;;
+        '--re-add') readd=1 ;;
+        '--re-add=force') readd=force ;;
         '--reinit') CZ_RECONFIG_FLAGS=1 ;;
         '--reinit=all') CZ_RECONFIG=1 ;;
         '--all') all=1; bin=1 ;;
@@ -19,7 +21,7 @@ while [[ $# -gt 0 ]]; do
             'Usage:' \
             '  czu ' \
             '  czu [--help]' \
-            '  czu [--no-init] [[--bin | --all [--no-bin]]] ' \
+            '  czu [--no-init] [[--bin | --all [--no-bin]]] [--re-add[=force]]' \
             '      [--yes] [--reinit[=all]] [--no-refresh] [--verbose] [--debug]' \
             '' \
             'Description:' \
@@ -62,6 +64,13 @@ if [[ $all -eq 1 ]]; then
 fi
 export CZ_EXTR="$CZ_EXTR_SAVE"
 unset CZ_EXTR_SAVE
+
+if [[ "$readd" != 0 ]]; then
+    readdinteractive=--interactive
+    [ "$readd" != 'force' ] || readdinteractive=
+
+    PAGER="$CZ_PAGER" env chezmoi re-add ${readdinteractive} $verbose $debug
+fi
 
 echo Applying pending changes...
 PAGER="$CZ_PAGER" env chezmoi apply --less-interactive $verbose $debug
