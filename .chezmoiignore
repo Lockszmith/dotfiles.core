@@ -5,6 +5,9 @@
 *
 ! .chezmoiscripts/
 ! .chezmoiscripts/**
+
+.config/home-manager/result
+
 {{ if not (stat (joinPath .chezmoi.homeDir "VAST/dockersh.home" )) -}}
 VAST/
 VAST/dockersh.home/
