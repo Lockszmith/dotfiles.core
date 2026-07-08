@@ -1,0 +1,12 @@
+#! /usr/bin/env bash
+
+set -e
+
+OLD_PWD="${PWD}" NEW_PWD="/file_server_var3/${PWD#/*/}"
+mkdir -p "${NEW_PWD%/*}"
+cd ..
+du -xhd1 "${OLD_PWD##*/}"
+cp -R "${OLD_PWD##*/}" "${NEW_PWD}"
+
+printf "%s copied, you can now\nrm -r %s\n" "${OLD_PWD##*/}" "${OLD_PWD}" >&2
+
