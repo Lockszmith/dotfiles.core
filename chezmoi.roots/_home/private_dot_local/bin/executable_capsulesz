@@ -1,0 +1,20 @@
+#! /usr/bin/env bash
+
+set -e
+
+ECHO=${ECHO:-:}
+[[ "$ECHO" == ":" ]] && ECHO= || ECHO=echo
+
+DBG=${DBG:-:}
+[[ "$DBG" == ":" ]] && DBG="2> /dev/null" || DBG=
+XARGS_DBG=t
+[[ -z "$DBG" ]] || XARGS_DBG=
+
+VAST_SCRIPT_ROOT=${VAST_SCRIPT_ROOT:-/file_server_var2/scripts}
+
+eval "${VAST_SCRIPT_ROOT}/login_to_aws_ecr.sh ${DBG}" | grep -q "^Login Succeeded$"
+
+sh -c "C=${C:-1} IDX=${IDX:--1} qfpdb \"$@\" ${DBG}" | xargs -r${XARGS_DBG}oI{} ${ECHO} sh -c "
+    echo \"\$(${VAST_SCRIPT_ROOT}/dockersh ${HUBBLE:-keep-hubble-latest} capsule json --simple {} | grep '^[[:space:]}\\{]' ${DBG} )\"
+"
+

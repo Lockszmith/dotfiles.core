@@ -1,0 +1,15 @@
+#! /usr/bin/env bash
+
+C=${C:-1}
+IDX=$(( "${2:-${IDX:-0}}" * -1 * C ))
+[[ $IDX -gt 0 ]] || IDX=
+
+qf "${1}Type.pdb.gz$" $(
+) | sed -Ee '
+    s|^(.*/pdb/)(.+\.pdb\.gz)$|\1:\2|;
+' | sort -t: -k2,2 $(
+) | sed -Ee '
+    s|/pdb/:|/pdb/|
+' | ${IDX:+tail -n}${IDX:-cat} $(
+) | ( [[ -n "$IDX" ]] && head -n${C} || cat - )
+
