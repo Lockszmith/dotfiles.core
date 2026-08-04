@@ -90,6 +90,7 @@ if is_sourced; then
             eval "$LOAD_ENV_FILES"
         fi
     }
+    ${DBG2:-:} -x
     load_all
 elif [[ "$1" == '-' ]]; then
     echo "BASE_0=${BASE_0}"
