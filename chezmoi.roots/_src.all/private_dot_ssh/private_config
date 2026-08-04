@@ -1,4 +1,4 @@
-Include config.d/*
+Include config.d/*.conf
 
 Host kateryna.out
     HostName szk.li
