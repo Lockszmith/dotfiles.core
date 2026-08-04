@@ -13,3 +13,5 @@ VAST/
 VAST/dockersh.home/
 VAST/dockersh.home/**
 {{ end -}}
+
+nvim.log
