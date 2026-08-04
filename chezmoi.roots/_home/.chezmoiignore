@@ -1,15 +1,3 @@
-/**/.git
-/**/.git/**
-*.zwc
-nvim.log
-
-/**/flake.lock
-
-.config/vim/autoload
-.config/raycast/node_modules
-!.config/raycast/extensions/*/package.json
-.config/raycast/extensions/*/*/**
-
 {{ $withNixHm := has "with-nix-hm" (splitList " " (dig "sz" "env" "flags" "" .)) -}}
 {{ if or (not $withNixHm) (not (stat (joinPath .chezmoi.homeDir ".config/home-manager" ))) -}}
 .config/home-manager/
@@ -22,3 +10,17 @@ VAST/
 VAST/dockersh.home/
 VAST/dockersh.home/**
 {{ end -}}
+
+/**/.git
+/**/.git/**
+*.zwc
+nvim.log
+/**/nvim.log
+
+/**/flake.lock
+
+.config/vim/autoload
+.config/raycast/node_modules
+!.config/raycast/extensions/*/package.json
+.config/raycast/extensions/*/*/**
+
