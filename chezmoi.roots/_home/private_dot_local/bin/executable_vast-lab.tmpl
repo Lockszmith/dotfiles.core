@@ -381,6 +381,7 @@ _main_() {
         || [ -z "$ZELLIJ_SESSION_NAME" ] || [ "$ZELLIJ_SESSION_NAME" = '__NO_LOAD__' ] \
         && unset MUX
 
+    [[ $# -gt 0 ]] && [[ "$1" == "--debug" ]] && shift && set -x || true
     if [[ $# -gt 0 ]] && declare -f "do_${1}" > /dev/null; then
         DO_CMD="do_${1}"
         shift
