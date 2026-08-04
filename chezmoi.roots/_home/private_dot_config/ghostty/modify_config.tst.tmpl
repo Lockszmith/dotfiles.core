@@ -1,0 +1,20 @@
+#! /usr/bin/env bash
+
+set -e
+
+MY_NODRIFT_SOURCE_PATH="{{ .chezmoi.sourceDir }}/{{ trimSuffix (base .chezmoi.sourceFile) .chezmoi.sourceFile }}.{{ .chezmoi.targetFile | base }}.no-drift"
+
+#echo "${#input}" >&2
+#echo "${MY_NODRIFT_SOURCE_PATH}" >&2
+
+MY_SCRIPT_PATH="{{ .chezmoi.targetFile | trimSuffix "tst" }}"
+input="$( cat - )"
+if [ ${#input} -le 0 ]; then
+  [ -r "${MY_NODRIFT_SOURCE_PATH}" ] || cat "${MY_NODRIFT_SOURCE_PATH}" && printf " Warning: NO DRIFT source missing: %s is missing.\n" "${MY_NODRIFT_SOURCE_PATH}"
+else
+  <<<"$input" sed -Ee '
+      s/^(window-height) = .*$/\1 = 80/;
+      s/^(window-width) = .*$/\1 = 140/;
+    '
+fi
+
