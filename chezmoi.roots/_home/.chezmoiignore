@@ -11,13 +11,14 @@ VAST/dockersh.home/
 VAST/dockersh.home/**
 {{ end -}}
 
-/**/.git
-/**/.git/**
+.git
+**/.git
+**/.git/**
 *.zwc
 nvim.log
-/**/nvim.log
+**/nvim.log
 
-/**/flake.lock
+**/flake.lock
 
 .config/vim/autoload
 .config/raycast/node_modules
