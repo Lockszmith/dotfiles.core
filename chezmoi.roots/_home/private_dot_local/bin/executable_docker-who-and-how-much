@@ -29,3 +29,59 @@ join -t $'\t' -1 4 -2 1 /tmp/ps_info.txt /tmp/stats_info.txt \
   printf "$FMT\n" "$uname" "$uid" "$cid" "$name" "$started" "$cpu" "$mem" "$image"
 done \
 | sort -t '|' ${S:-} | tr '|' ' '
+
+printf '\n\n=====================\n  VOLUMES\n=====================\n\n'
+
+# Lists: USER | CONTAINER | STATE | SIZE | VOLUME
+
+printf "%-20s %-30s %-12s %-10s %s\n" "USER" "CONTAINER" "STATE" "SIZE" "VOLUME"
+printf "%-20s %-30s %-12s %-10s %s\n" "----" "---------" "-----" "----" "------"
+
+# Map volume -> "container|state|user" (first match if shared)
+declare -A VOL_INFO
+
+while IFS= read -r cid; do
+  [ -z "$cid" ] && continue
+  name=$(docker inspect -f '{{.Name}}' "$cid" | sed 's#^/##')
+  state=$(docker inspect -f '{{.State.Status}}' "$cid")
+  # Container process user (Config.User); empty means image default (often root)
+  user=$(docker inspect -f '{{if .Config.User}}{{.Config.User}}{{else}}root{{end}}' "$cid")
+
+  # Named volumes only (Type=volume)
+  while IFS= read -r vol; do
+    [ -z "$vol" ] && continue
+    # Keep first container if volume is shared
+    if [ -z "${VOL_INFO[$vol]}" ]; then
+      VOL_INFO[$vol]="${user}|${name}|${state}"
+    fi
+  done < <(docker inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' "$cid")
+done < <(docker ps -aq)
+
+# All volumes + size via docker system df
+# Format of `docker system df -v` volume section varies; use inspect + du fallback where needed
+while IFS= read -r vol; do
+  [ -z "$vol" ] && continue
+
+  # Size: prefer docker system df parse; fallback to Mountpoint du
+  size=$(docker system df -v 2>/dev/null | awk -v v="$vol" '
+    $1 == v { print $3; found=1; exit }
+    END { if (!found) print "-" }
+  ')
+  if [ "$size" = "-" ] || [ -z "$size" ]; then
+    mp=$(docker volume inspect -f '{{.Mountpoint}}' "$vol" 2>/dev/null)
+    if [ -n "$mp" ] && [ -d "$mp" ]; then
+      size=$(du -sh "$mp" 2>/dev/null | awk '{print $1}')
+    else
+      size="N/A"
+    fi
+  fi
+
+  info="${VOL_INFO[$vol]}"
+  if [ -z "$info" ]; then
+    user="N/A"; container="N/A"; state="N/A"
+  else
+    IFS='|' read -r user container state <<< "$info"
+  fi
+
+  printf "%-20s %-30s %-12s %-10s %s\n" "$user" "$container" "$state" "$size" "$vol"
+done < <(docker volume ls -q)

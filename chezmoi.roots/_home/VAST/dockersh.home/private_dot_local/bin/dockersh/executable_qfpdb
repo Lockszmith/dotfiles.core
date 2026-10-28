@@ -1,4 +1,7 @@
 #! /usr/bin/env bash
+# vim: set ft=sh sw=4 sts=4 et:
+
+set -euo pipefail
 
 C=${C:-1}
 IDX=$(( "${2:-${IDX:-0}}" * -1 * C ))

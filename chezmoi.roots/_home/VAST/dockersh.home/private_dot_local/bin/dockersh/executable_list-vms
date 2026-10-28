@@ -1,0 +1,21 @@
+#! /usr/bin/env bash
+# vim: set ft=sh sw=4 sts=4 et:
+
+n_nodes=${1:-10};
+[[ $n_nodes != "all" ]] || unset n_nodes;
+
+ESC=$(printf "\e");
+CLR_START="${ESC}[92;1m";
+CLR_RESET="${ESC}[0m";
+SED_MARK_LATEST=$(printf '$s/:\|(.*)$/:|%s\\1 <--%s/' "${CLR_START}" "${CLR_RESET}");
+
+function list_all_vms_nodes ()
+{
+    qf '(^vms.log)|(docker.log$)' | xgp -i 'vms (has )?started|vms.elect' | fixcol_and_sort 2 | sed -Ee "${SED_MARK_LATEST}"
+};
+if [[ -v n_nodes ]]; then
+    list_all_vms_nodes | tail -n $n_nodes;
+else
+    list_all_vms_nodes;
+fi
+

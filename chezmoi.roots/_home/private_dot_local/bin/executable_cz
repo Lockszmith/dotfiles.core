@@ -1,6 +1,8 @@
 #! /usr/bin/env bash
 
 set -euo pipefail
+# vim: set ft=sh sw=4 sts=4 et:
+
 
 is_cmd() { type -p -- "${@}" 2> /dev/null 1> /dev/null; }
 

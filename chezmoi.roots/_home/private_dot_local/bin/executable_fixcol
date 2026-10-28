@@ -19,8 +19,16 @@ CELERY_HEADER_RE = re.compile(
 TIMESTAMP_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2}(?:[ T])\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)(?:\s+|$)"
 )
-# Path prefix for logfile: allow optional ':' before '[' (e.g. management-logs/workers.log:[2026-...)
-PATH_RE = re.compile(r"^((?:/|\.{1,2}/|~?/)?[^\s]*\/[^\s:]+)(?::)?(?=\s|\[|$)")
+# Path prefix for logfile: ``dir/file:`` or ``./file:`` then ``[``, digit (timestamp), space, or EOL.
+PATH_RE = re.compile(r"^((?:\./|\.\./|/|~/)?(?:[^\s:]+/)*[^\s:]+)(?::)(?=\[|\d|\s|$)")
+# Rsyslog / auth.log style (fixture 05): ISO with T + TZ, host, sudo[pid]:, user, message after `` : ``.
+SECURE_RSYSLOG_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}\.\d+)([+-]\d{2}:\d{2})\s+"
+    r"(\S+)\s+"
+    r"(sudo\[\d+\]:)\s+"
+    r"(\S+)\s+:\s+"
+    r"(.*)$"
+)
 LEVEL_RE = re.compile(
     r"^(?:\[?(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL)\]?)(?:\s+|$)",
     re.IGNORECASE,
@@ -107,6 +115,16 @@ def take_django_console_level_colon(message: str) -> tuple[str, str] | None:
     return match.group(1).upper(), match.group(2)
 
 
+def take_secure_rsyslog(message: str) -> tuple[str, str, str, str, str, str] | None:
+    """``DATE T TIME+TZ host sudo[pid]: user : rest`` -> (ts, level, host, sudo_colon, user, rest)."""
+    match = SECURE_RSYSLOG_RE.match(message)
+    if not match:
+        return None
+    date, time_frac, _tz, host, sudo_part, user, rest = match.groups()
+    norm_ts = f"{date} {time_frac}"
+    return norm_ts, "INFO", host, sudo_part, user, rest
+
+
 def take_bracket_ts_header(message: str) -> tuple[str, str, str, str, str, str] | None:
     """[ts] LEVEL [uuid] [file:line/pid] rest -> (ts, level, loc_prefix, loc_pid, loc_extra, rest)."""
     match = BRACKET_TS_LINE_RE.match(message)
@@ -132,14 +150,22 @@ def format_line(raw_line: str, state: ParseState, delimiter: str) -> str:
         if message and re.match(r"^\s*(\[\d{4}|\d{4}-\d{2})", message):
             message = message.lstrip()
     elif state.logfile:
-        # PATH_RE requires ``:`` before message to be followed by space, ``[``, or EOL — so lines like
-        # ``workers.log.1:INFO:vms:...`` do not match. Strip a repeated ``<logfile>:`` prefix instead.
+        # ``workers.log.1:INFO:vms:...`` does not match PATH_RE (``:`` not followed by ``[``/digit/space).
+        # Strip a repeated ``<logfile>:`` prefix instead.
         prefix = f"{state.logfile}:"
         if message.startswith(prefix):
             message = message[len(prefix) :]
 
-    celery = take_celery_header(message)
-    if celery is not None:
+    secure = take_secure_rsyslog(message)
+    if secure is not None:
+        ts, level, host, sudo_part, user, message = secure
+        state.timestamp = ts
+        state.level = level
+        state.loc_prefix = host
+        state.loc_pid = sudo_part
+        state.loc_extra = user
+        state.line_number = 1
+    elif (celery := take_celery_header(message)) is not None:
         ts, level, loc_prefix, loc_pid, loc_extra, message = celery
         state.timestamp = ts
         state.level = level
@@ -160,7 +186,7 @@ def format_line(raw_line: str, state: ParseState, delimiter: str) -> str:
         else:
             timestamp, message = take_match(TIMESTAMP_RE, message)
             if timestamp:
-                state.timestamp = timestamp
+                state.timestamp = timestamp.replace("T", " ")
                 state.level = ""
                 state.loc_prefix = ""
                 state.loc_pid = ""

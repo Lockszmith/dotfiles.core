@@ -1,0 +1,21 @@
+#! /usr/bin/env bash
+# vim: set ft=sh sw=4 sts=4 et:
+
+VASTPSWD="${VASTPSWD:-}" VASTUSR="${VASTUSR:-support}"
+if [ -z "${VASTPSWD}" ]; then
+    TOKEN=
+    printf 'VAST Password for %s: ' "$VASTUSR"
+    read -s PSWD
+    printf '\n'
+fi
+
+## Request temporary token
+VMS="${VMS:-https://$(cat /vast/vman/mgmt-vip)}"
+SHOW_TOKEN=${#TOKEN}
+export TOKEN="${TOKEN:-$(curl -sSk "${VMS}/api/token/" -F username="${VASTUSR}" -F password="${VASTPSWD}" | jq -r '.access')}"
+[[ $SHOW_TOKEN -eq 0 ]] || printf 'TOKEN="%s"\n\n' "$TOKEN"
+
+PIPETO="${PIPETO:-jq}"
+
+## Use token
+curl -sSkH "Authorization: Bearer ${TOKEN}" "${VMS}/api/${1}" | ${PIPETO} "${2:-.}"
